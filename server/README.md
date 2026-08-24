@@ -133,7 +133,7 @@ uv run --frozen --no-sync celery \
 ```
 
 3. Start the optional Jobs service when testing uploads or other Jobs-owned
-queues:
+   queues:
 
 ```bash
 cd ../jobs
@@ -293,6 +293,15 @@ creates another response variant at
 `POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
 Editing any turn on the active path creates an immutable sibling through
 `POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/branches`.
+`POST /api/v1/conversations/{conversation_id}/start` atomically creates a
+client-identified Conversation and accepts its first Turn/Response, so a first
+prompt never commits an empty Conversation in a separate request. Replaying the
+same immutable Turn/Response request returns its existing generation even after
+the Conversation title or current context changes; conflicting Turn, Response,
+query, contexts, reasoning, locale, or time-zone reuse returns
+`conversation_start_conflict`. Mutable title, current scope/context, and tool
+permissions are not replay identity; the originally accepted scope is recovered
+from the durable job's project/document ownership.
 `PUT /api/v1/conversations/{conversation_id}/selected-branch` selects a prompt
 version, restores its previously selected descendant suffix and authorized
 paper context, and returns the authoritative active path. All generation
@@ -300,20 +309,23 @@ endpoints complete quota, authorization, context, rate-limit, and concurrency
 preflight before product mutation. Branch acceptance uses one short transaction
 to restore the source paper-context snapshot, create the Turn and Response,
 switch the selected path, and increment its revision. Preflight rejection has no
-Conversation mutation; after acceptance, `start` is necessarily the first SSE
-event and any later failure is a persisted terminal response. Reusing a Turn ID
+Conversation mutation; after acceptance, `start` is necessarily the first typed
+SSE event and any later failure is a persisted terminal response. Reusing a Turn ID
 is idempotent only when every immutable input and its tree position match;
 otherwise the whole acceptance command returns `conversation_turn_conflict`.
 Clients that send `Prefer: respond-async` receive `202` only after the running
 Response, DurableJob, and outbox dispatch commit atomically. The dedicated
 Server-owned `conversation` worker then generates outside the browser request.
+Without that preference, the same endpoint returns a direct durable SSE
+subscription to the accepted generation: a comment-only `: accepted` frame
+flushes the response before subscription preparation, followed by the Redis-ID
+typed events. It never runs the agent in the HTTP request.
 `GET /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events`
 replays the bounded Redis event log from `Last-Event-ID` and reconciles terminal
 state from PostgreSQL; Redis is never canonical. Route changes, mobile
 backgrounding, reload, and connectivity loss therefore detach only a subscriber.
 `POST .../responses/{response_id}/cancel` is the sole user cancellation boundary
-and conditionally cancels both Response and job. The legacy no-Preference path
-retains inline SSE compatibility.
+and conditionally cancels both Response and job.
 Selecting the already-active branch is a storage and journal no-op. Consumers
 must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `assistant_item_complete`, `activity`, `references`, `response_ready`,
@@ -322,13 +334,19 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`. The additive `/events/candidates` subscription additionally returns
-sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
-`assistant_candidate_reset` events parsed from partial structured
-`final_answer` arguments. The adapter filters those additive events for older
-clients on the original `/events` route; newer clients fall back to that route
-when the additive endpoint is unavailable. Retries clear the provisional
-candidate, while a bounded suffix and private citation protocol never enter it.
+`progress`. The additive `/events/candidates` subscription and the
+`application/vnd.scholens.conversation-events` direct representation
+additionally return sanitized `assistant_candidate_start`,
+`assistant_candidate_delta`, and `assistant_candidate_reset` events parsed from
+partial structured `final_answer` arguments. The standard representation keeps
+the original direct-stream event union and projects cancellation through its
+existing terminal `error` shape. The Web requests the candidate representation
+and reconnects only through the candidate-aware route, so a deployment cannot
+silently downgrade an active answer's event contract. Retries clear the
+provisional candidate, while only a currently ambiguous forbidden-protocol or
+visible citation suffix is withheld;
+short safe answers stream immediately. Private citation protocol never enters
+the candidate.
 A `final` item is published only after the model submits the
 structured `final_answer` output and its visible content and private citation
 protocol validate. A successful source-backed tool result also makes at least
@@ -357,7 +375,8 @@ concurrently under the user's interactive concurrency limit. Creating a normal
 next turn prunes unselected
 response variants from its parent; prompt branches are never pruned as a side
 effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
-starts beside the answer stream and shares the same SSE instead of requiring a
+starts only after the main provider yields its first public stream event and
+shares the same SSE instead of requiring a
 second HTTP request or polling. It uses no open database transaction while the
 model runs and rechecks active-leaf ownership before persisting. The structured
 result is exactly three unique questions:

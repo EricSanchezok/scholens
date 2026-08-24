@@ -111,54 +111,29 @@ async function mockWorkspace(page: Page) {
 
 async function mockConversationSubmission(page: Page) {
   let submittedTurn: Record<string, unknown> | undefined;
-  const conversation = {
-    ...homeConversations[0]!,
-    paper_context: { kind: "library" as const },
-    tool_permissions: [],
-  };
-  await page.route(`${apiPattern}/conversations`, async (route) => {
-    if (route.request().method() !== "POST") {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({
-      body: JSON.stringify(conversation),
-      contentType: "application/json",
-      status: 201,
-    });
-  });
-  await page.route(`${apiPattern}/conversations/${conversation.id}`, (route) =>
-    route.fulfill({
-      body: JSON.stringify(conversation),
-      contentType: "application/json",
-    }),
-  );
-  await page.route(
-    `${apiPattern}/conversations/${conversation.id}/turns**`,
-    async (route) => {
-      if (route.request().method() === "GET") {
-        await route.fulfill({
-          body: JSON.stringify({
-            items: submittedTurn ? [submittedTurn] : [],
-            next_cursor: null,
-            path_revision: 1,
-          }),
-          contentType: "application/json",
-        });
-        return;
-      }
-      const request = route.request().postDataJSON() as {
-        locale: string;
-        reasoning_level: string;
-        response_id: string;
-        time_zone: string;
-        turn_id: string;
-        user_query: string;
+  let conversationId: string | undefined;
+  await page.route(`${apiPattern}/conversations/**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    const startMatch = pathname.match(/\/conversations\/([^/]+)\/start$/);
+    if (startMatch && request.method() === "POST") {
+      conversationId = startMatch[1]!;
+      const body = request.postDataJSON() as {
+        conversation: { paper_context: { kind: "library" } };
+        turn: {
+          locale: string;
+          reasoning_level: string;
+          response_id: string;
+          time_zone: string;
+          turn_id: string;
+          user_query: string;
+        };
       };
+      const turnRequest = body.turn;
       const response = {
         artifacts: null,
         content: "The motion path is complete.",
-        id: request.response_id,
+        id: turnRequest.response_id,
         references: null,
         status: "completed",
         trace: null,
@@ -168,31 +143,31 @@ async function mockConversationSubmission(page: Page) {
         branch: { count: 1, index: 1 },
         contexts: [],
         depth: 1,
-        id: request.turn_id,
-        locale: request.locale,
-        paper_context: conversation.paper_context,
+        id: turnRequest.turn_id,
+        locale: turnRequest.locale,
+        paper_context: body.conversation.paper_context,
         parent_turn_id: null,
-        reasoning_level: request.reasoning_level,
+        reasoning_level: turnRequest.reasoning_level,
         responses: [response],
-        selected_response_id: request.response_id,
+        selected_response_id: turnRequest.response_id,
         suggestions: null,
-        time_zone: request.time_zone,
-        user_query: request.user_query,
+        time_zone: turnRequest.time_zone,
+        user_query: turnRequest.user_query,
       };
       submittedTurn = turn;
       const events = [
         {
-          conversation_id: conversation.id,
+          conversation_id: conversationId,
           generation_kind: "initial",
-          response_id: request.response_id,
-          turn_id: request.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
           type: "start",
           variant_index: 1,
         },
-        { response_id: request.response_id, turn, type: "response_ready" },
+        { response_id: turnRequest.response_id, turn, type: "response_ready" },
         {
-          response_id: request.response_id,
-          turn_id: request.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
           type: "complete",
         },
       ];
@@ -205,8 +180,50 @@ async function mockConversationSubmission(page: Page) {
           .join(""),
         contentType: "text/event-stream",
       });
-    },
-  );
+      return;
+    }
+    const turnsMatch = pathname.match(/\/conversations\/([^/]+)\/turns$/);
+    if (turnsMatch && request.method() === "GET") {
+      await route.fulfill({
+        body: JSON.stringify({
+          items: submittedTurn ? [submittedTurn] : [],
+          next_cursor: null,
+          path_revision: 1,
+        }),
+        contentType: "application/json",
+      });
+      return;
+    }
+    const detailMatch = pathname.match(/\/conversations\/([^/]+)$/);
+    if (detailMatch && request.method() === "GET") {
+      const conversation = {
+        ...homeConversations[0]!,
+        id: detailMatch[1],
+        paper_context: { kind: "library" as const },
+        tool_permissions: [],
+      };
+      await route.fulfill({
+        body: JSON.stringify(conversation),
+        contentType: "application/json",
+      });
+      return;
+    }
+    if (
+      conversationId &&
+      pathname.includes(`/conversations/${conversationId}`)
+    ) {
+      await route.fulfill({
+        body: JSON.stringify({
+          items: submittedTurn ? [submittedTurn] : [],
+          next_cursor: null,
+          path_revision: 1,
+        }),
+        contentType: "application/json",
+      });
+      return;
+    }
+    await route.fallback();
+  });
 }
 
 async function mockReaderMotion(page: Page) {

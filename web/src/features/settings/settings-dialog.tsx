@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  keyboardFocusRing,
+  focusSurfaceVariants,
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import {
@@ -129,7 +129,7 @@ export function SettingsDialogSurface({
                   aria-current={active === item ? "page" : undefined}
                   className={cn(
                     "motion-control hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 text-left text-sm font-medium",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "selection" }),
                     active === item && "bg-hover",
                   )}
                   key={item}
@@ -148,7 +148,13 @@ export function SettingsDialogSurface({
               ))}
             </nav>
           </aside>
-          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-10 lg:py-9">
+          <main
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-10 lg:py-9",
+              focusSurfaceVariants({ intent: "scroll" }),
+            )}
+            tabIndex={0}
+          >
             <div className="settled-content-enter" key={active}>
               <Panel accountCenterUrl={accountCenterUrl} section={active} />
             </div>

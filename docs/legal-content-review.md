@@ -19,7 +19,7 @@ Before publishing replacement text, confirm and record:
 - the default-on controls, estimate limitations, three-contributor team
   threshold, 90-day fine-detail ceiling, longer coarse rollups, and scoped
   deletion/export behavior established by
-  [ADR 0038](./decisions/0038-first-party-research-activity-ledger.md);
+  [ADR 0039](./decisions/0039-first-party-research-activity-ledger.md);
 - subscription, cancellation, refund, warranty, and service-availability terms;
 - intellectual-property terms for uploaded papers, annotations, prompts, and
   generated outputs;

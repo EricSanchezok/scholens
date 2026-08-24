@@ -842,6 +842,65 @@ def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
         assert minimum[2] == maximum[2] == 0
 
 
+def test_conversation_capacity_and_rollout_order_match_latency_slo() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+
+    service = resources["ConversationWorkerService"]["Properties"]
+    assert service["DesiredCount"] == {"Fn::If": ["RunApplication", 2, 0]}
+
+    target = resources["ConversationWorkerScalableTarget"]["Properties"]
+    assert target["MinCapacity"] == {"Fn::If": ["RunApplication", 2, 0]}
+    assert target["MaxCapacity"] == {"Fn::If": ["RunApplication", 6, 0]}
+
+    tracking = resources["ConversationBacklogScaling"]["Properties"][
+        "TargetTrackingScalingPolicyConfiguration"
+    ]
+    assert tracking["TargetValue"] == 0.25
+    assert tracking["ScaleOutCooldown"] == 30
+    assert tracking["ScaleInCooldown"] == 900
+
+    age_alarm = resources["ConversationAgeAlarm"]["Properties"]
+    assert age_alarm["Namespace"] == "AWS/SQS"
+    assert age_alarm["MetricName"] == "ApproximateAgeOfOldestMessage"
+    assert age_alarm["Dimensions"] == [
+        {"Name": "QueueName", "Value": "scholens-production-conversation"}
+    ]
+    assert age_alarm["Statistic"] == "Maximum"
+    assert age_alarm["Period"] == 60
+    assert age_alarm["EvaluationPeriods"] == 1
+    assert age_alarm["Threshold"] == 15
+
+    # CloudFormation serializes updates in dependency order, so the API that
+    # owns `/start` reaches steady state before the Web that consumes it.
+    assert resources["WebService"]["DependsOn"] == ["HttpsListener", "ApiService"]
+
+    dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
+    rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
+    widgets = json.loads(rendered_dashboard)["widgets"]
+    by_title = {widget["properties"].get("title"): widget for widget in widgets}
+    accept = by_title["Conversation durable accept p95 (ms)"]["properties"]
+    claim = by_title["Conversation worker claim age p95 (s)"]["properties"]
+    assert accept["stat"] == claim["stat"] == "p95"
+    assert accept["metrics"][0] == [
+        "Scholens/Production",
+        "scholens.conversation.accept.total_duration",
+        "status",
+        "accepted",
+        "generation_kind",
+        "initial",
+        "OTelLib",
+        "scholens",
+    ]
+    assert claim["metrics"][0] == [
+        "Scholens/Production",
+        "scholens.conversation.worker.claim_age",
+        "generation_kind",
+        "initial",
+        "OTelLib",
+        "scholens",
+    ]
+
+
 def test_unhealthy_target_alarms_use_load_balancer_and_target_group() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
     for name, target_group in (
@@ -1106,8 +1165,12 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
     dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
     rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
     widgets = json.loads(rendered_dashboard)["widgets"]
-    assert len(widgets) == 7
+    assert len(widgets) == 10
     assert "web_performance" in dashboard_body
+    assert "conversation_performance" in dashboard_body
+    assert "Conversation feedback and stream p75 / p95" in dashboard_body
+    assert "scholens.conversation.worker.claim_age" in dashboard_body
+    assert "scholens.conversation.accept.total_duration" in dashboard_body
     assert "primary_content" in dashboard_body
 
 
@@ -1679,12 +1742,12 @@ def test_release_rejects_an_incomplete_first_runtime_stack() -> None:
     assert "no `DeleteStack` permission" in readme
 
 
-def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
+def test_release_stages_compatible_runtime_and_recovers_candidate_failures() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
 
-    deploy = workflow.index("Deploy digest-qualified ECS release")
+    deploy = workflow.index("- name: Deploy digest-qualified ECS release")
     stabilize = workflow.index("Wait for services to stabilize")
     smoke = workflow.index("Verify public deployment")
     recover = workflow.index(
@@ -1694,21 +1757,55 @@ def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
     smoke_block = workflow[smoke:recover]
     assert "--connect-timeout 5" in smoke_block
     assert "--max-time 20" in smoke_block
-    assert "continue-on-error: true" not in workflow[deploy:stabilize]
+    deploy_block = workflow[deploy:stabilize]
+    assert re.search(
+        r"- name: Deploy digest-qualified ECS release in compatibility order\n"
+        r"\s+id: candidate\n"
+        r"\s+continue-on-error: true",
+        deploy_block,
+    )
+    for image_output in ("web_image", "api_image", "jobs_image"):
+        assert f'echo "{image_output}=$(parameter ' in workflow
+    assert 'echo "phase=preflight"' in deploy_block
+    assert 'echo "phase=compatibility"' in deploy_block
+    assert 'echo "phase=final"' in deploy_block
+    assert 'if [[ "$OPERATION" == deploy ]]' in deploy_block
+    assert "compatibility_web_image=$PREVIOUS_WEB_IMAGE" in deploy_block
+    assert "compatibility_api_image=$candidate_api_image" in deploy_block
+    assert "compatibility_jobs_image=$candidate_jobs_image" in deploy_block
+    assert "compatibility_web_image=$candidate_web_image" in deploy_block
+    assert "compatibility_api_image=$PREVIOUS_API_IMAGE" in deploy_block
+    assert "compatibility_jobs_image=$PREVIOUS_JOBS_IMAGE" in deploy_block
+    compatibility = deploy_block.index('echo "phase=compatibility"')
+    compatibility_smoke = deploy_block.rindex("verify_public_runtime")
+    final = deploy_block.index('echo "phase=final"')
+    assert compatibility < compatibility_smoke < final
     assert re.search(
         r"- name: Wait for services to stabilize\n"
         r"\s+id: stabilize\n"
-        r"\s+continue-on-error: true",
+        r"\s+continue-on-error: true\n"
+        r"\s+if: steps\.candidate\.outcome == 'success'",
         workflow,
     )
-    assert (
-        "if: steps.stabilize.outcome == 'success' && "
-        "inputs.application_enabled == 'true'"
-    ) in workflow
-    recovery_condition = (
-        "if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'"
-    )
-    assert workflow.count(recovery_condition) == 2
+    assert workflow.count("steps.candidate.outcome == 'failure' ||") == 2
+    assert workflow.count("steps.stabilize.outcome == 'failure' ||") == 2
+    assert workflow.count("steps.smoke.outcome == 'failure'") == 2
+    assert "steps.candidate.outcome == 'success' &&" in workflow
+    assert "steps.stabilize.outcome == 'success' &&" in workflow
+    recovery_block = workflow[recover:]
+    assert '"$FAILED_PHASE" == final' in recovery_block
+    assert "recovery_mode=compatible-backend" in recovery_block
+    compatible_start = recovery_block.index('if [[ "$recovered_previous" == true')
+    compatible_end = recovery_block.index("recovery_mode=compatible-backend")
+    compatible_recovery = recovery_block[compatible_start:compatible_end]
+    assert "recovery_scheduler=$PREVIOUS_SCHEDULER_STATE" in compatible_recovery
+    assert "recovery_scheduler=$SCHEDULER_STATE" not in compatible_recovery
+    assert "recovery_template=deploy/ecs/scholens-production.yml" in recovery_block
+    assert "web_image=$PREVIOUS_WEB_IMAGE" in recovery_block
+    assert "api_image=$PREVIOUS_API_IMAGE" in recovery_block
+    assert "jobs_image=$PREVIOUS_JOBS_IMAGE" in recovery_block
+    assert "api_image=$(jq -er .images.api release-manifest.json)" in recovery_block
+    assert "jobs_image=$(jq -er .images.jobs release-manifest.json)" in recovery_block
     assert "candidate-verification-recovery" in workflow
     assert "Automatic candidate verification recovery" in workflow
     assert workflow.count("sanchezcloud-scholens-configuration-key-arn") == 2

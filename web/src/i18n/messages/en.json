@@ -397,6 +397,7 @@
       "followUpPlaceholder": "Ask a follow-up",
       "submit": "Ask Scholens",
       "stop": "Stop response",
+      "pending": "Response in progress",
       "addContext": "Add context",
       "standard": "Standard",
       "deep": "Deep",
@@ -489,6 +490,7 @@
       "loading": "Loading conversation",
       "empty": "Ask a question to begin this conversation.",
       "cancelled": "Response stopped. You can ask again.",
+      "completed": "Response complete.",
       "error": "The response could not be completed.",
       "retry": "Try again",
       "retryHint": "Your input is still in the composer. Try sending it again later.",
@@ -1959,6 +1961,10 @@
     "emptyDescription": "Try a broader description or a related concept.",
     "untitled": "Untitled paper",
     "unknownAuthors": "Unknown authors",
+    "form": {
+      "minimumQuery": "Enter at least 2 characters, or clear the field and press Enter to show all papers.",
+      "relevanceSort": "Relevance"
+    },
     "results": {
       "loading": "Searching your papers",
       "retry": "Try again",

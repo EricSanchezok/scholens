@@ -13,6 +13,7 @@ from app.llm.conversation_agent import (
     ConversationAgentResult,
     ConversationAgentStreamEvent,
     ScholensConversationAgent,
+    _unsafe_candidate_suffix_length,
 )
 from app.modules.conversations.application.chat import (
     ChatPaperSnapshot,
@@ -301,6 +302,7 @@ async def _events(
             correlation_id=operation.trace.correlation_id,
             user_operation_id=operation.trace.operation_id,
             mentioned_annotations=None,
+            history=[],
         )
     ]
 
@@ -356,13 +358,14 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
         for event in events
     ] == [
         "assistant_candidate_start",
+        "assistant_candidate_delta",
         "assistant_item_start",
         "assistant_item_delta",
         "assistant_item_complete",
         "result",
     ]
-    assert isinstance(events[3], ConversationStreamAssistantItemCompleteEvent)
-    assert events[3].item.phase == "final"
+    assert isinstance(events[4], ConversationStreamAssistantItemCompleteEvent)
+    assert events[4].item.phase == "final"
     assert "2026-08-06" in seen_instructions[0]
     assert "Asia/Shanghai" in seen_instructions[0]
     assert _result(events).trace is None
@@ -429,12 +432,38 @@ async def test_structured_final_answer_streams_candidate_deltas_incrementally() 
 
     assert candidate_deltas
     assert answer.startswith("".join(candidate_deltas))
-    assert len(answer) - len("".join(candidate_deltas)) == 32
+    assert "".join(candidate_deltas) == answer
     assert last_candidate_index < final_complete_index
     final_item = events[final_complete_index]
     assert isinstance(final_item, ConversationStreamAssistantItemCompleteEvent)
     assert final_item.item.id == candidate_start.item_id
     assert final_item.item.content == answer
+
+
+@pytest.mark.parametrize(
+    "term",
+    [
+        "source_keys",
+        "private marker",
+        "initial answer packet",
+        "scholens_cite",
+    ],
+)
+def test_candidate_holds_every_private_protocol_chunk_boundary(term: str) -> None:
+    for boundary in range(1, len(term)):
+        value = f"Safe answer. {term[:boundary]}"
+        assert _unsafe_candidate_suffix_length(value) == boundary
+
+
+def test_candidate_holds_every_visible_citation_chunk_boundary() -> None:
+    citation = "[A12, A3]"
+    for boundary in range(1, len(citation)):
+        value = f"Safe answer. {citation[:boundary]}"
+        assert _unsafe_candidate_suffix_length(value) == boundary
+
+
+def test_candidate_does_not_delay_an_ordinary_short_answer() -> None:
+    assert _unsafe_candidate_suffix_length("Done.") == 0
 
 
 @pytest.mark.asyncio

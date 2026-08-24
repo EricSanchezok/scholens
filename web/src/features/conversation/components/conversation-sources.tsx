@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  keyboardFocusRing,
+  focusSurfaceVariants,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
@@ -89,7 +89,7 @@ function SourceRow({
   );
   const className = cn(
     "motion-control border-line hover:bg-hover flex min-h-20 w-full items-start gap-3 border-b px-5 py-4 text-left last:border-b-0 lg:px-6",
-    source.kind === "external" && keyboardFocusRing,
+    source.kind === "external" && focusSurfaceVariants({ intent: "selection" }),
     selected && "bg-subtle",
   );
 
@@ -100,6 +100,7 @@ function SourceRow({
           title: sourceTitle(source, fallbackTitle),
         })}
         className={className}
+        data-state={selected ? "active" : undefined}
         href={source.url}
         rel="noreferrer"
         target="_blank"
@@ -111,7 +112,8 @@ function SourceRow({
   if (source.kind === "document" && onDocumentOpen) {
     return (
       <button
-        className={cn(className, keyboardFocusRing)}
+        className={cn(className, focusSurfaceVariants({ intent: "selection" }))}
+        data-state={selected ? "active" : undefined}
         onClick={() => onDocumentOpen(source)}
         type="button"
       >
@@ -149,7 +151,7 @@ export function ConversationSources({
         <button
           className={cn(
             "motion-control bg-subtle hover:bg-hover active:bg-pressed ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:min-h-8",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
           )}
           type="button"
         >

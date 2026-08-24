@@ -4,7 +4,7 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
 import { readerPdfRectsForPage } from "../reader-pdf-position";
@@ -333,6 +333,10 @@ function PdfPageSurface({
     let active = true;
     const renderTask = renderPdfPage({
       activeSearchMatchId: activeSearchMatch?.id,
+      annotationLinkClassName: cn(
+        focusSurfaceVariants({ intent: "neutral" }),
+        "focus-visible:opacity-60 forced-colors:opacity-100",
+      ),
       annotationLinkLabel,
       annotationLayer,
       canvas,
@@ -444,7 +448,7 @@ function PdfPageSurface({
         ref={textLayerRef}
       />
       <div
-        className="pdf-annotation-layer pointer-events-none absolute inset-0 [&_a]:pointer-events-auto [&_a]:outline-offset-2"
+        className="pdf-annotation-layer pointer-events-none absolute inset-0 [&_a]:pointer-events-auto"
         ref={annotationLayerRef}
       />
       <div className="pointer-events-none absolute inset-0 z-10">
@@ -481,9 +485,10 @@ function PdfPageSurface({
               {pageRects.map((rect, index) => (
                 <button
                   aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
+                  aria-pressed={groupSelected}
                   className={cn(
                     "motion-control pointer-events-auto absolute rounded-[1px]",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "selection" }),
                     paintMode === "highlight" &&
                       "opacity-20 hover:opacity-30 focus-visible:opacity-30",
                     paintMode === "annotation" &&
@@ -536,7 +541,7 @@ function PdfPageSurface({
                   className={cn(
                     "shadow-raised text-caption border-line bg-surface text-secondary pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-full border px-1.5 font-semibold",
                     resolved && "bg-subtle text-muted opacity-70 grayscale",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "status" }),
                   )}
                   data-reader-annotation-comment-marker={interactionTarget.id}
                   onClick={activateGroup}
@@ -977,7 +982,10 @@ export function PdfPage({
   return (
     <div
       aria-label={canvasLabel}
-      className="bg-subtle relative min-h-0 flex-1 overflow-auto overscroll-contain p-4"
+      className={cn(
+        "bg-subtle relative min-h-0 flex-1 overflow-auto overscroll-contain p-4",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
       onPointerDown={(event) => {
         const target = event.target as HTMLElement;
         if (!target.closest("[data-reader-selection-toolbar]")) {

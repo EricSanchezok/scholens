@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { webPerformanceEventSchema } from "@/lib/observability/web-performance-contract";
+import {
+  conversationPerformanceMetricNames,
+  webTelemetryEventSchema,
+} from "@/lib/observability/web-performance-contract";
 
 const MAX_CONTENT_LENGTH = 4_096;
+const CONVERSATION_METRICS = new Set<string>(
+  conversationPerformanceMetricNames,
+);
 
 function noStore(status = 204) {
   return new NextResponse(null, {
@@ -23,8 +29,12 @@ export async function POST(request: Request) {
   } catch {
     return noStore(400);
   }
-  const parsed = webPerformanceEventSchema.safeParse(body);
+  const parsed = webTelemetryEventSchema.safeParse(body);
   if (!parsed.success) return noStore(400);
+
+  const eventName = CONVERSATION_METRICS.has(parsed.data.metric)
+    ? "conversation_performance"
+    : "web_performance";
 
   const ray = request.headers.get("cf-ray") ?? "";
   const country = request.headers.get("cf-ipcountry")?.toUpperCase();
@@ -33,7 +43,7 @@ export async function POST(request: Request) {
       ...parsed.data,
       cf_colo: ray.includes("-") ? ray.split("-").at(-1) : undefined,
       country_group: country === "CN" ? "CN" : "non-CN",
-      event: "web_performance",
+      event: eventName,
       received_at: new Date().toISOString(),
     }),
   );

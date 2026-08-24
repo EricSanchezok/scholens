@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { Button, Frame, keyboardFocusRing, Skeleton } from "@/components/ui";
+import { Button, focusSurfaceVariants, Frame, Skeleton } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
@@ -216,7 +216,7 @@ function MobileRecentLauncher({
                 aria-pressed={selected}
                 className={cn(
                   "motion-control bg-surface hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "selection" }),
                   selected && "bg-pressed",
                 )}
                 key={`${item.kind}:${item.id}`}

@@ -14,8 +14,8 @@ import { useTranslations } from "next-intl";
 
 import { useCopyActionFeedback } from "@/components/feedback";
 import {
+  focusSurfaceVariants,
   IconButton,
-  keyboardFocusRing,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -26,7 +26,6 @@ import { AnimatePresence, m, motionVariants } from "@/design-system/motion";
 import { cn } from "@/lib/utilities/cn";
 import {
   readerHighlightColors,
-  readerHighlightColorValue,
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
 import { readerPdfRectsForPage } from "../reader-pdf-position";
@@ -37,6 +36,7 @@ import {
 import type { ReaderAnnotationAudience } from "../reader-types";
 import { useReaderFloatingPosition } from "./use-reader-floating-position";
 import { translationErrorMessageKey } from "../translation/translation-errors";
+import { ReaderHighlightColorButton } from "./reader-highlight-color-button";
 
 export type ReaderSelectionLabels = {
   ask: string;
@@ -228,7 +228,7 @@ export function ReaderSelectionToolbar({
               aria-label={labels.viewTranslation}
               className={cn(
                 "border-line bg-elevated shadow-raised hidden w-80 max-w-[min(20rem,80vw)] rounded-[var(--radius-lg)] border p-3 text-left lg:block",
-                keyboardFocusRing,
+                focusSurfaceVariants({ intent: "neutral" }),
               )}
               data-reader-selection-translation-preview
               exit="exit"
@@ -282,7 +282,7 @@ export function ReaderSelectionToolbar({
                       className={cn(
                         "rounded-[calc(var(--radius-md)-2px)] px-2 py-1",
                         audience === value && "bg-surface shadow-raised",
-                        keyboardFocusRing,
+                        focusSurfaceVariants({ intent: "selection" }),
                       )}
                       key={value}
                       onClick={() => setAudience(value)}
@@ -293,20 +293,17 @@ export function ReaderSelectionToolbar({
                   ))}
                 </div>
               ) : null}
-              <div className="flex gap-2">
+              <div
+                className="grid grid-cols-4 gap-2"
+                data-reader-highlight-palette=""
+              >
                 {readerHighlightColors.map((color) => (
-                  <button
-                    aria-label={labels.colors[color]}
-                    className={cn(
-                      "motion-control border-control size-6 rounded-full border hover:scale-105",
-                      keyboardFocusRing,
-                    )}
+                  <ReaderHighlightColorButton
+                    className="hover:scale-105"
+                    color={color}
                     key={color}
+                    label={labels.colors[color]}
                     onClick={() => onHighlight(color, audience)}
-                    style={{
-                      backgroundColor: readerHighlightColorValue(color),
-                    }}
-                    type="button"
                   />
                 ))}
               </div>

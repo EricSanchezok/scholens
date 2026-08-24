@@ -34,7 +34,6 @@
   --color-bg-surface: #ffffff;
   --color-border-control: #94948e;
   --color-border-default: #e4e4e1;
-  --color-border-focus: #20201e;
   --color-border-strong: #73736e;
   --color-border-subtle: #e7e7e4;
   --color-danger-bg: #fff2f0;
@@ -53,7 +52,11 @@
   --color-document-selection-bg: rgba(91, 155, 213, 0.3);
   --color-elevation-composer: rgba(0, 0, 0, 0.12);
   --color-elevation-shadow: rgba(0, 0, 0, 0.4);
-  --color-focus-ring: #20201e;
+  --color-focus-foreground: #20201e;
+  --color-focus-icon: #4b4b47;
+  --color-focus-scrollbar: #73736e;
+  --color-focus-secondary: #4b4b47;
+  --color-focus-surface: #d7d7d2;
   --color-icon-disabled: #a2a29c;
   --color-icon-inverse: #ffffff;
   --color-icon-primary: #20201e;
@@ -114,7 +117,6 @@
   --color-bg-surface: #20201e;
   --color-border-control: #73736e;
   --color-border-default: #4b4b47;
-  --color-border-focus: #ffffff;
   --color-border-strong: #73736e;
   --color-border-subtle: #323230;
   --color-danger-bg: #963e38;
@@ -133,7 +135,11 @@
   --color-document-selection-bg: rgba(91, 155, 213, 0.3);
   --color-elevation-composer: rgba(0, 0, 0, 0.4);
   --color-elevation-shadow: rgba(0, 0, 0, 0.4);
-  --color-focus-ring: #ffffff;
+  --color-focus-foreground: #ffffff;
+  --color-focus-icon: #e4e4e1;
+  --color-focus-scrollbar: #bbbbb5;
+  --color-focus-secondary: #e4e4e1;
+  --color-focus-surface: #5e5e59;
   --color-icon-disabled: #73736e;
   --color-icon-inverse: #141412;
   --color-icon-primary: #ffffff;

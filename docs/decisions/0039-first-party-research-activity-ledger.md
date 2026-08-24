@@ -1,4 +1,4 @@
-# 0038 — First-party research activity ledger
+# 0039 — First-party research activity ledger
 
 Status: Accepted
 Date: 2026-08-24

@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
   Frame,
   FramePanel,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   OverflowMenuButton,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
@@ -39,7 +39,7 @@ export function ProjectRow({
   return (
     <Frame
       asChild
-      className="motion-control group/interactive-row hover:border-line-strong hover:bg-hover focus-within:border-line-strong focus-within:bg-hover active:bg-pressed flex-row items-start"
+      className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex-row items-start"
       spacing="compact"
     >
       <article data-project-row="">
@@ -47,7 +47,7 @@ export function ProjectRow({
           aria-label={project.title}
           className={cn(
             "flex min-w-0 flex-1 items-start gap-3 rounded-[var(--radius-lg)] px-2 py-3 sm:gap-4 sm:px-3",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
           )}
           href={`/projects/${project.id}` as Route}
         >

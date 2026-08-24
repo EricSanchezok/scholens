@@ -79,12 +79,15 @@ and the shared Conversation feature.
   mismatch, treats expired/revoked/authority failures as terminal, and exposes
   retry only for connection or service failure.
 
-List search and sort live in the URL. Detail view, selected
-conversation, chat disclosure, the Overview insight range, and namespaced
-paper/output filters also live in the URL. `range` accepts `7d`,
+List search and sort live in the URL. The Project-paper search field keeps its
+unsubmitted draft in feature-local state and writes the trimmed committed query
+to the URL only on Enter. Detail view, selected conversation, chat disclosure,
+the Overview insight range, and namespaced paper/output filters also live in the
+URL. `range` accepts `7d`,
 `30d`, `90d`, or `all`; the default `30d` is omitted. Project and output lists
 retain opaque URL cursors; Project-paper continuations live in TanStack Query
-and append in place. `panel=chat` means the responsive Project conversation is open;
+and append in place. `panel=chat` means the responsive Project conversation is
+open;
 omitting `panel` fully collapses it without deleting `conversation`. Closing the
 panel keeps the mounted draft and selected conversation. Server resources use
 TanStack Query; forms use React Hook Form and Zod; dialog and menu disclosure
@@ -95,10 +98,12 @@ header and single-layer overview groups, with no reserved chat rail.
 Opening chat adds the same responsive `clamp(23rem, 34vw, 31.25rem)` side panel
 used by Reader. Mobile uses a Reader-style full-screen Sheet aligned to the
 visual viewport height and vertical offset with shared safe-area padding; the
-Workspace app bar remains the only visible
-page title, while conversation history and New Conversation keep the same
-placement and icons as Reader. Papers and rows become one-column compositions
-below the desktop breakpoints, and all controls remain usable at 320px.
+Workspace app bar remains the only visible page title. The in-panel toolbar
+runs from conversation history, as its only flexible and widest item, to the
+compact label-only reasoning-strength selector, New Conversation, and Collapse.
+The existing New Conversation and Collapse glyph buttons keep their behavior
+and appearance. Papers and rows become one-column compositions below the
+desktop breakpoints, and all controls remain usable at 320px.
 
 Project detail inherits the Library collection language: underlined tabs,
 pill-shaped search, the shared light-line Select surface for sorting and kind,
@@ -129,7 +134,7 @@ engagement, activity, outputs, collaboration.
 ## Research activity in Project Overview
 
 The Project research-activity sequence ships with
-[ADR 0038](../../docs/decisions/0038-first-party-research-activity-ledger.md)
+[ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md)
 and consumes the real insight and Project-activity contracts. It does not fill
 the Overview with fake chart data when a dependency is unavailable. Period
 changes refetch an authorized Server projection; the browser never downloads
@@ -213,9 +218,12 @@ independent action target and is always discoverable on touch layouts.
   and keyset pagination. It exposes `preview_url`, summary, keywords, and the
   current actor's optional personal status, tags, and last-access timestamp in
   addition to the Project relationship's `added_at`. Filtering happens before
-  count and pagination. Queries of two or more characters use
+  count and pagination. Submitting a query of two or more characters uses
   `POST /api/v1/search/papers` with the same personal filters and a Project
   selection collection so fuzzy, full-text, and semantic ranking stay shared.
+  The mounted search toolbar remains available in loading, error, empty, and
+  populated states, and active search is always presented as relevance-ordered;
+  clearing the query restores the prior browse sort.
   Preview and source-file URL signing are independent: the Web requests
   `load_preview_urls=true` and leaves `load_urls=false`, while omitted flags and
   MCP access sign neither URL. Both flags participate in cursor validation.
@@ -266,8 +274,8 @@ Canonical Figma file: [Scholens — Product Design](https://www.figma.com/design
 | paper filters / columns / folded preview    | `1172:1891`              | `Library` interaction and account preference states         |
 | outputs populated / empty                   | `1087:1622`              | `Outputs`, `OutputsEmpty`                                   |
 | manage / Add papers first                   | `1087:1715`              | `Papers`                                                    |
-| mobile 390 project / chat                   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |
-| mobile 430 project / chat                   | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat`                                   |
+| mobile 390 project / ordered chat toolbar   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |
+| mobile 430 project / ordered chat toolbar   | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat430`                                |
 | collaborator delivery states                | `1151:2`                 | `Features/Projects/Manage collaborators` → `DeliveryStates` |
 | collaborator 390 / 320 dark zh-CN           | `1154:2`, `1154:74`      | `Mobile390`, `SmallMobile320`, `ChineseDark`                |
 | invitation desktop states / 430 zh-CN retry | `1152:2`, `1154:98`      | `Features/Projects/Accept invitation`                       |

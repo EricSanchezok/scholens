@@ -5,11 +5,13 @@ import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
-import { keyboardFocusRing } from "./focus";
+import { focusSurfaceVariants } from "./focus";
 import { useTextControlFocus } from "./text-control-focus";
 
-const controlClass =
-  "motion-control w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted hover:border-line-strong aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled";
+const controlClass = cn(
+  "motion-control w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted hover:bg-hover aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled",
+  focusSurfaceVariants({ intent: "neutral" }),
+);
 
 export const Input = React.forwardRef<
   HTMLInputElement,
@@ -57,7 +59,13 @@ export const SearchField = React.forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative">
+  <div
+    className={cn(
+      "bg-surface relative rounded-[var(--radius-md)]",
+      focusSurfaceVariants({ intent: "neutral" }),
+    )}
+    data-focus-surface
+  >
     <Icon
       className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
       glyph={Search}
@@ -65,7 +73,8 @@ export const SearchField = React.forwardRef<
       tone="secondary"
     />
     <Input
-      className={cn("pl-10", className)}
+      className={cn("bg-transparent pl-10 hover:bg-transparent", className)}
+      data-focus-delegate="surface"
       ref={ref}
       type="search"
       {...props}
@@ -94,10 +103,17 @@ export const PasswordInput = React.forwardRef<
     const label = visible ? hidePasswordLabel : showPasswordLabel;
 
     return (
-      <div className="relative">
+      <div
+        className={cn(
+          "bg-surface relative rounded-[var(--radius-md)]",
+          focusSurfaceVariants({ intent: "neutral" }),
+        )}
+        data-focus-surface
+      >
         <Input
           autoComplete={autoComplete ?? "current-password"}
-          className={cn("pr-12", className)}
+          className={cn("bg-transparent pr-12 hover:bg-transparent", className)}
+          data-focus-delegate="surface"
           ref={ref}
           type={visible ? "text" : "password"}
           {...props}
@@ -107,7 +123,7 @@ export const PasswordInput = React.forwardRef<
           aria-pressed={visible}
           className={cn(
             "group text-ui-icon-secondary absolute top-1/2 right-0 grid size-11 -translate-y-1/2 place-items-center rounded-[var(--radius-md)]",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
           )}
           disabled={props.disabled}
           onClick={() => setVisible((value) => !value)}

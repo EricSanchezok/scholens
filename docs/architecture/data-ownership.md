@@ -109,7 +109,9 @@ path, and increments `path_revision`. Those aggregate fields therefore never
 describe a branch that the Server has not durably accepted. The same transaction
 creates a `conversation_generate` DurableJob and outbox dispatch whose ID equals
 the Response ID. The job owns delivery and lease state only; it never owns the
-answer or selects the active branch.
+answer or selects the active branch. For a first prompt, that same transaction
+may insert the client-identified Conversation before its root Turn; no empty
+Conversation or partial first generation becomes externally accepted.
 
 A turn also owns its typed paper-context snapshot and Reader context. A
 `paper_selection` captures the
@@ -221,7 +223,7 @@ and single-flight coordination.
 ## Research activity ownership
 
 Research activity is first-party product data in `scholens.*`, following
-[ADR 0038](../decisions/0038-first-party-research-activity-ledger.md). The Web
+[ADR 0039](../decisions/0039-first-party-research-activity-ledger.md). The Web
 observes bounded Reader evidence and submits cumulative values through the
 public API; browser state is not the durable owner. Server owns authentication,
 paper and Project authorization, monotonic validation, rollup updates,

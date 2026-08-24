@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { mockBillingUsage } from "./billing-fixture";
+import { focusThroughTab } from "./focus";
 import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 import path from "node:path";
 
@@ -605,10 +606,10 @@ async function mockReaderReflow(
 }
 
 async function mockReaderConversationCreation(page: Page) {
-  const conversationId = "60000000-0000-4000-8000-000000000001";
+  let conversationId: string | undefined;
   const answer = "The paper presents a persistent agent runtime.";
   let persistedTurn: Record<string, unknown> | undefined;
-  const detail = {
+  const detail = (id: string) => ({
     archived_at: null,
     capabilities: {
       archive: true,
@@ -620,7 +621,7 @@ async function mockReaderConversationCreation(page: Page) {
       send: true,
       share: false,
     },
-    id: conversationId,
+    id,
     paper_context: {
       kind: "selection",
       document_ids: [paperDocument.document_id],
@@ -636,52 +637,50 @@ async function mockReaderConversationCreation(page: Page) {
     title: "New conversation",
     tool_permissions: [],
     updated_at: "2026-08-14T00:00:00Z",
-  };
+  });
 
   await page.unroute(`${apiPattern}/conversations**`);
   await page.route(`${apiPattern}/conversations**`, async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
-    if (pathname.endsWith("/conversations") && request.method() === "POST") {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(detail),
-      });
-      return;
-    }
-    if (
-      pathname.endsWith(`/conversations/${conversationId}/turns`) &&
-      request.method() === "POST"
-    ) {
+    const startMatch = pathname.match(/\/conversations\/([^/]+)\/start$/);
+    if (startMatch && request.method() === "POST") {
+      conversationId = startMatch[1]!;
       const body = request.postDataJSON() as {
-        response_id: string;
-        turn_id: string;
-        user_query: string;
+        conversation: {
+          paper_context: ReturnType<typeof detail>["paper_context"];
+        };
+        turn: {
+          response_id: string;
+          turn_id: string;
+          user_query: string;
+        };
       };
+      const turnRequest = body.turn;
       const turn = {
         branch: { count: 1, index: 1 },
         contexts: [],
         depth: 1,
-        id: body.turn_id,
+        id: turnRequest.turn_id,
         locale: "en",
         reasoning_level: "standard",
         responses: [
           {
             artifacts: null,
             content: answer,
-            id: body.response_id,
+            id: turnRequest.response_id,
             references: null,
             status: "completed",
             trace: null,
             variant_index: 0,
           },
         ],
-        paper_context: detail.paper_context,
+        paper_context: body.conversation.paper_context,
         parent_turn_id: null,
-        selected_response_id: body.response_id,
+        selected_response_id: turnRequest.response_id,
         suggestions: null,
         time_zone: "Asia/Shanghai",
-        user_query: body.user_query,
+        user_query: turnRequest.user_query,
       };
       persistedTurn = turn;
       const events = [
@@ -689,27 +688,27 @@ async function mockReaderConversationCreation(page: Page) {
           type: "start",
           conversation_id: conversationId,
           generation_kind: "initial",
-          response_id: body.response_id,
-          turn_id: body.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
           variant_index: 0,
         },
         {
           type: "assistant_item_start",
           item_id: "assistant-item-1",
-          response_id: body.response_id,
+          response_id: turnRequest.response_id,
           sequence: 1,
         },
         {
           type: "assistant_item_delta",
           delta: answer,
           item_id: "assistant-item-1",
-          response_id: body.response_id,
+          response_id: turnRequest.response_id,
         },
         { type: "response_ready", turn },
         {
           type: "complete",
-          response_id: body.response_id,
-          turn_id: body.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
         },
       ];
       await route.fulfill({
@@ -720,7 +719,10 @@ async function mockReaderConversationCreation(page: Page) {
       });
       return;
     }
-    if (pathname.endsWith(`/conversations/${conversationId}/turns`)) {
+    if (
+      conversationId &&
+      pathname.endsWith(`/conversations/${conversationId}/turns`)
+    ) {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -731,10 +733,13 @@ async function mockReaderConversationCreation(page: Page) {
       });
       return;
     }
-    if (pathname.endsWith(`/conversations/${conversationId}`)) {
+    if (
+      conversationId &&
+      pathname.endsWith(`/conversations/${conversationId}`)
+    ) {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify(detail),
+        body: JSON.stringify(detail(conversationId)),
       });
       return;
     }
@@ -744,7 +749,7 @@ async function mockReaderConversationCreation(page: Page) {
     });
   });
 
-  return { answer, conversationId };
+  return { answer, getConversationId: () => conversationId };
 }
 
 async function selectPdfPassage(page: Page, pageNumber: number) {
@@ -1107,8 +1112,16 @@ test("creates a persistent document highlight with the full color palette", asyn
   expect(
     await swatches.evaluateAll(
       (items) =>
-        new Set(items.map((item) => getComputedStyle(item).backgroundColor))
-          .size,
+        new Set(
+          items.map(
+            (item) =>
+              getComputedStyle(
+                item.querySelector<HTMLElement>(
+                  "[data-reader-highlight-swatch]",
+                )!,
+              ).backgroundColor,
+          ),
+        ).size,
     ),
   ).toBe(8);
 
@@ -1156,6 +1169,48 @@ test("creates a persistent document highlight with the full color palette", asyn
     "background-color",
     persistedAppearance.background,
   );
+});
+
+test("preserves Reader swatch colors and one focus owner in forced colors", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await selectPdfPassage(page, 2);
+  await page.getByRole("button", { name: "Add annotation" }).click();
+
+  const palette = page.locator("[data-reader-highlight-palette]");
+  const swatches = palette.getByRole("button");
+  await expect(swatches).toHaveCount(8);
+  expect(
+    await palette
+      .locator("[data-reader-highlight-swatch]")
+      .evaluateAll(
+        (items) =>
+          new Set(items.map((item) => getComputedStyle(item).backgroundColor))
+            .size,
+      ),
+  ).toBe(8);
+
+  const selected = palette.getByRole("button", { name: "Yellow highlight" });
+  await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    selected.locator("[data-reader-highlight-swatch]"),
+  ).toHaveAttribute("data-selected", "true");
+  await focusThroughTab(selected);
+  await expect
+    .poll(() =>
+      selected.evaluate((element) => ({
+        outline: getComputedStyle(element).outlineWidth,
+        swatchOutline: getComputedStyle(
+          element.querySelector<HTMLElement>("[data-reader-highlight-swatch]")!,
+        ).outlineStyle,
+      })),
+    )
+    .toEqual({ outline: "2px", swatchOutline: "none" });
 });
 test("preserves an exact partial-span PDF selection", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
@@ -1782,12 +1837,17 @@ test("filters Project Ask by the current paper and preserves an unsent draft", a
 test("activates a newly created Reader conversation before history refreshes", async ({
   page,
 }) => {
-  const { answer, conversationId } = await mockReaderConversationCreation(page);
+  const { answer, getConversationId } =
+    await mockReaderConversationCreation(page);
   const question = "What is the paper's central contribution?";
   await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
 
   await page.getByRole("textbox", { name: "Ask a follow-up" }).fill(question);
   await page.getByRole("button", { name: "Ask Scholens" }).click();
+
+  await expect.poll(getConversationId).not.toBeUndefined();
+  const conversationId = getConversationId();
+  if (!conversationId) throw new Error("Conversation start was not observed");
 
   await expect(page).toHaveURL(
     new RegExp(`panel=ask.*conversation=${conversationId}`),
@@ -1942,15 +2002,54 @@ test("keeps Reader Ask controls inside a panned visual viewport", async ({
   await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
 
   const panel = page.locator('[data-placement="visual-full"]');
-  const newConversation = page
+  const switcher = panel.locator("[data-conversation-switcher]");
+  const history = switcher.locator("[data-conversation-switcher-history]");
+  const reasoning = switcher.getByRole("button", {
+    name: "Reasoning strength: Standard",
+  });
+  const create = switcher
     .getByRole("button", { name: "New conversation", exact: true })
-    .first();
+    .last();
+  const close = panel.getByRole("button", { name: "Close context panel" });
   const composer = page
     .getByRole("textbox", { name: "Ask a follow-up" })
     .locator("xpath=ancestor::form");
   await expect(panel).toBeVisible();
-  await expect(newConversation).toBeVisible();
+  await expect(history).toBeVisible();
+  await expect(close).toBeVisible();
   await expect(composer).toBeVisible();
+  const controlBoxes = await Promise.all(
+    [history, reasoning, create].map((control) => control.boundingBox()),
+  );
+  expect(controlBoxes.every(Boolean)).toBe(true);
+  expect(controlBoxes.map((box) => Math.round(box!.x))).toEqual(
+    [...controlBoxes]
+      .sort((left, right) => left!.x - right!.x)
+      .map((box) => Math.round(box!.x)),
+  );
+  expect(controlBoxes[0]!.width).toBeGreaterThan(
+    Math.max(...controlBoxes.slice(1).map((box) => box!.width)),
+  );
+  expect(
+    controlBoxes
+      .slice(0, -1)
+      .every((box, index) => box!.x + box!.width <= controlBoxes[index + 1]!.x),
+  ).toBe(true);
+  const closeBox = await close.boundingBox();
+  expect(closeBox).not.toBeNull();
+  expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(
+    controlBoxes[0]!.y,
+  );
+  expect(
+    await switcher.evaluate((element) => element.scrollWidth),
+  ).toBeLessThanOrEqual(
+    await switcher.evaluate((element) => element.clientWidth),
+  );
+  await reasoning.click();
+  await page.getByRole("menuitemradio", { name: /Deep/ }).click();
+  await expect(
+    switcher.getByRole("button", { name: "Reasoning strength: Deep" }),
+  ).toBeVisible();
 
   await setVisualViewport(page, { height: 500, offsetTop: 220 });
   await expect
@@ -1965,11 +2064,11 @@ test("keeps Reader Ask controls inside a panned visual viewport", async ({
       }),
     )
     .toEqual({ bottom: 720, height: 500, top: 220 });
-  const [newConversationBox, composerBox] = await Promise.all([
-    newConversation.boundingBox(),
+  const [historyBox, composerBox] = await Promise.all([
+    history.boundingBox(),
     composer.boundingBox(),
   ]);
-  expect(newConversationBox!.y).toBeGreaterThanOrEqual(220);
+  expect(historyBox!.y).toBeGreaterThanOrEqual(220);
   expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(720);
 
   await setVisualViewport(page, { height: 844, offsetTop: 0 });

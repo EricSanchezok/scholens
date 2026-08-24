@@ -216,6 +216,9 @@ export const UnifiedSearchKeyboard: Story = {
     const search = await body.findByRole("searchbox", {
       name: "Search conversations or papers",
     });
+    await userEvent.type(search, "😀");
+    await expect(body.getByText("Recent conversations")).toBeVisible();
+    await userEvent.clear(search);
     await userEvent.type(search, "memory");
     const result = await body.findByRole("link", {
       name: /Comparing memory retrieval strategies/,

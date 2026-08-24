@@ -123,7 +123,7 @@ service without spending menu width on the license label.
 
 `GET|PUT /api/v1/me/reading-activity-preferences` is the only account preference
 authority for the research-activity slice defined by
-[ADR 0038](../../docs/decisions/0038-first-party-research-activity-ledger.md).
+[ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md).
 The Research activity group contains two independent switches:
 
 - **Record reading activity** controls future private Reader sessions, active-

@@ -74,6 +74,7 @@ def verify_paper_search() -> None:
         assert first.total == 3
         assert first.items[0].document_id == TITLE_DOCUMENT_ID
         assert first.items[0].matched_fields == ["title"]
+        assert first.items[0].snippets == []
         assert first.next_cursor is not None
         second = search(
             actor=owner,
@@ -82,6 +83,12 @@ def verify_paper_search() -> None:
             ),
         )
         assert second.items[0].document_id != first.items[0].document_id
+
+        short_numeric = search(
+            actor=owner,
+            request=PaperSearchRequest(query="23"),
+        )
+        assert short_numeric.items == [] and short_numeric.total == 0
 
         library = search(
             actor=owner,
@@ -122,6 +129,15 @@ def verify_paper_search() -> None:
             ),
         )
         assert [item.document_id for item in restricted.items] == [BODY_DOCUMENT_ID]
+        stemmed = search(
+            actor=owner,
+            request=PaperSearchRequest(
+                query="neural retrieving",
+                collection=SelectedPaperCollection(document_ids=[BODY_DOCUMENT_ID]),
+            ),
+        )
+        assert [item.document_id for item in stemmed.items] == [BODY_DOCUMENT_ID]
+        assert "neural retrieval" in stemmed.items[0].snippets[0].text
         hidden = search(
             actor=outsider, request=PaperSearchRequest(query="neural retrieval")
         )

@@ -130,6 +130,7 @@ function ReaderDocumentWorkspace({
     new URLSearchParams(searchParams.toString()),
   );
   const t = useTranslations("Reader");
+  const conversationT = useTranslations("Home.conversation");
   const { resolved: resolvedMotion } = useMotionPreference();
   const toast = useToast();
   const { signOut } = useAuthSession();
@@ -325,6 +326,11 @@ function ReaderDocumentWorkspace({
       }));
       updateLocation({ conversation: nextConversationId, panel: "ask" });
     },
+    onSubmissionError: () =>
+      toast.notify({
+        title: conversationT("error"),
+        description: conversationT("retryHint"),
+      }),
     onTurnStarted: () => {
       setPendingTurnContext(undefined);
       setSelectedAnnotationId(undefined);

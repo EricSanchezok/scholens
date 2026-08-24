@@ -367,6 +367,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Conversation */
+        post: operations["start_conversation_api_v1_conversations__conversation_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
         parameters: {
             query?: never;
@@ -3032,6 +3049,19 @@ export interface components {
             /** Snippet */
             snippet?: string | null;
         };
+        /**
+         * ConversationStartRequest
+         * @description Atomically create a Conversation and accept its first turn.
+         *
+         *     Replay identity uses the client IDs, owner, originally accepted scope,
+         *     immutable Turn fields, and the Turn's paper-context snapshot. Mutable Conversation
+         *     title, current scope, current context, and tool permissions are not replay-identity
+         *     fields.
+         */
+        ConversationStartRequest: {
+            conversation: components["schemas"]["ConversationCreateRequest"];
+            turn: components["schemas"]["ConversationTurnCreateRequest"];
+        };
         /** ConversationStreamActivityEvent */
         ConversationStreamActivityEvent: {
             activity: components["schemas"]["ConversationActivity"];
@@ -3198,7 +3228,7 @@ export interface components {
         };
         /**
          * ConversationStreamEventSchema
-         * @description Compatible schema for the existing inline SSE response.
+         * @description Compatible schema for the original direct generation response.
          */
         ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
@@ -7403,6 +7433,53 @@ export interface operations {
             };
         };
     };
+    start_conversation_api_v1_conversations__conversation_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                prefer?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationStartRequest"];
+            };
+        };
+        responses: {
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
+                    "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
+                };
+            };
+            /** @description Durable generation accepted for background delivery. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put: {
         parameters: {
             query?: never;
@@ -7489,17 +7566,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7537,17 +7615,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7585,17 +7664,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;

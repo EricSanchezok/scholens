@@ -73,6 +73,9 @@
     "/api/v1/conversations/{conversation_id}/selected-branch": [
       "put"
     ],
+    "/api/v1/conversations/{conversation_id}/start": [
+      "post"
+    ],
     "/api/v1/conversations/{conversation_id}/tool-permissions": [
       "put"
     ],

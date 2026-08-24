@@ -4,8 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import type { Components } from "react-markdown";
 import * as React from "react";
 
-import { Button } from "@/components/ui";
+import { Button, focusSurfaceVariants } from "@/components/ui";
 import { AcademicMarkdown } from "@/components/ui/academic-markdown";
+import {
+  academicMarkdownToPlainText,
+  sanitizeAcademicMarkdown,
+} from "@/lib/content/academic-text";
 import { cn } from "@/lib/utilities/cn";
 import {
   reflowQueries,
@@ -33,7 +37,10 @@ export type ReaderReflowLabels = {
 const createMarkdownComponents = (figurePlaceholder: string): Components => ({
   a: ({ children, href }) => (
     <a
-      className="decoration-line-strong hover:decoration-foreground underline underline-offset-4"
+      className={cn(
+        "decoration-line-strong hover:decoration-foreground rounded-[var(--radius-xs)] underline underline-offset-4",
+        focusSurfaceVariants({ intent: "inline" }),
+      )}
       href={href}
       rel="noreferrer"
       target="_blank"
@@ -84,13 +91,22 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
   ),
   p: ({ children }) => <p>{children}</p>,
   pre: ({ children }) => (
-    <pre className="bg-subtle max-w-full overflow-x-auto rounded-[var(--radius-lg)] p-4 font-mono text-sm leading-6">
+    <pre
+      className={cn(
+        "bg-subtle max-w-full overflow-x-auto rounded-[var(--radius-lg)] p-4 font-mono text-sm leading-6",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
+      tabIndex={0}
+    >
       {children}
     </pre>
   ),
   table: ({ children }) => (
     <div
-      className="border-line max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] border"
+      className={cn(
+        "border-line max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] border",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
       tabIndex={0}
     >
       <table className="w-full min-w-[36rem] border-collapse text-left font-sans text-sm">
@@ -112,28 +128,6 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
     </ul>
   ),
 });
-
-export function sanitizeAcademicMarkdown(markdown: string) {
-  return markdown
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<sup>\s*([^<]+?)\s*<\/sup>/gi, (_, value: string) =>
-      value.trim() ? `$^{${value.trim()}}$` : "",
-    )
-    .replace(/<sub>\s*([^<]+?)\s*<\/sub>/gi, (_, value: string) =>
-      value.trim() ? `$_{${value.trim()}}$` : "",
-    )
-    .replace(/<br\s*\/?>/gi, "  \n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\uFFFD/g, "");
-}
-
-export function reflowMarkdownPlainText(markdown: string) {
-  return sanitizeAcademicMarkdown(markdown)
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/[`*_#>|$[\]{}]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function primaryReflowSource(block: DocumentReflowBlock) {
   return block.source_spans[0];
@@ -362,7 +356,7 @@ function ReflowBlock({
               asset={asset}
               documentId={documentId}
               label={
-                reflowMarkdownPlainText(source) || labels.figurePlaceholder
+                academicMarkdownToPlainText(source) || labels.figurePlaceholder
               }
             />
           ) : (
@@ -379,7 +373,10 @@ function ReflowBlock({
               ) : null}
               {pageNumber && primarySource && onOpenPdfSource ? (
                 <button
-                  className="hover:text-foreground underline-offset-4 hover:underline"
+                  className={cn(
+                    "hover:text-foreground rounded-[var(--radius-xs)] underline-offset-4 hover:underline",
+                    focusSurfaceVariants({ intent: "inline" }),
+                  )}
                   onClick={() => onOpenPdfSource(primarySource)}
                   type="button"
                 >
@@ -457,7 +454,12 @@ function PaperInformation({
   if (blocks.length === 0) return null;
   return (
     <details className="border-line border-y py-3">
-      <summary className="cursor-pointer list-none font-sans text-sm font-medium [&::-webkit-details-marker]:hidden">
+      <summary
+        className={cn(
+          "cursor-pointer list-none rounded-[var(--radius-sm)] font-sans text-sm font-medium [&::-webkit-details-marker]:hidden",
+          focusSurfaceVariants({ intent: "neutral" }),
+        )}
+      >
         {title}
       </summary>
       <div className="border-line mt-3 grid gap-3 border-t pt-3">
@@ -533,9 +535,11 @@ export function ReaderReflowView({
     <div
       className={cn(
         "bg-canvas min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-x-none",
+        focusSurfaceVariants({ intent: "scroll" }),
         className,
       )}
       ref={scrollContainerRef}
+      tabIndex={0}
     >
       <article
         aria-label={labels.document}

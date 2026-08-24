@@ -34,7 +34,7 @@ from app.shared.domain import (
     WorkspacePermission,
     ordered_workspace_permissions,
 )
-from sqlalchemy import and_, delete, exists, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -367,6 +367,7 @@ class ConversationRepository:
         request: ConversationCreateRequest,
         user_id: int,
         refresh_result: bool = True,
+        conversation_id: uuid.UUID | None = None,
     ) -> Conversation:
         project_id: uuid.UUID | None = None
         document_id: uuid.UUID | None = None
@@ -409,6 +410,7 @@ class ConversationRepository:
                 WorkspacePermission.WRITE,
             ]
         conversation = Conversation(
+            id=conversation_id or uuid.uuid4(),
             title=request.title or DEFAULT_CONVERSATION_TITLE,
             user_id=user_id,
             scope_type=request.scope_type.value,
@@ -440,6 +442,45 @@ class ConversationRepository:
         else:
             db.flush()
         return conversation
+
+    def create_with_id(
+        self,
+        db: Session,
+        *,
+        conversation_id: uuid.UUID,
+        request: ConversationCreateRequest,
+        user_id: int,
+    ) -> ConversationWrite[Conversation]:
+        """Serialize creation and return only an existing row owned by the caller.
+
+        Atomic-start replay validates the immutable accepted scope from the durable
+        job's project/document fields; the Conversation's current scope is mutable.
+        """
+        advisory_key = int.from_bytes(
+            conversation_id.bytes[:8],
+            byteorder="big",
+            signed=True,
+        )
+        db.execute(select(func.pg_advisory_xact_lock(advisory_key)))
+        existing = db.get(Conversation, conversation_id)
+        if existing is None:
+            return ConversationWrite(
+                value=self.create(
+                    db,
+                    request=request,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                ),
+                changed=True,
+            )
+
+        if existing.user_id != user_id:
+            raise AppError(
+                code="conversation_start_conflict",
+                message="This conversation identifier was already used differently",
+                kind=FailureKind.CONFLICT,
+            )
+        return ConversationWrite(value=existing, changed=False)
 
     def list(
         self,

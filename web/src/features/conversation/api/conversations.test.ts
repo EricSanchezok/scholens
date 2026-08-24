@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cancelConversationGeneration,
   parseConversationEventBlock,
+  streamConversationStart,
   streamConversationTurn,
   subscribeConversationEvents,
 } from "./conversations";
@@ -17,7 +18,20 @@ function streamResponse(body: string) {
   });
 }
 
+function turnRequest() {
+  return {
+    turn_id: turnId,
+    response_id: responseId,
+    user_query: "Question",
+    locale: "en" as const,
+    time_zone: "Asia/Shanghai",
+    reasoning_level: "standard" as const,
+    contexts: [],
+  };
+}
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -88,11 +102,53 @@ describe("conversation SSE parsing", () => {
         'data: {"type":"content_delta","delta":"legacy"}',
       ),
     ).toThrow("Conversation stream event was malformed");
+    expect(() =>
+      parseConversationEventBlock('data: {"type":"toString"}'),
+    ).toThrow("Conversation stream event was malformed");
+  });
+
+  it("rejects a known terminal event without its immutable identity", () => {
+    expect(() =>
+      parseConversationEventBlock('data: {"type":"complete"}'),
+    ).toThrow("Conversation stream event was malformed");
   });
 });
 
 describe("durable conversation generation", () => {
-  it("requests asynchronous acceptance and follows the detachable event stream", async () => {
+  it("uses the direct durable stream by default", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        streamResponse(
+          `: accepted\n\nid: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nid: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const events: string[] = [];
+    const accepted: string[] = [];
+
+    await streamConversationTurn({
+      conversationId,
+      request: turnRequest(),
+      signal: new AbortController().signal,
+      onEvent: (event) => events.push(event.type),
+      onAccepted: (streamKind) => accepted.push(streamKind),
+    });
+
+    expect(accepted).toEqual(["direct"]);
+    expect(events).toEqual(["start", "complete"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const post = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(post.method).toBe("POST");
+    expect(post.url).not.toContain("include_candidates");
+    expect(post.headers.get("Prefer")).toBeNull();
+    expect(post.headers.get("Accept")).toBe(
+      "application/vnd.scholens.conversation-events, text/event-stream, application/json",
+    );
+    expect(post.signal.aborted).toBe(false);
+  });
+
+  it("supports a 202 compatibility response and follows the durable stream", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -109,119 +165,67 @@ describe("durable conversation generation", () => {
       )
       .mockResolvedValueOnce(
         streamResponse(
-          `id: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+          `id: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nid: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
         ),
       );
     vi.stubGlobal("fetch", fetchMock);
     const events: string[] = [];
-    const accepted: boolean[] = [];
+    const accepted: string[] = [];
 
     await streamConversationTurn({
       conversationId,
-      request: {
-        turn_id: turnId,
-        response_id: responseId,
-        user_query: "Question",
-        locale: "en",
-        time_zone: "Asia/Shanghai",
-        reasoning_level: "standard",
-        contexts: [],
-      },
+      request: turnRequest(),
       signal: new AbortController().signal,
       onEvent: (event) => events.push(event.type),
-      onAccepted: (durable) => accepted.push(durable),
+      onAccepted: (streamKind) => accepted.push(streamKind),
     });
 
-    expect(accepted).toEqual([true]);
+    expect(accepted).toEqual(["resume"]);
     expect(events).toEqual(["start", "complete"]);
     const post = fetchMock.mock.calls[0]?.[0] as Request;
-    expect(post.headers.get("Prefer")).toBe("respond-async");
+    expect(post.headers.get("Prefer")).toBeNull();
     expect(post.headers.get("Accept")).toContain("application/json");
     const subscription = fetchMock.mock.calls[1]?.[0] as Request;
     expect(subscription.method).toBe("GET");
     expect(subscription.url).toContain(`/${responseId}/events/candidates`);
   });
 
-  it("falls back to the compatible subscription on an older Server", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            conversation_id: conversationId,
-            turn_id: turnId,
-            response_id: responseId,
-            variant_index: 1,
-            generation_kind: "initial",
-          }),
-          { status: 202 },
-        ),
-      )
-      .mockResolvedValueOnce(new Response(null, { status: 404 }))
-      .mockResolvedValueOnce(
-        streamResponse(
-          `id: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-    const events: string[] = [];
-
-    await streamConversationTurn({
-      conversationId,
-      request: {
-        turn_id: turnId,
-        response_id: responseId,
-        user_query: "Question",
-        locale: "en",
-        time_zone: "Asia/Shanghai",
-        reasoning_level: "standard",
-        contexts: [],
-      },
-      signal: new AbortController().signal,
-      onEvent: (event) => events.push(event.type),
-    });
-
-    const candidateRequest = fetchMock.mock.calls[1]?.[0] as Request;
-    const compatibleRequest = fetchMock.mock.calls[2]?.[0] as Request;
-    expect(candidateRequest.url).toContain(`/${responseId}/events/candidates`);
-    expect(compatibleRequest.url).toMatch(new RegExp(`/${responseId}/events$`));
-    expect(events).toEqual(["start", "complete"]);
-  });
-
-  it("keeps the legacy inline SSE contract as a compatibility fallback", async () => {
+  it("atomically creates a conversation and starts its first turn", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         streamResponse(
-          `event: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+          `id: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nid: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
         ),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const accepted: boolean[] = [];
-    const events: string[] = [];
 
-    await streamConversationTurn({
+    await streamConversationStart({
       conversationId,
       request: {
-        turn_id: turnId,
-        response_id: responseId,
-        user_query: "Question",
-        locale: "en",
-        time_zone: "Asia/Shanghai",
-        reasoning_level: "standard",
-        contexts: [],
+        conversation: {
+          scope_type: "global",
+          paper_context: { kind: "library" },
+        },
+        turn: turnRequest(),
       },
       signal: new AbortController().signal,
-      onEvent: (event) => events.push(event.type),
-      onAccepted: (durable) => accepted.push(durable),
+      onEvent: () => undefined,
     });
 
-    expect(accepted).toEqual([false]);
-    expect(events).toEqual(["start", "complete"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(request.url).toContain(`/conversations/${conversationId}/start`);
+    expect(await request.json()).toEqual({
+      conversation: {
+        scope_type: "global",
+        paper_context: { kind: "library" },
+      },
+      turn: turnRequest(),
+    });
   });
 
-  it("reconnects from the last durable event without replaying it", async () => {
+  it("resumes a direct stream from its last durable event", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -235,6 +239,135 @@ describe("durable conversation generation", () => {
         ),
       );
     vi.stubGlobal("fetch", fetchMock);
+    const events: string[] = [];
+
+    await streamConversationTurn({
+      conversationId,
+      request: turnRequest(),
+      signal: new AbortController().signal,
+      onEvent: (event) => events.push(event.type),
+    });
+
+    expect(events).toEqual(["start", "complete"]);
+    const resumed = fetchMock.mock.calls[1]?.[0] as Request;
+    expect(resumed.method).toBe("GET");
+    expect(resumed.headers.get("Last-Event-ID")).toBe("1-0");
+  });
+
+  it("retries an ambiguous acceptance with the same idempotent request", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nid: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const streaming = streamConversationTurn({
+      conversationId,
+      request: turnRequest(),
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    await streaming;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const requests = fetchMock.mock.calls.map((call) => call[0] as Request);
+    expect(await requests[0]?.clone().json()).toEqual(
+      await requests[1]?.clone().json(),
+    );
+  });
+
+  it("bounds header acceptance and retries with a fresh signal", async () => {
+    vi.useFakeTimers();
+    const requestSignals: AbortSignal[] = [];
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((input) => {
+        const request = input as Request;
+        requestSignals.push(request.signal);
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => reject(request.signal.reason),
+            { once: true },
+          );
+        });
+      })
+      .mockImplementationOnce(async (input) => {
+        requestSignals.push((input as Request).signal);
+        return streamResponse(
+          `id: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\nid: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        );
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const streaming = streamConversationTurn({
+      conversationId,
+      request: turnRequest(),
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(500);
+    await streaming;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requestSignals).toHaveLength(2);
+    expect(requestSignals[0]?.aborted).toBe(true);
+    expect(requestSignals[1]).not.toBe(requestSignals[0]);
+    expect(requestSignals[1]?.aborted).toBe(false);
+    const requests = fetchMock.mock.calls.map((call) => call[0] as Request);
+    expect(await requests[0]?.clone().json()).toEqual(
+      await requests[1]?.clone().json(),
+    );
+  });
+
+  it("does not reconnect when the event consumer throws a TypeError", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 1-0\nevent: start\ndata: {"type":"start","conversation_id":"${conversationId}","turn_id":"${turnId}","response_id":"${responseId}","variant_index":1,"generation_kind":"initial"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      streamConversationTurn({
+        conversationId,
+        request: turnRequest(),
+        signal: new AbortController().signal,
+        onEvent: () => {
+          throw new TypeError("consumer bug");
+        },
+      }),
+    ).rejects.toThrow("consumer bug");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(request.signal.aborted).toBe(true);
+  });
+
+  it("deduplicates a replayed delta after reconnecting from its cursor", async () => {
+    const firstDelta = `{"type":"assistant_candidate_delta","response_id":"${responseId}","item_id":"assistant-1","delta":"Hello "}`;
+    const secondDelta = `{"type":"assistant_candidate_delta","response_id":"${responseId}","item_id":"assistant-1","delta":"world"}`;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 1-0\nevent: assistant_candidate_delta\ndata: ${firstDelta}\n\n`,
+        ),
+      )
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 1-0\nevent: assistant_candidate_delta\ndata: ${firstDelta}\n\nid: 2-0\nevent: assistant_candidate_delta\ndata: ${secondDelta}\n\nid: 3-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(window, "setTimeout").mockImplementation(((
       handler: TimerHandler,
     ) => {
@@ -243,7 +376,7 @@ describe("durable conversation generation", () => {
       });
       return 1;
     }) as typeof window.setTimeout);
-    const events: string[] = [];
+    const deltas: string[] = [];
     const states: string[] = [];
 
     await subscribeConversationEvents({
@@ -251,11 +384,15 @@ describe("durable conversation generation", () => {
       turnId,
       responseId,
       signal: new AbortController().signal,
-      onEvent: (event) => events.push(event.type),
+      onEvent: (event) => {
+        if (event.type === "assistant_candidate_delta") {
+          deltas.push(event.delta);
+        }
+      },
       onConnectionState: (state) => states.push(state),
     });
 
-    expect(events).toEqual(["start", "complete"]);
+    expect(deltas).toEqual(["Hello ", "world"]);
     expect(states).toEqual(["connected", "reconnecting", "connected"]);
     const resumed = fetchMock.mock.calls[1]?.[0] as Request;
     expect(resumed.headers.get("Last-Event-ID")).toBe("1-0");
@@ -277,6 +414,140 @@ describe("durable conversation generation", () => {
       }),
     ).rejects.toThrow("Conversation stream event was malformed");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(request.signal.aborted).toBe(true);
+  });
+
+  it("treats authorization failures as terminal", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({ detail: "forbidden" }, { status: 403 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      subscribeConversationEvents({
+        conversationId,
+        turnId,
+        responseId,
+        signal: new AbortController().signal,
+        onEvent: () => undefined,
+      }),
+    ).rejects.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconnects when an open stream receives no bytes for 40 seconds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(async (input) => {
+        const request = input as Request;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              request.signal.addEventListener(
+                "abort",
+                () => controller.error(request.signal.reason),
+                { once: true },
+              );
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      })
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const states: string[] = [];
+
+    const subscription = subscribeConversationEvents({
+      conversationId,
+      turnId,
+      responseId,
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+      onConnectionState: (state) => states.push(state),
+    });
+    await vi.advanceTimersByTimeAsync(40_000);
+    await vi.advanceTimersByTimeAsync(500);
+    await subscription;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(states).toEqual(["connected", "reconnecting", "connected"]);
+  });
+
+  it("reconnects when an event subscription receives no headers", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    let firstSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce((input) => {
+        firstSignal = (input as Request).signal;
+        return new Promise<Response>((_resolve, reject) => {
+          firstSignal?.addEventListener(
+            "abort",
+            () => reject(firstSignal?.reason),
+            { once: true },
+          );
+        });
+      })
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const subscription = subscribeConversationEvents({
+      conversationId,
+      turnId,
+      responseId,
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(500);
+    await subscription;
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits offline and reconnects immediately on the online event", async () => {
+    let online = false;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        streamResponse(
+          `id: 2-0\nevent: complete\ndata: {"type":"complete","turn_id":"${turnId}","response_id":"${responseId}"}\n\n`,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const states: string[] = [];
+
+    const subscription = subscribeConversationEvents({
+      conversationId,
+      turnId,
+      responseId,
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+      onConnectionState: (state) => states.push(state),
+    });
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+    online = true;
+    window.dispatchEvent(new window.Event("online"));
+    await subscription;
+
+    expect(states).toEqual(["offline", "connected"]);
   });
 
   it("uses an explicit server cancellation instead of aborting generation locally", async () => {

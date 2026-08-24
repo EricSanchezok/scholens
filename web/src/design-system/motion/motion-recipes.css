@@ -159,8 +159,9 @@
 }
 
 .motion-icon {
-  transition: transform var(--motion-duration-fast)
-    var(--motion-easing-standard);
+  transition-property: transform, translate, scale, rotate;
+  transition-duration: var(--motion-duration-fast);
+  transition-timing-function: var(--motion-easing-standard);
 }
 
 .motion-shape {

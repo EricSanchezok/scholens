@@ -14,15 +14,17 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type {
   ConversationActivity,
   ConversationFailure,
   ProvisionalAssistantItem,
+  ConversationPhase,
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
+import { isActiveConversationPhase } from "../conversation-state";
 import { MessageContent } from "./message-content";
 
 type ActivityBatch = {
@@ -71,15 +73,16 @@ function activities(entries: ConversationTraceEntry[]) {
 
 function worklogSummary(
   entries: ConversationTraceEntry[],
-  state: LiveTurn["state"],
+  phase: ConversationPhase,
   sources: number,
   failure: ConversationFailure | null,
   connectionState: LiveTurn["connectionState"],
+  stopFailure: boolean,
   t: ReturnType<typeof useTranslations<"Home.conversation">>,
 ) {
   const operations = activities(entries);
-  if (state === "cancelled") return t("activity.stopped");
-  if (state === "error") {
+  if (phase === "cancelled") return t("activity.stopped");
+  if (phase === "error") {
     if (failure?.code === "llm_stream_timeout") return t("failure.timeout");
     if (failure?.code === "llm_provider_response_invalid") {
       return t("failure.invalidResponse");
@@ -102,8 +105,9 @@ function worklogSummary(
   const running = operations.findLast(
     (activity) => activity.state === "running",
   );
-  if (state === "streaming") {
-    if (connectionState === "stop_failed") return t("failure.stopFailed");
+  if (isActiveConversationPhase(phase)) {
+    if (stopFailure) return t("failure.stopFailed");
+    if (connectionState === "offline") return t("activity.reconnecting");
     if (connectionState === "reconnecting") return t("activity.reconnecting");
     if (running?.category === "search") return t("activity.searching");
     if (running?.category === "read") return t("activity.reading");
@@ -217,7 +221,7 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
 export function ConversationWorklog({
   entries,
   sourceTotal,
-  state,
+  phase,
   failure,
   provisionalItems,
   historical = false,
@@ -225,10 +229,11 @@ export function ConversationWorklog({
   durationMs,
   startedAtMs,
   connectionState = "connected",
+  stopFailure = false,
 }: {
   entries: ConversationTraceEntry[];
   sourceTotal: number;
-  state: LiveTurn["state"];
+  phase: ConversationPhase;
   failure: ConversationFailure | null;
   provisionalItems: ProvisionalAssistantItem[];
   historical?: boolean;
@@ -236,15 +241,16 @@ export function ConversationWorklog({
   durationMs?: number | null;
   startedAtMs?: number;
   connectionState?: LiveTurn["connectionState"];
+  stopFailure?: boolean;
 }) {
   const t = useTranslations("Home.conversation");
   const [manualOpen, setManualOpen] = React.useState<boolean | null>(null);
   const [liveNow, setLiveNow] = React.useState(() => Date.now());
   React.useEffect(() => {
-    if (state !== "streaming" || startedAtMs === undefined) return;
+    if (!isActiveConversationPhase(phase) || startedAtMs === undefined) return;
     const interval = window.setInterval(() => setLiveNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
-  }, [startedAtMs, state]);
+  }, [phase, startedAtMs]);
   const rows = React.useMemo(
     () =>
       groupWorklogEntries([
@@ -266,24 +272,26 @@ export function ConversationWorklog({
   );
   const hasDetails = rows.length > 0;
   const open =
-    manualOpen ?? (!historical && state === "streaming" && hasDetails);
+    manualOpen ??
+    (!historical && isActiveConversationPhase(phase) && hasDetails);
   const visible =
     hasDetails ||
-    state === "cancelled" ||
-    state === "error" ||
-    state === "streaming" ||
+    phase === "cancelled" ||
+    phase === "error" ||
+    isActiveConversationPhase(phase) ||
     durationMs != null;
   const summary = worklogSummary(
     entries,
-    state,
+    phase,
     sourceTotal,
     failure,
     connectionState,
+    stopFailure,
     t,
   );
   const effectiveDuration =
     durationMs ??
-    (state === "streaming" && startedAtMs !== undefined
+    (isActiveConversationPhase(phase) && startedAtMs !== undefined
       ? Math.max(0, liveNow - startedAtMs)
       : null);
   const durationLabel =
@@ -291,7 +299,7 @@ export function ConversationWorklog({
       ? null
       : formatWorklogDuration(effectiveDuration, t);
   const finalDurationAnnouncement =
-    state !== "streaming" && durationLabel
+    !isActiveConversationPhase(phase) && durationLabel
       ? t("duration.completed", { duration: durationLabel })
       : null;
 
@@ -307,21 +315,34 @@ export function ConversationWorklog({
   return (
     <section
       className="text-secondary min-w-0 text-[0.9375rem] leading-6 lg:text-sm lg:leading-normal"
-      data-state={state}
+      data-state={phase}
     >
+      {!historical && phase !== "ready" ? (
+        <span
+          aria-atomic="true"
+          aria-live="polite"
+          className="sr-only"
+          role="status"
+        >
+          {summary}
+          {finalDurationAnnouncement ? ` ${finalDurationAnnouncement}` : ""}
+        </span>
+      ) : null}
       {hasDetails ? (
         <button
           aria-expanded={open}
           className={cn(
             "motion-control hover:text-foreground focus-visible:text-foreground inline-flex min-h-11 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] text-left lg:min-h-8",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "inline" }),
           )}
           onClick={toggle}
           type="button"
         >
           <span className="settled-content-enter min-w-0" key={summary}>
             {summary}
-            {durationLabel ? <span aria-hidden> · {durationLabel}</span> : null}
+            {durationLabel ? (
+              <span aria-hidden={!historical}> · {durationLabel}</span>
+            ) : null}
           </span>
           <Icon
             className={cn("motion-icon shrink-0", open && "rotate-180")}
@@ -331,22 +352,15 @@ export function ConversationWorklog({
           />
         </button>
       ) : (
-        <p
-          aria-live="polite"
-          className="flex min-h-11 items-center lg:min-h-8"
-          role="status"
-        >
+        <p className="flex min-h-11 items-center lg:min-h-8">
           <span className="settled-content-enter" key={summary}>
             {summary}
-            {durationLabel ? <span aria-hidden> · {durationLabel}</span> : null}
+            {durationLabel ? (
+              <span aria-hidden={!historical}> · {durationLabel}</span>
+            ) : null}
           </span>
         </p>
       )}
-      {finalDurationAnnouncement ? (
-        <span aria-live="polite" className="sr-only">
-          {finalDurationAnnouncement}
-        </span>
-      ) : null}
       {open && hasDetails && (
         <ol className="settled-content-enter border-line relative mt-2 ml-3 grid min-w-0 gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
           {rows.map((row) =>
@@ -361,7 +375,8 @@ export function ConversationWorklog({
                 <MessageContent
                   content={row.content}
                   streaming={
-                    state === "streaming" && provisionalItemIds.has(row.id)
+                    isActiveConversationPhase(phase) &&
+                    provisionalItemIds.has(row.id)
                   }
                 />
               </li>
@@ -371,7 +386,7 @@ export function ConversationWorklog({
           )}
         </ol>
       )}
-      {state === "error" && failure?.diagnosticId && (
+      {phase === "error" && failure?.diagnosticId && (
         <p className="text-muted mt-1 text-xs">
           {t("failure.diagnostic", { id: failure.diagnosticId })}
         </p>

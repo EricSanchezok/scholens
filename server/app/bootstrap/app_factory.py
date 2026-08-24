@@ -115,6 +115,7 @@ from app.modules.projects.infrastructure.invitation_delivery import (
 from app.shared.domain import AppError
 from app.shared.application import OperationContextFactory
 from app.shared.infrastructure.email_settings import email_settings
+from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
 from app.transport.http.errors import (
     app_error_handler,
     http_error_handler,
@@ -238,6 +239,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     )
     operation_context_factory = OperationContextFactory()
     application.state.operation_context_factory = operation_context_factory
+    application.state.job_dispatcher_wakeup = JobDispatcherWakeup()
     executor = create_application_executor(runtime_settings)
     application.state.application_executor = executor
     connector_tool_resolver = create_connector_tool_resolver(
@@ -296,6 +298,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         operation_context_factory,
         application.state.diagnostic_snapshot_recorder,
         runtime_settings.resolved_cache_url,
+        application.state.job_dispatcher_wakeup,
     )
     application.state.onboarding_finisher = create_onboarding_finisher()
     application.state.billing_usage_workflow = create_billing_usage_workflow(

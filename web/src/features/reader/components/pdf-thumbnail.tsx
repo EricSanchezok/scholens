@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { RenderTask } from "pdfjs-dist";
 
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type { PdfDocumentAdapter } from "../pdf-document-adapter";
 
@@ -75,7 +75,7 @@ export function PdfThumbnail({
       aria-label={label}
       className={cn(
         "hover:bg-hover grid w-full justify-items-center gap-1.5 rounded-[var(--radius-md)] p-2",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "selection" }),
         current && "bg-pressed",
       )}
       onClick={onSelect}

@@ -27,6 +27,29 @@ export type ConversationFailure = {
   diagnosticId?: string;
 };
 
+export type ConversationPhase =
+  | "submitting"
+  | "queued"
+  | "working"
+  | "answering"
+  | "finalizing"
+  | "ready"
+  | "cancelled"
+  | "error";
+
+export type ConversationConnectionState =
+  "connecting" | "connected" | "reconnecting" | "offline";
+
+export function isActiveConversationPhase(phase: ConversationPhase) {
+  return (
+    phase === "submitting" ||
+    phase === "queued" ||
+    phase === "working" ||
+    phase === "answering" ||
+    phase === "finalizing"
+  );
+}
+
 export type LiveTurn = {
   turnId: string;
   responseId: string;
@@ -46,8 +69,9 @@ export type LiveTurn = {
   failure: ConversationFailure | null;
   durationMs: number | null;
   startedAtMs: number;
-  connectionState: "connected" | "reconnecting" | "stop_failed";
-  state: "streaming" | "ready" | "complete" | "cancelled" | "error";
+  connectionState: ConversationConnectionState;
+  phase: ConversationPhase;
+  stopFailure: boolean;
 };
 
 export function createLiveTurn(
@@ -77,8 +101,9 @@ export function createLiveTurn(
     failure: null,
     durationMs: null,
     startedAtMs,
-    connectionState: "connected",
-    state: "streaming",
+    connectionState: "connecting",
+    phase: "submitting",
+    stopFailure: false,
   };
 }
 
@@ -204,15 +229,13 @@ export function reduceLiveTurn(
       durationMs: response.duration_ms ?? current.durationMs,
       answerCandidate: null,
       provisionalItems: [],
-      state: "ready",
+      connectionState: "connected",
+      phase: "ready",
     };
   }
   if (event.response_id !== current.responseId) return current;
   if (event.type === "suggestions") {
-    if (
-      event.turn_id !== current.turnId ||
-      (current.state !== "ready" && current.state !== "complete")
-    ) {
+    if (event.turn_id !== current.turnId || current.phase !== "ready") {
       return current;
     }
     return {
@@ -224,10 +247,10 @@ export function reduceLiveTurn(
     };
   }
   if (event.type === "complete") {
-    if (event.turn_id !== current.turnId || current.state !== "ready") {
+    if (event.turn_id !== current.turnId || current.phase !== "ready") {
       return current;
     }
-    return { ...current, state: "complete" };
+    return current;
   }
   if (event.type === "cancelled") {
     if (event.turn_id !== current.turnId) return current;
@@ -235,11 +258,11 @@ export function reduceLiveTurn(
       ...current,
       answerCandidate: null,
       durationMs: Math.max(0, Date.now() - current.startedAtMs),
-      state: "cancelled",
+      phase: "cancelled",
     };
   }
   if (event.type === "error") {
-    if (current.state === "ready" || current.state === "complete") {
+    if (current.phase === "ready") {
       return current;
     }
     return {
@@ -247,20 +270,32 @@ export function reduceLiveTurn(
       answerCandidate: null,
       failure: conversationFailureFromValue(event.error),
       durationMs: Math.max(0, Date.now() - current.startedAtMs),
-      state: "error",
+      phase: "error",
     };
   }
   if (event.type === "start") {
-    return current.state === "streaming"
-      ? { ...current, variantIndex: event.variant_index }
+    return current.phase === "submitting" || current.phase === "queued"
+      ? {
+          ...current,
+          connectionState: "connected",
+          phase: "queued",
+          variantIndex: event.variant_index,
+        }
       : current;
   }
-  if (current.state !== "streaming") return current;
+  if (
+    current.phase === "ready" ||
+    current.phase === "cancelled" ||
+    current.phase === "error"
+  ) {
+    return current;
+  }
   switch (event.type) {
     case "activity":
       return {
         ...current,
         entries: updateEntry(current.entries, event.activity),
+        phase: current.phase === "answering" ? "answering" : "working",
       };
     case "assistant_candidate_start":
       if (
@@ -277,6 +312,7 @@ export function reduceLiveTurn(
           phase: "provisional" as const,
           content: "",
         },
+        phase: current.phase === "answering" ? "answering" : "working",
       };
     case "assistant_item_start":
       if (current.completedItemIds.includes(event.item_id)) return current;
@@ -300,6 +336,7 @@ export function reduceLiveTurn(
             content: "",
           },
         ].sort((left, right) => left.sequence - right.sequence),
+        phase: current.phase === "answering" ? "answering" : "working",
       };
     case "assistant_candidate_reset":
       if (current.completedItemIds.includes(event.item_id)) return current;
@@ -307,6 +344,7 @@ export function reduceLiveTurn(
       return {
         ...current,
         answerCandidate: { ...current.answerCandidate, content: "" },
+        phase: "working",
       };
     case "assistant_candidate_delta":
       if (
@@ -321,6 +359,7 @@ export function reduceLiveTurn(
           ...current.answerCandidate,
           content: current.answerCandidate.content + event.delta,
         },
+        phase: "answering",
       };
     case "assistant_item_delta":
       if (current.completedItemIds.includes(event.item_id)) return current;
@@ -332,13 +371,18 @@ export function reduceLiveTurn(
             ? { ...item, content: item.content + event.delta }
             : item,
         ),
+        phase: "answering",
       };
     case "assistant_item_complete":
-      return completeAssistantItem(current, event.item);
+      return {
+        ...completeAssistantItem(current, event.item),
+        phase: event.item.phase === "final" ? "finalizing" : current.phase,
+      };
     case "references":
       return {
         ...current,
         references: event.references as Record<string, unknown>,
+        phase: "finalizing",
       };
   }
 }

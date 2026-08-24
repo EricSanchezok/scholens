@@ -35,7 +35,7 @@ import {
   DropdownMenuTrigger,
   Button,
   IconButton,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   Sheet,
   SheetContent,
   SheetTitle,
@@ -281,7 +281,7 @@ function SidebarControl({
       aria-label={accessibleLabel}
       className={cn(
         "motion-control active:bg-pressed relative flex h-10 items-center gap-2 rounded-[var(--radius-lg)] border font-medium",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "selection" }),
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active
           ? "border-line bg-surface shadow-raised"
@@ -310,7 +310,7 @@ function SidebarControl({
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
         "motion-control flex h-10 items-center gap-2 rounded-[var(--radius-lg)] border border-transparent font-medium",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "neutral" }),
         collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
       )}
@@ -435,7 +435,7 @@ function AccountMenu({
           aria-label={t("account.openMenu")}
           className={cn(
             "border-line bg-surface shadow-raised hover:bg-hover flex h-14 items-center rounded-[var(--radius-xl)] border",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
             collapsed
               ? "ml-auto w-10 justify-center px-2"
               : "w-full gap-3 px-2",
@@ -606,7 +606,7 @@ function MobileActorIdentity({
       aria-label={name}
       className={cn(
         "hover:bg-hover active:bg-pressed -ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-xl)] px-2 py-2",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       href={"/me" as Route}
       onClick={onSelect}
@@ -723,7 +723,7 @@ function ConversationHistoryPagination({
       <button
         className={cn(
           "text-secondary hover:bg-hover mt-2 w-full rounded-[var(--radius-lg)] px-3 py-2 text-left text-xs",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
         onClick={onRetry}
         type="button"
@@ -738,7 +738,7 @@ function ConversationHistoryPagination({
       <button
         className={cn(
           "text-secondary hover:bg-hover w-full rounded-[var(--radius-lg)] px-3 py-2 text-xs",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
         disabled={isFetchingNextPage}
         onClick={onLoadMore}
@@ -926,7 +926,7 @@ function MobileNavigation({
             aria-label={t("navigation.search")}
             className={cn(
               "bg-surface text-secondary hover:bg-hover flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full px-4 text-left text-base",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             onClick={onSearch}
             type="button"
@@ -938,7 +938,7 @@ function MobileNavigation({
             aria-label={t("navigation.newChat")}
             className={cn(
               "bg-surface hover:bg-hover grid size-12 shrink-0 place-items-center rounded-full",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             href="/"
             onClick={onSelect}
@@ -1016,7 +1016,7 @@ function MobileDestinationLink({
       aria-label={label}
       className={cn(
         "active:bg-pressed flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] px-1 text-xs font-medium",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "selection" }),
         active ? "text-foreground" : "text-secondary",
       )}
       href={href as Route}
@@ -1119,7 +1119,7 @@ export function WorkspaceNewChatAction() {
       aria-label={t("newChat")}
       className={cn(
         "hover:bg-hover active:bg-pressed grid size-11 place-items-center rounded-[var(--radius-md)]",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       href="/"
     >
@@ -1199,7 +1199,10 @@ function Sidebar({
         <div className="relative mb-3 flex h-10 shrink-0 items-center justify-end">
           {!collapsed && (
             <Link
-              className="motion-control text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap"
+              className={cn(
+                "motion-control text-ui absolute left-1 rounded-[var(--radius-sm)] font-semibold tracking-[-0.003em] whitespace-nowrap",
+                focusSurfaceVariants({ intent: "neutral" }),
+              )}
               href="/"
             >
               <ProductLockup />
@@ -1402,7 +1405,6 @@ export function WorkspaceShell({
     resolved: resolvedMotion,
     skipAnimations,
   } = useMotionPreference();
-  const mobileSheetRef = React.useRef<HTMLDivElement>(null);
   const mobileMenuTriggerRef = React.useRef<HTMLButtonElement>(null);
   const localMobileDockRef = React.useRef<HTMLDivElement>(null);
   const desktopRailChromeRef = React.useRef<HTMLDivElement>(null);
@@ -1597,16 +1599,10 @@ export function WorkspaceShell({
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
-          className="inset-0 h-dvh w-full max-w-none border-0 bg-[var(--color-bg-sidebar)] p-0 shadow-none focus:outline-none"
+          className="inset-0 h-dvh w-full max-w-none border-0 bg-[var(--color-bg-sidebar)] p-0 shadow-none"
           closeGlyph={DismissIcon}
           closeLabel={t("navigation.closeMenu")}
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            mobileSheetRef.current?.focus();
-          }}
-          ref={mobileSheetRef}
           side="left"
-          tabIndex={-1}
         >
           <SheetTitle className="sr-only">
             {t("navigation.openMenu")}
@@ -1670,7 +1666,10 @@ export function WorkspaceShell({
           </header>
         ) : null}
         <main
-          className="min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain"
+          className={cn(
+            "min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain",
+            focusSurfaceVariants({ intent: "scroll" }),
+          )}
           data-scrollbar-gutter="stable"
           tabIndex={0}
         >

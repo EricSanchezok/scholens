@@ -397,6 +397,7 @@
       "followUpPlaceholder": "继续追问",
       "submit": "询问 Scholens",
       "stop": "停止生成",
+      "pending": "回答处理中",
       "addContext": "添加上下文",
       "standard": "标准",
       "deep": "深入",
@@ -489,6 +490,7 @@
       "loading": "正在加载对话",
       "empty": "提出一个问题以开始这次对话。",
       "cancelled": "已停止生成，你可以重新提问。",
+      "completed": "回答已完成。",
       "error": "未能完成这次回答。",
       "retry": "重试",
       "retryHint": "输入已保留在编辑框中，可稍后再次发送。",
@@ -1959,6 +1961,10 @@
     "emptyDescription": "请换一个更宽泛的描述或相关概念。",
     "untitled": "未命名论文",
     "unknownAuthors": "作者未知",
+    "form": {
+      "minimumQuery": "请输入至少 2 个字符，或清空输入框后按回车显示全部论文。",
+      "relevanceSort": "相关性"
+    },
     "results": {
       "loading": "正在搜索论文",
       "retry": "重试",

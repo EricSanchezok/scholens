@@ -71,22 +71,160 @@
     opacity: 1;
   }
 
+  .focus-recipe-scroll:focus-visible {
+    background-image:
+      linear-gradient(
+        var(--color-focus-scrollbar),
+        var(--color-focus-scrollbar)
+      ),
+      linear-gradient(
+        90deg,
+        var(--color-focus-scrollbar),
+        var(--color-focus-scrollbar)
+      );
+    background-position:
+      right var(--border-width) center,
+      center bottom var(--border-width);
+    background-repeat: no-repeat;
+    background-size:
+      calc(var(--border-width) * 2) var(--space-6),
+      var(--space-6) calc(var(--border-width) * 2);
+    scrollbar-color: var(--color-focus-scrollbar) transparent;
+  }
+
+  .focus-recipe-scroll:focus-visible::-webkit-scrollbar-thumb {
+    background-color: var(--color-focus-scrollbar);
+  }
+
+  [data-scrollbar-root]:has(> .focus-recipe-scroll:focus-visible)
+    [data-scrollbar-track] {
+    opacity: 1;
+  }
+
+  [data-scrollbar-root]:has(> .focus-recipe-scroll:focus-visible)
+    [data-scrollbar-thumb] {
+    background-color: var(--color-focus-scrollbar);
+  }
+
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
+}
 
-  [data-focus-delegate]:focus-visible {
-    outline: none;
-    outline-offset: 0;
+.focus-recipe:focus-visible,
+[data-focus-delegate]:focus {
+  outline: none;
+  outline-offset: 0;
+}
+
+@media (hover: hover) {
+  .focus-recipe-neutral[data-focus-surface]:has(
+      [data-focus-delegate="surface"]:hover
+    ) {
+    background-color: var(--color-bg-hover);
   }
+}
 
+:is(
+  .focus-recipe-neutral:not([data-focus-delegate]):focus-visible,
+  .focus-recipe-inline:not([data-focus-delegate]):focus-visible,
+  .focus-recipe-selection:focus-visible:not(
+      [data-state="active"],
+      [data-state="checked"],
+      [aria-current],
+      [aria-pressed="true"]
+    ),
   [data-focus-delegate="self"][data-focus-origin="keyboard"]:focus,
   [data-focus-surface]:has(
     [data-focus-delegate="surface"][data-focus-origin="keyboard"]:focus
+  )
+) {
+  --color-text-primary: var(--color-focus-foreground);
+  --color-text-secondary: var(--color-focus-secondary);
+  --color-text-muted: var(--color-focus-secondary);
+  --color-text-tertiary: var(--color-focus-secondary);
+  --color-text-link: var(--color-focus-foreground);
+  --color-text-link-hover: var(--color-focus-foreground);
+  --color-icon-primary: var(--color-focus-icon);
+  --color-icon-secondary: var(--color-focus-icon);
+}
+
+.focus-recipe-neutral:not([data-focus-delegate]):focus-visible,
+.focus-recipe-inline:not([data-focus-delegate]):focus-visible,
+[data-focus-delegate="self"][data-focus-origin="keyboard"]:focus,
+[data-focus-surface]:has(
+  [data-focus-delegate="surface"][data-focus-origin="keyboard"]:focus
+) {
+  background-color: var(--color-focus-surface);
+  color: var(--color-focus-foreground);
+}
+
+.focus-recipe-inline:not([data-focus-delegate]):focus-visible {
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  text-decoration-line: underline;
+  text-decoration-thickness: max(var(--border-width), 0.12em);
+  text-underline-offset: 0.2em;
+}
+
+.focus-recipe-primary:focus-visible {
+  --color-icon-primary: var(--color-action-primary-foreground);
+  --color-icon-secondary: var(--color-action-primary-foreground);
+  background-color: var(--color-action-primary-hover);
+  box-shadow: var(--shadow-raised);
+}
+
+.focus-recipe-danger:focus-visible:not(
+    :disabled,
+    [aria-disabled="true"],
+    [data-disabled]
   ) {
-    outline: none;
-    box-shadow: 0 0 0 1px var(--color-focus-ring);
+  background-color: color-mix(
+    in oklab,
+    var(--color-danger-bg) 92%,
+    var(--color-danger-text)
+  );
+}
+
+@media (hover: hover) {
+  .focus-recipe-danger:hover:not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled]
+    ) {
+    background-color: color-mix(
+      in oklab,
+      var(--color-danger-bg) 92%,
+      var(--color-danger-text)
+    );
   }
+}
+
+.focus-recipe-danger:focus-visible,
+.focus-recipe-status:focus-visible {
+  box-shadow: var(--shadow-raised);
+}
+
+.focus-recipe-status:focus-visible {
+  filter: brightness(0.94);
+}
+
+.focus-recipe-selection:focus-visible:not(
+    [data-state="active"],
+    [data-state="checked"],
+    [aria-current],
+    [aria-pressed="true"]
+  ) {
+  background-color: var(--color-focus-surface);
+}
+
+.focus-recipe-selection:focus-visible:is(
+    [data-state="active"],
+    [data-state="checked"],
+    [aria-current],
+    [aria-pressed="true"]
+  ) {
+  filter: brightness(0.92);
 }
 
 [data-scrollbar-gutter="stable"] {
@@ -94,6 +232,109 @@
 }
 
 @media (forced-colors: active) {
+  .focus-recipe:not([data-focus-delegate]):focus-visible,
+  [data-focus-delegate="self"][data-focus-origin="keyboard"]:focus,
+  [data-focus-surface]:has(
+    [data-focus-delegate="surface"][data-focus-origin="keyboard"]:focus
+  ) {
+    forced-color-adjust: auto;
+    background: Canvas;
+    color: CanvasText;
+    filter: none;
+    box-shadow: none;
+    transform: none;
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: var(--focus-width);
+  }
+
+  .focus-recipe-selection:is(
+    [data-state="active"],
+    [data-state="checked"],
+    [aria-current],
+    [aria-pressed="true"]
+  ) {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  [data-selection-control="checkbox"][data-state="checked"] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  [data-selection-control="checkbox"] [data-selection-indicator] svg {
+    color: HighlightText;
+  }
+
+  [data-selection-control="radio"] {
+    border-color: ButtonText;
+    background: Canvas;
+  }
+
+  [data-selection-control="radio"][data-state="checked"] {
+    border-color: Highlight;
+    background: Canvas;
+  }
+
+  [data-selection-indicator] {
+    background: Highlight;
+  }
+
+  [data-selection-control="switch"] {
+    border: var(--border-width) solid ButtonText;
+    background: Canvas;
+  }
+
+  [data-selection-control="switch"][data-state="checked"] {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  [data-selection-thumb] {
+    background: ButtonText;
+  }
+
+  [data-selection-control="switch"][data-state="checked"]
+    [data-selection-thumb] {
+    background: HighlightText;
+  }
+
+  :is(
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"]
+  )[data-highlighted] {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  :is(
+      [role="option"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"]
+    )[data-state="checked"]:not([data-highlighted]) {
+    color: Highlight;
+  }
+
+  [data-reader-highlight-swatch] {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+
+  [data-reader-highlight-swatch][data-selected]::after {
+    position: absolute;
+    inset: 0.4375rem;
+    border-radius: var(--radius-full);
+    background: Highlight;
+    content: "";
+  }
+
+  .focus-recipe.focus-recipe-scroll:focus-visible {
+    outline-offset: calc(-1 * var(--focus-width));
+  }
+
   * {
     scrollbar-color: CanvasText Canvas;
   }

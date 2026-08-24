@@ -319,6 +319,7 @@ export function AddPapersDialog({
                 event.currentTarget.value = "";
               }}
               ref={fileInputRef}
+              tabIndex={-1}
               type="file"
             />
             <Button
