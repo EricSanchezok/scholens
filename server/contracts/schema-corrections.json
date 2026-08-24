@@ -223,6 +223,32 @@
       "runtime_evidence": "server/tests/test_research_visibility_contract.py::test_annotation_positions_match_the_persisted_integer_range"
     },
     {
+      "id": "http-conversation-start-selection-segment-page-integer-range",
+      "boundary": "http",
+      "target": "POST /api/v1/conversations/{conversation_id}/start",
+      "schema_pointer": "#/components/schemas/PdfTextPageSegment/properties/page_number/maximum",
+      "change_kind": "maximum_decreased",
+      "base_value_sha256": null,
+      "revision_value_sha256": "66c77b3a521bb617676ae98b50b8f5fcf80bae240a653e7a492b5e1ed35f4f04",
+      "owner": "scholens-platform",
+      "recorded_on": "2026-08-24",
+      "reason": "The atomic conversation start endpoint accepts the same persisted PDF selection model, whose PostgreSQL Integer range was already enforced at runtime but omitted from the published schema.",
+      "runtime_evidence": "server/tests/test_research_visibility_contract.py::test_annotation_positions_match_the_persisted_integer_range"
+    },
+    {
+      "id": "http-conversation-start-selection-pdf-page-integer-range",
+      "boundary": "http",
+      "target": "POST /api/v1/conversations/{conversation_id}/start",
+      "schema_pointer": "#/components/schemas/PdfTextPosition/properties/page_number/maximum",
+      "change_kind": "maximum_decreased",
+      "base_value_sha256": null,
+      "revision_value_sha256": "66c77b3a521bb617676ae98b50b8f5fcf80bae240a653e7a492b5e1ed35f4f04",
+      "owner": "scholens-platform",
+      "recorded_on": "2026-08-24",
+      "reason": "The atomic conversation start endpoint accepts the same persisted PDF selection model, whose PostgreSQL Integer range was already enforced at runtime but omitted from the published schema.",
+      "runtime_evidence": "server/tests/test_research_visibility_contract.py::test_annotation_positions_match_the_persisted_integer_range"
+    },
+    {
       "id": "http-library-paper-author-minimum",
       "boundary": "http",
       "target": "PATCH /api/v1/library/papers/{document_id}",
