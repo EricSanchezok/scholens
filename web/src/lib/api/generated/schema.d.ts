@@ -4432,7 +4432,7 @@ export interface components {
          * PaperListColumn
          * @enum {string}
          */
-        PaperListColumn: "reading_time" | "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
+        PaperListColumn: "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
         /** PaperListColumnWidth */
         PaperListColumnWidth: {
             column: components["schemas"]["PaperListSizedColumn"];
@@ -4465,7 +4465,7 @@ export interface components {
          * PaperListSizedColumn
          * @enum {string}
          */
-        PaperListSizedColumn: "paper" | "reading_time" | "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
+        PaperListSizedColumn: "paper" | "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
         /** PaperSearchFilters */
         PaperSearchFilters: {
             /**

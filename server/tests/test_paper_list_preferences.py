@@ -16,10 +16,6 @@ from app.modules.papers.application.preferences import (
     PaperListPreferencesRecord,
     PaperListPreferencesUpdateRequest,
 )
-from app.modules.papers.infrastructure.preferences import (
-    PaperListPreference,
-    _record,
-)
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -89,7 +85,6 @@ def test_paper_list_preferences_default_and_ordered_update() -> None:
 
     defaults = preferences.get(actor=_actor(7))
     assert defaults.visible_columns == list(DEFAULT_PAPER_LIST_COLUMNS)
-    assert defaults.visible_columns[0] == PaperListColumn.READING_TIME
     assert defaults.preview_open is True
     assert {item.column: item.width for item in defaults.column_widths} == (
         DEFAULT_PAPER_LIST_COLUMN_WIDTHS
@@ -119,30 +114,6 @@ def test_paper_list_preferences_default_and_ordered_update() -> None:
     )
     assert updated.preview_width == DEFAULT_PAPER_LIST_PREVIEW_WIDTH
     assert len(journal.entries) == 1
-
-
-def test_legacy_preferences_gain_the_default_reading_time_column() -> None:
-    record = _record(
-        PaperListPreference(
-            user_id=7,
-            visible_columns=["status", "authors"],
-            preview_open=True,
-            column_widths={"paper": 420, "status": 112, "authors": 208},
-            preview_width=512,
-        )
-    )
-
-    assert record.visible_columns == (
-        PaperListColumn.READING_TIME,
-        PaperListColumn.STATUS,
-        PaperListColumn.AUTHORS,
-    )
-    widths = {item.column: item.width for item in record.column_widths}
-    assert widths[PaperListSizedColumn.PAPER] == 420
-    assert (
-        widths[PaperListSizedColumn.READING_TIME]
-        == DEFAULT_PAPER_LIST_COLUMN_WIDTHS[PaperListSizedColumn.READING_TIME]
-    )
 
 
 def test_paper_list_preferences_are_isolated_and_read_across_sessions() -> None:

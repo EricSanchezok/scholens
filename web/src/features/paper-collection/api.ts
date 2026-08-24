@@ -18,7 +18,6 @@ export const paperListPreferencesKey = [
 export const defaultPaperListPreferences = {
   column_widths: [
     { column: "paper", width: 360 },
-    { column: "reading_time", width: 112 },
     { column: "status", width: 96 },
     { column: "tags", width: 160 },
     { column: "authors", width: 176 },
@@ -27,14 +26,7 @@ export const defaultPaperListPreferences = {
     { column: "added_at", width: 120 },
     { column: "doi", width: 160 },
   ],
-  visible_columns: [
-    "reading_time",
-    "status",
-    "tags",
-    "authors",
-    "publication",
-    "last_opened",
-  ],
+  visible_columns: ["status", "tags", "authors", "publication", "last_opened"],
   preview_open: true,
   preview_width: 512,
 } satisfies PaperListPreferences;

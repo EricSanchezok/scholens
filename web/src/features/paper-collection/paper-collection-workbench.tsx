@@ -76,8 +76,12 @@ export type PaperCollectionItem = {
   href: Route;
 };
 
+type PaperCollectionRenderedColumn = PaperCollectionColumn | "reading_time";
+type PaperCollectionRenderedSizedColumn =
+  PaperCollectionSizedColumn | "reading_time";
+
 const COLUMN_WIDTH_LIMITS: Record<
-  PaperCollectionSizedColumn,
+  PaperCollectionRenderedSizedColumn,
   { default: number; max: number; min: number }
 > = {
   paper: { default: 360, max: 1600, min: 160 },
@@ -90,7 +94,10 @@ const COLUMN_WIDTH_LIMITS: Record<
   added_at: { default: 120, max: 280, min: 112 },
   doi: { default: 160, max: 480, min: 144 },
 };
-const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
+const PREVIEW_COLUMN_MINIMUMS: Record<
+  PaperCollectionRenderedSizedColumn,
+  number
+> = {
   paper: 200,
   reading_time: 80,
   status: 64,
@@ -102,15 +109,21 @@ const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
   doi: 96,
 };
 
-const ALL_COLUMNS = Object.keys(
+const RENDERED_COLUMNS = Object.keys(
   COLUMN_WIDTH_LIMITS,
-) as PaperCollectionSizedColumn[];
-const CONFIGURABLE_COLUMNS = ALL_COLUMNS.filter(
+) as PaperCollectionRenderedSizedColumn[];
+const PERSISTED_COLUMNS = RENDERED_COLUMNS.filter(
+  (column): column is PaperCollectionSizedColumn => column !== "reading_time",
+);
+const CONFIGURABLE_COLUMNS = PERSISTED_COLUMNS.filter(
   (column): column is PaperCollectionColumn => column !== "paper",
 );
 const DEFAULT_COLUMN_WIDTHS = Object.fromEntries(
-  ALL_COLUMNS.map((column) => [column, COLUMN_WIDTH_LIMITS[column].default]),
-) as Record<PaperCollectionSizedColumn, number>;
+  RENDERED_COLUMNS.map((column) => [
+    column,
+    COLUMN_WIDTH_LIMITS[column].default,
+  ]),
+) as Record<PaperCollectionRenderedSizedColumn, number>;
 const MIN_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_WIDTH = 720;
 const MIN_LIST_WIDTH_WITH_PREVIEW = 640;
@@ -145,9 +158,12 @@ function getColumnWidths(preferences: PaperListPreferences) {
 }
 
 function toColumnWidthPreferences(
-  widths: Record<PaperCollectionSizedColumn, number>,
+  widths: Record<PaperCollectionRenderedSizedColumn, number>,
 ) {
-  return ALL_COLUMNS.map((column) => ({ column, width: widths[column] }));
+  return PERSISTED_COLUMNS.map((column) => ({
+    column,
+    width: widths[column],
+  }));
 }
 
 function resizeColumnPair({
@@ -864,7 +880,7 @@ export function PaperCollectionWorkbench({
     setPreviewWidth(preferences.preview_width);
   }, [persistedColumnWidths, preferences.preview_width]);
   const commitColumnWidths = React.useCallback(
-    (updates: Partial<Record<PaperCollectionSizedColumn, number>>) => {
+    (updates: Partial<Record<PaperCollectionRenderedSizedColumn, number>>) => {
       setColumnWidths((current) => ({ ...current, ...updates }));
       mutatePreferences((current) => {
         const nextWidths = {
@@ -949,7 +965,10 @@ export function PaperCollectionWorkbench({
     },
     [setSidePanelState],
   );
-  const effectiveColumns = preferences.visible_columns;
+  const effectiveColumns = React.useMemo<PaperCollectionRenderedColumn[]>(
+    () => ["reading_time", ...preferences.visible_columns],
+    [preferences.visible_columns],
+  );
   const compact = listWidth < 640;
   const columnCount = compact
     ? 2 + (actions ? 1 : 0)
@@ -968,7 +987,7 @@ export function PaperCollectionWorkbench({
       scrollRef.current.scrollTop = 0;
     }
   }, [contentState, scrollResetKey]);
-  const orderedColumns = React.useMemo<PaperCollectionSizedColumn[]>(
+  const orderedColumns = React.useMemo<PaperCollectionRenderedSizedColumn[]>(
     () => ["paper", ...effectiveColumns],
     [effectiveColumns],
   );
@@ -976,7 +995,7 @@ export function PaperCollectionWorkbench({
     const leadingWidth = previewVisible ? 40 : 48;
     const actionsWidth = previewVisible ? 36 : 44;
     const columnGap = previewVisible ? 8 : 12;
-    const minimumFor = (column: PaperCollectionSizedColumn) =>
+    const minimumFor = (column: PaperCollectionRenderedSizedColumn) =>
       previewVisible
         ? PREVIEW_COLUMN_MINIMUMS[column]
         : COLUMN_WIDTH_LIMITS[column].min;
@@ -1022,7 +1041,7 @@ export function PaperCollectionWorkbench({
           ),
         ];
       }),
-    ) as Partial<Record<PaperCollectionSizedColumn, number>>;
+    ) as Partial<Record<PaperCollectionRenderedSizedColumn, number>>;
   }, [
     actions,
     columnCount,
@@ -1057,7 +1076,7 @@ export function PaperCollectionWorkbench({
     (actions ? actionsColumnWidth : 0) +
     Math.max(0, columnCount - 1) * tableColumnGap +
     16;
-  const columnLabel = (column: PaperCollectionSizedColumn) =>
+  const columnLabel = (column: PaperCollectionRenderedSizedColumn) =>
     t(
       column === "paper"
         ? "columns.paper"
@@ -1193,16 +1212,19 @@ export function PaperCollectionWorkbench({
                     const nextLabel = nextColumn
                       ? columnLabel(nextColumn)
                       : undefined;
-                    const resizePair = nextColumn
-                      ? (nextLeft: number) =>
-                          resizeColumnPair({
-                            left: columnWidths[column],
-                            leftLimits: COLUMN_WIDTH_LIMITS[column],
-                            nextLeft,
-                            right: columnWidths[nextColumn],
-                            rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
-                          })
-                      : undefined;
+                    const resizePair =
+                      nextColumn &&
+                      column !== "reading_time" &&
+                      nextColumn !== "reading_time"
+                        ? (nextLeft: number) =>
+                            resizeColumnPair({
+                              left: columnWidths[column],
+                              leftLimits: COLUMN_WIDTH_LIMITS[column],
+                              nextLeft,
+                              right: columnWidths[nextColumn],
+                              rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
+                            })
+                        : undefined;
                     const pair = resizePair?.(columnWidths[column]);
                     return (
                       <span

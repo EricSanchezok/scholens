@@ -24,14 +24,7 @@ const preferences: PaperListPreferences = {
     ...width,
   })),
   preview_open: true,
-  visible_columns: [
-    "reading_time",
-    "status",
-    "tags",
-    "authors",
-    "publication",
-    "last_opened",
-  ],
+  visible_columns: ["status", "tags", "authors", "publication", "last_opened"],
 };
 
 const preferenceHandlers = [
@@ -260,18 +253,14 @@ export const Library: Story = {
     await expect(
       canvas.getByRole("heading", { name: "Key findings" }),
     ).toBeVisible();
-    const paperResize = canvas.getByRole("separator", {
-      name: "Resize boundary between Paper and Active reading",
-    });
-    const initialPaperWidth = Number(paperResize.getAttribute("aria-valuenow"));
-    paperResize.focus();
-    await userEvent.keyboard("{ArrowLeft}");
-    await waitFor(() =>
-      expect(paperResize).toHaveAttribute(
-        "aria-valuenow",
-        String(initialPaperWidth - 8),
-      ),
-    );
+    await expect(
+      canvas.getByRole("columnheader", { name: "Active reading" }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole("separator", {
+        name: "Resize boundary between Paper and Active reading",
+      }),
+    ).not.toBeInTheDocument();
     const previewResize = canvas.getByRole("separator", {
       name: "Resize paper details",
     });
@@ -473,27 +462,12 @@ export const AdjacentColumnResizing: Story = {
       });
     };
 
-    const paper = columnHeader("Paper");
-    const readingTime = columnHeader("Active reading");
     const status = columnHeader("Status");
-    const paperBoundary = canvas.getByRole("separator", {
-      name: "Resize boundary between Paper and Active reading",
-    });
-    await expect(paperBoundary).toHaveAttribute("aria-valuemin", "232");
-    const paperBefore = paper.getBoundingClientRect();
-    const readingTimeBefore = readingTime.getBoundingClientRect();
-    dragLeft(paperBoundary, 48);
-    await waitFor(() => {
-      const paperAfter = paper.getBoundingClientRect();
-      const readingTimeAfter = readingTime.getBoundingClientRect();
-      expect(paperAfter.width).toBeCloseTo(paperBefore.width - 48, 0);
-      expect(readingTimeAfter.width).toBeCloseTo(
-        readingTimeBefore.width + 48,
-        0,
-      );
-      expect(readingTimeAfter.right).toBeCloseTo(readingTimeBefore.right, 0);
-    });
-    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
+    await expect(
+      canvas.queryByRole("separator", {
+        name: "Resize boundary between Paper and Active reading",
+      }),
+    ).not.toBeInTheDocument();
 
     const tags = columnHeader("Tags");
     const statusBoundary = canvas.getByRole("separator", {
@@ -512,7 +486,7 @@ export const AdjacentColumnResizing: Story = {
       expect(tagsAfter.width).toBeCloseTo(tagsBefore.width + 8, 0);
       expect(tagsAfter.right).toBeCloseTo(tagsBefore.right, 0);
     });
-    await waitFor(() => expect(resizePreferenceRequestCount).toBe(2));
+    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
     const lastOpened = columnHeader("Last opened");
     await expect(
       lastOpened.querySelector("[data-paper-resize-handle]"),
@@ -546,7 +520,7 @@ export const ColumnConfiguration: Story = {
     await expect(
       await body.findByRole("heading", { name: "Visible columns" }),
     ).toBeVisible();
-    await expect(body.getAllByRole("checkbox")).toHaveLength(8);
+    await expect(body.getAllByRole("checkbox")).toHaveLength(7);
     await expect(
       body.getByRole("button", { name: "Reset all widths" }),
     ).toBeVisible();
@@ -646,7 +620,6 @@ export const QueuedPreferenceUpdates: Story = {
     await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
     await waitFor(() =>
       expect(queuedPersistedPreferences.visible_columns).toEqual([
-        "reading_time",
         "status",
         "tags",
         "publication",
@@ -680,7 +653,7 @@ export const KeyboardColumnReordering: Story = {
     );
 
     await expect(
-      body.getByRole("button", { name: "Move Active reading up" }),
+      body.getByRole("button", { name: "Move Status up" }),
     ).toBeDisabled();
     await expect(
       body.getByRole("button", { name: "Move Last opened down" }),
@@ -697,18 +670,10 @@ export const KeyboardColumnReordering: Story = {
       ).toHaveFocus(),
     );
     await userEvent.keyboard("{Enter}");
-    await waitFor(() =>
-      expect(
-        body.getByRole("button", { name: "Move Authors up" }),
-      ).toHaveFocus(),
-    );
-    await userEvent.keyboard("{Enter}");
-
-    await waitFor(() => expect(queuedPreferenceRequestCount).toBe(3));
+    await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
     await waitFor(() =>
       expect(queuedPersistedPreferences.visible_columns).toEqual([
         "authors",
-        "reading_time",
         "status",
         "tags",
         "publication",
@@ -755,7 +720,7 @@ export const FailedPreferenceUpdateBeforeInitialQuery: Story = {
       body.getByRole("checkbox", { name: "Authors" }),
     ).toHaveAttribute("aria-checked", "true");
     await expect(
-      body.getByRole("button", { name: "Move Active reading up" }),
+      body.getByRole("button", { name: "Move Status up" }),
     ).toBeDisabled();
     await userEvent.click(trigger);
     await waitFor(() =>

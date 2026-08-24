@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class PaperListColumn(StrEnum):
-    READING_TIME = "reading_time"
     STATUS = "status"
     TAGS = "tags"
     AUTHORS = "authors"
@@ -25,7 +24,6 @@ class PaperListColumn(StrEnum):
 
 class PaperListSizedColumn(StrEnum):
     PAPER = "paper"
-    READING_TIME = "reading_time"
     STATUS = "status"
     TAGS = "tags"
     AUTHORS = "authors"
@@ -36,7 +34,6 @@ class PaperListSizedColumn(StrEnum):
 
 
 DEFAULT_PAPER_LIST_COLUMNS = (
-    PaperListColumn.READING_TIME,
     PaperListColumn.STATUS,
     PaperListColumn.TAGS,
     PaperListColumn.AUTHORS,
@@ -46,7 +43,6 @@ DEFAULT_PAPER_LIST_COLUMNS = (
 
 DEFAULT_PAPER_LIST_COLUMN_WIDTHS = {
     PaperListSizedColumn.PAPER: 360,
-    PaperListSizedColumn.READING_TIME: 112,
     PaperListSizedColumn.STATUS: 96,
     PaperListSizedColumn.TAGS: 160,
     PaperListSizedColumn.AUTHORS: 176,
@@ -57,7 +53,6 @@ DEFAULT_PAPER_LIST_COLUMN_WIDTHS = {
 }
 PAPER_LIST_COLUMN_WIDTH_LIMITS = {
     PaperListSizedColumn.PAPER: (160, 1600),
-    PaperListSizedColumn.READING_TIME: (96, 240),
     PaperListSizedColumn.STATUS: (88, 960),
     PaperListSizedColumn.TAGS: (128, 400),
     PaperListSizedColumn.AUTHORS: (144, 520),
