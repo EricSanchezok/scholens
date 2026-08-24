@@ -502,16 +502,33 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   await expect(page.getByText("1 paper selected")).toHaveCount(0);
 
   const searchbox = page.getByRole("searchbox", { name: "Search papers" });
+  await searchbox.evaluate((element) => {
+    element.setAttribute("data-e2e-owner", "library-paper-search");
+  });
+  await searchbox.fill("retrieval");
+  await expect(page).not.toHaveURL(/q=/);
+
+  await page.getByRole("button", { exact: true, name: "Status" }).click();
+  await page.getByRole("checkbox", { exact: true, name: "Reading" }).click();
+  await expect(page).toHaveURL(/status=reading/);
+  await expect(page).not.toHaveURL(/q=/);
+  await expect(searchbox).toHaveValue("retrieval");
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "library-paper-search",
+  );
+
   const searchRequest = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       request.url().endsWith("/api/v1/search/papers"),
   );
-  await searchbox.fill("retrieval");
+  await searchbox.click();
+  await searchbox.press("Enter");
   expect((await searchRequest).postDataJSON()).toEqual({
     collection: { kind: "personal_library" },
     filters: {
-      personal_statuses: [],
+      personal_statuses: ["reading"],
       personal_tag_ids: [],
     },
     limit: 50,
@@ -519,6 +536,15 @@ test("supports the Library Papers critical journey", async ({ page }) => {
     sort: "relevance",
   });
   await expect(page).toHaveURL(/q=retrieval/);
+  await expect(searchbox).toBeFocused();
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "library-paper-search",
+  );
+  await expect(page.getByText("Relevance", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Sort papers" })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole("link", {
       name: /Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks/,
@@ -527,7 +553,12 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Next" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Previous" })).toHaveCount(0);
   await searchbox.fill("");
+  await expect(page).toHaveURL(/q=retrieval/);
+  await searchbox.press("Enter");
   await expect(page).not.toHaveURL(/q=retrieval/);
+  await expect(
+    page.getByRole("combobox", { name: "Sort papers" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Add papers" }).click();
   const dialog = page.getByRole("dialog");

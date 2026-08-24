@@ -12,9 +12,14 @@ import {
   CollectionToolbar,
   CollectionToolbarButton,
   CollectionToolbarSelectTrigger,
+  CollectionToolbarStaticValue,
 } from "./collection-toolbar";
 
-function CollectionToolbarPreview() {
+function CollectionToolbarPreview({
+  relevance = false,
+}: {
+  relevance?: boolean;
+}) {
   return (
     <div className="min-w-0">
       <CollectionToolbar
@@ -22,13 +27,17 @@ function CollectionToolbarPreview() {
           <>
             <CollectionToolbarButton glyph={FilterIcon} label="Status" />
             <CollectionToolbarButton count={2} glyph={TagIcon} label="Tags" />
-            <Select defaultValue="recent">
-              <CollectionToolbarSelectTrigger label="Sort papers" />
-              <SelectContent>
-                <SelectItem value="recent">Recently added</SelectItem>
-                <SelectItem value="title">Title</SelectItem>
-              </SelectContent>
-            </Select>
+            {relevance ? (
+              <CollectionToolbarStaticValue label="Relevance" />
+            ) : (
+              <Select defaultValue="recent">
+                <CollectionToolbarSelectTrigger label="Sort papers" />
+                <SelectContent>
+                  <SelectItem value="recent">Recently added</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </>
         }
         meta="27 papers"
@@ -43,6 +52,7 @@ function CollectionToolbarPreview() {
 const meta = {
   title: "Features/Paper Collection/Collection Toolbar",
   component: CollectionToolbarPreview,
+  args: { relevance: false },
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
@@ -57,6 +67,20 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const Relevance: Story = {
+  args: { relevance: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const relevance = canvas.getByTitle("Relevance");
+    await expect(canvas.getByText("Relevance")).toBeVisible();
+    await expect(relevance.tagName).toBe("SPAN");
+    await expect(relevance).not.toHaveAttribute("tabindex");
+    await expect(
+      canvas.queryByRole("combobox", { name: "Sort papers" }),
+    ).not.toBeInTheDocument();
+  },
+};
 
 export const Mobile: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },

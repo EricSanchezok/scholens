@@ -1951,6 +1951,10 @@
     "emptyDescription": "Try a broader description or a related concept.",
     "untitled": "Untitled paper",
     "unknownAuthors": "Unknown authors",
+    "form": {
+      "minimumQuery": "Enter at least 2 characters, or clear the field and press Enter to show all papers.",
+      "relevanceSort": "Relevance"
+    },
     "results": {
       "loading": "Searching your papers",
       "retry": "Try again",

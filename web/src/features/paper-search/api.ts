@@ -2,6 +2,7 @@ import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
+import { isSearchQuery, normalizeSearchQuery } from "@/lib/search/query";
 
 type PaperCollection =
   | components["schemas"]["LibraryPaperCollection"]
@@ -20,17 +21,21 @@ export const paperSearchQueries = {
     query: string,
     collection: PaperCollection,
     filters: PaperSearchFilters = {},
-  ) =>
-    queryOptions({
-      enabled: query.trim().length >= 2,
-      queryKey: [...paperSearchKeys.results(query, collection), filters],
+  ) => {
+    const normalizedQuery = normalizeSearchQuery(query);
+    return queryOptions({
+      enabled: isSearchQuery(normalizedQuery),
+      queryKey: [
+        ...paperSearchKeys.results(normalizedQuery, collection),
+        filters,
+      ],
       queryFn: async ({ signal }) => {
         const { data } = await apiClient.POST("/api/v1/search/papers", {
           body: {
             collection,
             filters,
             limit: 50,
-            query: query.trim(),
+            query: normalizedQuery,
             sort: "relevance",
           },
           signal,
@@ -38,17 +43,19 @@ export const paperSearchQueries = {
         if (!data) throw new Error("Paper search response was empty");
         return data;
       },
-    }),
+    });
+  },
   infiniteResults: (
     query: string,
     collection: PaperCollection,
     filters: PaperSearchFilters = {},
-  ) =>
-    infiniteQueryOptions({
-      enabled: query.trim().length >= 2,
+  ) => {
+    const normalizedQuery = normalizeSearchQuery(query);
+    return infiniteQueryOptions({
+      enabled: isSearchQuery(normalizedQuery),
       initialPageParam: undefined as string | undefined,
       queryKey: [
-        ...paperSearchKeys.results(query, collection),
+        ...paperSearchKeys.results(normalizedQuery, collection),
         filters,
         "infinite",
       ],
@@ -59,7 +66,7 @@ export const paperSearchQueries = {
             filters,
             cursor: pageParam,
             limit: 50,
-            query: query.trim(),
+            query: normalizedQuery,
             sort: "relevance",
           },
           signal,
@@ -68,7 +75,8 @@ export const paperSearchQueries = {
         return data;
       },
       getNextPageParam: (page) => page.next_cursor ?? undefined,
-    }),
+    });
+  },
 };
 
 export type PaperSearchResult = components["schemas"]["PaperSearchResult"];

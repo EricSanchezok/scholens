@@ -79,7 +79,9 @@ and the shared Conversation feature.
   mismatch, treats expired/revoked/authority failures as terminal, and exposes
   retry only for connection or service failure.
 
-List search and sort live in the URL. Detail view, selected
+List search and sort live in the URL. The Project-paper search field keeps its
+unsubmitted draft in feature-local state and writes the trimmed committed query
+to the URL only on Enter. Detail view, selected
 conversation, chat disclosure, and namespaced paper/output filters also live in
 the URL. Project and output lists retain opaque URL cursors; Project-paper
 continuations live in TanStack Query and append in place. `panel=chat` means the
@@ -149,9 +151,12 @@ independent action target and is always discoverable on touch layouts.
   and keyset pagination. It exposes `preview_url`, summary, keywords, and the
   current actor's optional personal status, tags, and last-access timestamp in
   addition to the Project relationship's `added_at`. Filtering happens before
-  count and pagination. Queries of two or more characters use
+  count and pagination. Submitting a query of two or more characters uses
   `POST /api/v1/search/papers` with the same personal filters and a Project
   selection collection so fuzzy, full-text, and semantic ranking stay shared.
+  The mounted search toolbar remains available in loading, error, empty, and
+  populated states, and active search is always presented as relevance-ordered;
+  clearing the query restores the prior browse sort.
   Preview and source-file URL signing are independent: the Web requests
   `load_preview_urls=true` and leaves `load_urls=false`, while omitted flags and
   MCP access sign neither URL. Both flags participate in cursor validation.

@@ -6,6 +6,10 @@ import * as React from "react";
 
 import { Button } from "@/components/ui";
 import { AcademicMarkdown } from "@/components/ui/academic-markdown";
+import {
+  academicMarkdownToPlainText,
+  sanitizeAcademicMarkdown,
+} from "@/lib/content/academic-text";
 import { cn } from "@/lib/utilities/cn";
 import {
   reflowQueries,
@@ -112,28 +116,6 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
     </ul>
   ),
 });
-
-export function sanitizeAcademicMarkdown(markdown: string) {
-  return markdown
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<sup>\s*([^<]+?)\s*<\/sup>/gi, (_, value: string) =>
-      value.trim() ? `$^{${value.trim()}}$` : "",
-    )
-    .replace(/<sub>\s*([^<]+?)\s*<\/sub>/gi, (_, value: string) =>
-      value.trim() ? `$_{${value.trim()}}$` : "",
-    )
-    .replace(/<br\s*\/?>/gi, "  \n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\uFFFD/g, "");
-}
-
-export function reflowMarkdownPlainText(markdown: string) {
-  return sanitizeAcademicMarkdown(markdown)
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/[`*_#>|$[\]{}]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function primaryReflowSource(block: DocumentReflowBlock) {
   return block.source_spans[0];
@@ -359,7 +341,7 @@ function ReflowBlock({
               asset={asset}
               documentId={documentId}
               label={
-                reflowMarkdownPlainText(source) || labels.figurePlaceholder
+                academicMarkdownToPlainText(source) || labels.figurePlaceholder
               }
             />
           ) : (
