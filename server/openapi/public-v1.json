@@ -2949,17 +2949,13 @@
         "type": "object"
       },
       "ConversationStreamEventSchema": {
-        "description": "Complete event union for a direct durable generation SSE response.",
+        "description": "Compatible schema for the original direct generation response.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
-            "assistant_candidate_delta": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent",
-            "assistant_candidate_reset": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent",
-            "assistant_candidate_start": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
-            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
             "references": "#/components/schemas/ConversationStreamReferencesEvent",
@@ -2996,18 +2992,6 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamErrorEvent"
@@ -12235,16 +12219,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "include_candidates",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Candidates",
-              "type": "boolean"
-            }
-          },
-          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12274,13 +12248,18 @@
         "responses": {
           "200": {
             "content": {
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                  "$ref": "#/components/schemas/ConversationSubscriptionEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12452,16 +12431,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "include_candidates",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Candidates",
-              "type": "boolean"
-            }
-          },
-          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12491,13 +12460,23 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12553,16 +12532,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "include_candidates",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Candidates",
-              "type": "boolean"
-            }
-          },
-          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12592,13 +12561,23 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12654,16 +12633,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "include_candidates",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Candidates",
-              "type": "boolean"
-            }
-          },
-          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12693,13 +12662,23 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {

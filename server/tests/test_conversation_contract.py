@@ -547,35 +547,41 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     )
 
 
-def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
-    response = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
-        "post"
-    ]["responses"]["200"]
+def test_conversation_turns_expose_compatible_and_candidate_stream_contracts() -> None:
+    contract = app.openapi()
+    schemas = contract["components"]["schemas"]
 
-    assert response["content"]["text/event-stream"]["schema"]["$ref"] == (
-        "#/components/schemas/ConversationStreamEventSchema"
-    )
-    event_schema = app.openapi()["components"]["schemas"][
-        "ConversationStreamEventSchema"
-    ]["oneOf"]
-    assert {item["$ref"].rsplit("/", maxsplit=1)[-1] for item in event_schema} == {
+    def variants(schema: str) -> set[str]:
+        return {
+            item["$ref"].rsplit("/", maxsplit=1)[-1]
+            for item in schemas[schema]["oneOf"]
+        }
+
+    legacy_events = {
         "ConversationStreamStartEvent",
         "ConversationStreamActivityEvent",
         "ConversationStreamAssistantItemStartEvent",
         "ConversationStreamAssistantItemDeltaEvent",
         "ConversationStreamAssistantItemCompleteEvent",
-        "ConversationStreamAssistantCandidateStartEvent",
-        "ConversationStreamAssistantCandidateDeltaEvent",
-        "ConversationStreamAssistantCandidateResetEvent",
         "ConversationStreamReferencesEvent",
         "ConversationStreamResponseReadyEvent",
         "ConversationStreamSuggestionsEvent",
         "ConversationStreamCompleteEvent",
-        "ConversationStreamCancelledEvent",
         "ConversationStreamErrorEvent",
     }
+    assert variants("ConversationStreamEventSchema") == legacy_events
+    assert variants("ConversationSubscriptionEventSchema") == {
+        *legacy_events,
+        "ConversationStreamCancelledEvent",
+    }
+    assert variants("ConversationCandidateSubscriptionEventSchema") == {
+        *legacy_events,
+        "ConversationStreamAssistantCandidateStartEvent",
+        "ConversationStreamAssistantCandidateDeltaEvent",
+        "ConversationStreamAssistantCandidateResetEvent",
+        "ConversationStreamCancelledEvent",
+    }
 
-    schemas = app.openapi()["components"]["schemas"]
     assert "ConversationSuggestionsResponse" not in schemas
     variant_properties = schemas["ConversationResponseVariantResponse"]["properties"]
     assert "suggestions" not in variant_properties
@@ -590,14 +596,14 @@ def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
     assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
     assert "duration_ms" in variant_properties
     assert "failure" in variant_properties
-    accepted = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
+    accepted = contract["paths"]["/api/v1/conversations/{conversation_id}/turns"][
         "post"
     ]["responses"]["202"]
     assert set(accepted["content"]) == {"application/json"}
     assert accepted["content"]["application/json"]["schema"]["$ref"] == (
         "#/components/schemas/ConversationGenerationAccepted"
     )
-    event_subscription = app.openapi()["paths"][
+    event_subscription = contract["paths"][
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/"
         "{response_id}/events"
     ]["get"]["responses"]
@@ -607,10 +613,6 @@ def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
         event_subscription["200"]["content"]["text/event-stream"]["schema"]["$ref"]
         == "#/components/schemas/ConversationSubscriptionEventSchema"
     )
-    subscription_schema = schemas["ConversationSubscriptionEventSchema"]["oneOf"]
-    assert "ConversationStreamCancelledEvent" in {
-        item["$ref"].rsplit("/", maxsplit=1)[-1] for item in subscription_schema
-    }
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties
     assert "mentioned_thread_ids" not in create_properties
@@ -619,7 +621,7 @@ def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
     ]
     assert "branch" in start_generation["enum"]
 
-    start_operation = app.openapi()["paths"][
+    start_operation = contract["paths"][
         "/api/v1/conversations/{conversation_id}/start"
     ]["post"]
     assert (
@@ -631,11 +633,10 @@ def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
         start_operation["responses"]["200"]["content"]["text/event-stream"]["schema"][
             "$ref"
         ]
-        == "#/components/schemas/ConversationStreamEventSchema"
+        == "#/components/schemas/ConversationSubscriptionEventSchema"
     )
     assert {parameter["name"] for parameter in start_operation["parameters"]} >= {
         "conversation_id",
-        "include_candidates",
         "prefer",
     }
     start_schema = schemas["ConversationStartRequest"]
@@ -648,18 +649,49 @@ def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        "/api/v1/conversations/{conversation_id}/start",
         "/api/v1/conversations/{conversation_id}/turns",
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses",
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches",
     ],
 )
-def test_generation_posts_document_exact_response_media_types(path: str) -> None:
+def test_existing_generation_posts_retain_legacy_response_media_types(
+    path: str,
+) -> None:
     responses = app.openapi()["paths"][path]["post"]["responses"]
 
-    assert set(responses["200"]["content"]) == {"text/event-stream"}
-    assert responses["200"]["content"]["text/event-stream"]["schema"]["$ref"] == (
-        "#/components/schemas/ConversationStreamEventSchema"
+    content = responses["200"]["content"]
+    candidate_media_type = "application/vnd.scholens.conversation-events"
+    assert set(content) == {
+        "application/json",
+        "text/event-stream",
+        candidate_media_type,
+    }
+    for media_type in ("application/json", "text/event-stream"):
+        assert content[media_type]["schema"]["$ref"] == (
+            "#/components/schemas/ConversationStreamEventSchema"
+        )
+    assert content[candidate_media_type]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+    )
+    assert set(responses["202"]["content"]) == {"application/json"}
+    assert responses["202"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationGenerationAccepted"
+    )
+
+
+def test_atomic_start_documents_only_implemented_stream_media_types() -> None:
+    responses = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/start"][
+        "post"
+    ]["responses"]
+
+    content = responses["200"]["content"]
+    candidate_media_type = "application/vnd.scholens.conversation-events"
+    assert set(content) == {"text/event-stream", candidate_media_type}
+    assert content["text/event-stream"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationSubscriptionEventSchema"
+    )
+    assert content[candidate_media_type]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
     )
     assert set(responses["202"]["content"]) == {"application/json"}
     assert responses["202"]["content"]["application/json"]["schema"]["$ref"] == (

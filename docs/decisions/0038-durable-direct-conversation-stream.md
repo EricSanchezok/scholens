@@ -34,6 +34,9 @@ Every Conversation generation uses one Server-owned durable path:
   the same command;
 - `Prefer: respond-async` keeps the detachable `202` receipt, while the default
   response subscribes the same accepted generation directly as SSE;
+- the established SSE media type retains its published event union, while a
+  candidate-aware media type exposes durable cancellation and sanitized partial
+  answer events without widening that compatibility boundary;
 - disconnecting either subscriber never cancels generation; reconnect uses the
   existing Redis event ID and PostgreSQL terminal reconciliation;
 - Redis remains a bounded sanitized replay log rather than canonical

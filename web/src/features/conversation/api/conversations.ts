@@ -38,6 +38,8 @@ type ConversationEventCursor = {
 };
 
 const ACCEPTANCE_TIMEOUT_MS = 10_000;
+const CANDIDATE_STREAM_MEDIA_TYPE =
+  "application/vnd.scholens.conversation-events";
 
 const conversationStreamEventTypes = {
   start: true,
@@ -210,12 +212,12 @@ async function streamConversation({
       try {
         try {
           response = await authenticatedFetch(
-            `${clientEnvironment.NEXT_PUBLIC_API_URL}${path}?include_candidates=true`,
+            `${clientEnvironment.NEXT_PUBLIC_API_URL}${path}`,
             {
               method: "POST",
               credentials: "include",
               headers: {
-                Accept: "text/event-stream, application/json",
+                Accept: `${CANDIDATE_STREAM_MEDIA_TYPE}, text/event-stream, application/json`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify(body),

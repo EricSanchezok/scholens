@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationCandidateSubscriptionEventSchema,
     ConversationResponseCreateRequest,
     ConversationStartRequest,
+    ConversationStreamErrorEvent,
     ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
     ConversationTurnCreateRequest,
@@ -31,6 +33,7 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
+from app.shared.domain import FailureKind
 from app.transport.client_ip import http_client_ip
 from app.transport.http.observability import attach_operation_context
 from app.transport.http.public_v1.auth_dependencies import (
@@ -42,25 +45,44 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 turn_router = APIRouter()
 
+_CANDIDATE_EVENT_STREAM_MEDIA_TYPE = "application/vnd.scholens.conversation-events"
+
 
 class ConversationEventStreamResponse(StreamingResponse):
     media_type = "text/event-stream"
 
 
-def _stream_responses() -> dict[int | str, dict[str, object]]:
+def _stream_responses(
+    *,
+    standard_schema: str,
+    retain_legacy_json: bool,
+) -> dict[int | str, dict[str, object]]:
+    content = {
+        "text/event-stream": {
+            "schema": {"$ref": f"#/components/schemas/{standard_schema}"}
+        },
+        _CANDIDATE_EVENT_STREAM_MEDIA_TYPE: {
+            "schema": {
+                "$ref": (
+                    "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                )
+            }
+        },
+    }
+    if retain_legacy_json:
+        # This media type was published for the original three generation POSTs.
+        # Runtime delivery remains SSE, but removing the documented shape would
+        # break generated clients at the stable /api/v1 boundary.
+        content["application/json"] = {
+            "schema": {"$ref": "#/components/schemas/ConversationStreamEventSchema"}
+        }
     return {
         200: {
             "description": (
-                "Standard SSE stream of typed conversation events. Sanitized "
-                "candidate events are additive when include_candidates is true."
+                "A durable typed event stream. Request the Scholens candidate "
+                "media type to include sanitized partial answer events."
             ),
-            "content": {
-                "text/event-stream": {
-                    "schema": {
-                        "$ref": "#/components/schemas/ConversationStreamEventSchema"
-                    }
-                }
-            },
+            "content": content,
         },
         202: {
             "description": "Durable generation accepted for background delivery.",
@@ -115,19 +137,102 @@ def _prefers_background(prefer: str | None) -> bool:
     )
 
 
+def _media_preference(
+    accept: str | None,
+    media_type: str,
+) -> tuple[float, int] | None:
+    target_type, _, target_subtype = media_type.casefold().partition("/")
+    preferences: list[tuple[float, int]] = []
+    for value in (accept or "").split(","):
+        selected, *parameters = value.split(";")
+        selected_type, separator, selected_subtype = (
+            selected.strip().casefold().partition("/")
+        )
+        if not separator:
+            continue
+        if (selected_type, selected_subtype) == (target_type, target_subtype):
+            specificity = 2
+        elif (selected_type, selected_subtype) == (target_type, "*"):
+            specificity = 1
+        elif (selected_type, selected_subtype) == ("*", "*"):
+            specificity = 0
+        else:
+            continue
+        quality = 1.0
+        for parameter in parameters:
+            name, separator, raw_value = parameter.strip().partition("=")
+            if separator and name.casefold() == "q":
+                try:
+                    quality = float(raw_value)
+                except ValueError:
+                    quality = 0.0
+        preferences.append((quality if 0 <= quality <= 1 else 0.0, specificity))
+    if not preferences:
+        return None
+    most_specific = max(specificity for _, specificity in preferences)
+    return max(
+        preference for preference in preferences if preference[1] == most_specific
+    )
+
+
+def _requests_candidate_stream(accept: str | None) -> bool:
+    candidate_preference = _media_preference(
+        accept,
+        _CANDIDATE_EVENT_STREAM_MEDIA_TYPE,
+    )
+    if (
+        candidate_preference is None
+        or candidate_preference[0] <= 0
+        or candidate_preference[1] != 2
+    ):
+        return False
+    standard_preference = _media_preference(accept, "text/event-stream")
+    return (
+        standard_preference is None or candidate_preference[0] >= standard_preference[0]
+    )
+
+
 _EVENT_STREAM_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
+    "Vary": "Accept",
     "X-Accel-Buffering": "no",
 }
 
 
 def _event_stream_response(
     events: AsyncIterator[str],
+    *,
+    media_type: str = "text/event-stream",
 ) -> ConversationEventStreamResponse:
     return ConversationEventStreamResponse(
         events,
         headers=_EVENT_STREAM_HEADERS,
+        media_type=media_type,
     )
+
+
+def _legacy_compatible_frame(frame: str, *, response_id: UUID) -> str:
+    if not any(line == "event: cancelled" for line in frame.splitlines()):
+        return frame
+    event_id = next(
+        (line for line in frame.splitlines() if line.startswith("id: ")),
+        None,
+    )
+    error = ConversationStreamErrorEvent(
+        response_id=response_id,
+        error={
+            "code": "conversation_generation_cancelled",
+            "kind": FailureKind.CONFLICT.value,
+            "retryable": False,
+        },
+    )
+    payload = json.dumps(
+        error.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    error_frame = f"event: error\ndata: {payload}\n\n"
+    return f"{event_id}\n{error_frame}" if event_id is not None else error_frame
 
 
 async def _accepted_response(
@@ -136,7 +241,8 @@ async def _accepted_response(
     chat: ConversationChat,
     actor: Actor,
     prefer: str | None,
-    include_candidates: bool,
+    accept: str | None,
+    legacy_stream: bool,
 ) -> Response:
     if _prefers_background(prefer):
         return JSONResponse(
@@ -144,6 +250,8 @@ async def _accepted_response(
             content=accepted.model_dump(mode="json"),
             headers={"Preference-Applied": "respond-async"},
         )
+
+    candidate_stream = _requests_candidate_stream(accept)
 
     async def events() -> AsyncIterator[str]:
         yield ": accepted\n\n"
@@ -153,12 +261,23 @@ async def _accepted_response(
             turn_id=accepted.turn_id,
             response_id=accepted.response_id,
             last_event_id=None,
-            include_assistant_candidates=include_candidates,
+            include_assistant_candidates=candidate_stream,
         )
         async for frame in subscription:
-            yield frame
+            yield (
+                _legacy_compatible_frame(frame, response_id=accepted.response_id)
+                if legacy_stream and not candidate_stream
+                else frame
+            )
 
-    return _event_stream_response(events())
+    return _event_stream_response(
+        events(),
+        media_type=(
+            _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
+            if candidate_stream
+            else "text/event-stream"
+        ),
+    )
 
 
 def _conversation_operation(
@@ -191,9 +310,12 @@ def get_chat_capabilities(
 @turn_router.post(
     "/{conversation_id}/start",
     response_class=Response,
-    response_model=ConversationStreamEventSchema,
+    response_model=ConversationSubscriptionEventSchema,
     status_code=status.HTTP_200_OK,
-    responses=_stream_responses(),
+    responses=_stream_responses(
+        standard_schema="ConversationSubscriptionEventSchema",
+        retain_legacy_json=False,
+    ),
 )
 async def start_conversation(
     conversation_id: UUID,
@@ -204,7 +326,6 @@ async def start_conversation(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -226,7 +347,8 @@ async def start_conversation(
         chat=chat,
         actor=current_user,
         prefer=prefer,
-        include_candidates=include_candidates,
+        accept=http_request.headers.get("accept"),
+        legacy_stream=False,
     )
 
 
@@ -235,7 +357,10 @@ async def start_conversation(
     response_class=Response,
     response_model=ConversationStreamEventSchema,
     status_code=status.HTTP_200_OK,
-    responses=_stream_responses(),
+    responses=_stream_responses(
+        standard_schema="ConversationStreamEventSchema",
+        retain_legacy_json=True,
+    ),
 )
 async def create_conversation_turn(
     conversation_id: UUID,
@@ -246,7 +371,6 @@ async def create_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -267,7 +391,8 @@ async def create_conversation_turn(
         chat=chat,
         actor=current_user,
         prefer=prefer,
-        include_candidates=include_candidates,
+        accept=http_request.headers.get("accept"),
+        legacy_stream=True,
     )
 
 
@@ -276,7 +401,10 @@ async def create_conversation_turn(
     response_class=Response,
     response_model=ConversationStreamEventSchema,
     status_code=status.HTTP_200_OK,
-    responses=_stream_responses(),
+    responses=_stream_responses(
+        standard_schema="ConversationStreamEventSchema",
+        retain_legacy_json=True,
+    ),
 )
 async def retry_conversation_turn(
     conversation_id: UUID,
@@ -288,7 +416,6 @@ async def retry_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -310,7 +437,8 @@ async def retry_conversation_turn(
         chat=chat,
         actor=current_user,
         prefer=prefer,
-        include_candidates=include_candidates,
+        accept=http_request.headers.get("accept"),
+        legacy_stream=True,
     )
 
 
@@ -319,7 +447,10 @@ async def retry_conversation_turn(
     response_class=Response,
     response_model=ConversationStreamEventSchema,
     status_code=status.HTTP_200_OK,
-    responses=_stream_responses(),
+    responses=_stream_responses(
+        standard_schema="ConversationStreamEventSchema",
+        retain_legacy_json=True,
+    ),
 )
 async def branch_conversation_turn(
     conversation_id: UUID,
@@ -331,7 +462,6 @@ async def branch_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -353,7 +483,8 @@ async def branch_conversation_turn(
         chat=chat,
         actor=current_user,
         prefer=prefer,
-        include_candidates=include_candidates,
+        accept=http_request.headers.get("accept"),
+        legacy_stream=True,
     )
 
 

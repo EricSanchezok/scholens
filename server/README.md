@@ -334,15 +334,17 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`. The additive `/events/candidates` subscription and
-`include_candidates=true` direct stream additionally return
-sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
-`assistant_candidate_reset` events parsed from partial structured
-`final_answer` arguments. The adapter filters those additive events for older
-clients on the original `/events` route; the Web reconnects only through the
-candidate-aware route so a deployment cannot silently downgrade an active
-answer's event contract. Retries clear the provisional candidate, while only a
-currently ambiguous forbidden-protocol or visible citation suffix is withheld;
+`progress`. The additive `/events/candidates` subscription and the
+`application/vnd.scholens.conversation-events` direct representation
+additionally return sanitized `assistant_candidate_start`,
+`assistant_candidate_delta`, and `assistant_candidate_reset` events parsed from
+partial structured `final_answer` arguments. The standard representation keeps
+the original direct-stream event union and projects cancellation through its
+existing terminal `error` shape. The Web requests the candidate representation
+and reconnects only through the candidate-aware route, so a deployment cannot
+silently downgrade an active answer's event contract. Retries clear the
+provisional candidate, while only a currently ambiguous forbidden-protocol or
+visible citation suffix is withheld;
 short safe answers stream immediately. Private citation protocol never enters
 the candidate.
 A `final` item is published only after the model submits the

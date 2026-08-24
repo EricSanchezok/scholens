@@ -561,8 +561,11 @@ attempt; conflicting reuse of an active Response ID preserves the existing
 generation's lease. `Prefer: respond-async` returns a `202` receipt after
 commit. Without that preference, the POST returns a direct subscription
 to the same durable generation, flushes a comment-only acceptance frame, and
-then consumes Redis-ID events. Neither path runs the agent inside the HTTP
-request. Disconnecting a subscriber never cancels generation;
+then consumes Redis-ID events. The candidate-aware
+`application/vnd.scholens.conversation-events` representation carries sanitized
+partial answers and explicit cancellation; the established media type retains
+its published event union. Neither path runs the agent inside the HTTP request.
+Disconnecting a subscriber never cancels generation;
 only the authorized cancellation command transitions the running Response and
 job. Event subscriptions may reconnect from `Last-Event-ID`, but generation is
 never automatically replayed. If a worker lease expires, the Response fails as

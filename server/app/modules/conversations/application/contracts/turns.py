@@ -127,6 +127,11 @@ ConversationBaseStreamEvent = (
     | ConversationStreamCompleteEvent
 )
 
+ConversationLegacyStreamEvent = Annotated[
+    ConversationBaseStreamEvent | ConversationStreamErrorEvent,
+    Field(discriminator="type"),
+]
+
 ConversationSubscriptionEvent = Annotated[
     ConversationBaseStreamEvent
     | ConversationStreamCancelledEvent
@@ -145,8 +150,8 @@ ConversationStreamEvent = Annotated[
 ]
 
 
-class ConversationStreamEventSchema(RootModel[ConversationStreamEvent]):
-    """Complete event union for a direct durable generation SSE response."""
+class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
+    """Compatible schema for the original direct generation response."""
 
 
 class ConversationSubscriptionEventSchema(RootModel[ConversationSubscriptionEvent]):

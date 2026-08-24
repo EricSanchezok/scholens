@@ -140,9 +140,11 @@ describe("durable conversation generation", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const post = fetchMock.mock.calls[0]?.[0] as Request;
     expect(post.method).toBe("POST");
-    expect(post.url).toContain("?include_candidates=true");
+    expect(post.url).not.toContain("include_candidates");
     expect(post.headers.get("Prefer")).toBeNull();
-    expect(post.headers.get("Accept")).toContain("text/event-stream");
+    expect(post.headers.get("Accept")).toBe(
+      "application/vnd.scholens.conversation-events, text/event-stream, application/json",
+    );
     expect(post.signal.aborted).toBe(false);
   });
 

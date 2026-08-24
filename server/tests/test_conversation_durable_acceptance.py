@@ -37,7 +37,11 @@ from app.modules.papers.application.contracts.search import LibraryPaperCollecti
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind, WorkspacePermission
 from app.shared.domain.enums import ConversationScopeType, ReasoningLevel
-from app.transport.http.public_v1.turns import _accepted_response
+from app.transport.http.public_v1.turns import (
+    _CANDIDATE_EVENT_STREAM_MEDIA_TYPE,
+    _accepted_response,
+    _requests_candidate_stream,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -1112,17 +1116,45 @@ async def test_start_rolls_back_a_recreated_generation_when_its_job_is_a_tombsto
 
 
 class _SubscriptionChat:
-    def __init__(self) -> None:
+    def __init__(self, *frames: str) -> None:
         self.subscribe_calls = 0
+        self.subscribe_arguments: list[dict[str, object]] = []
+        self.frames = frames or ("event: start\ndata: {}\n\n",)
         self.cancel = MagicMock()
 
-    async def subscribe(self, **_kwargs: object) -> AsyncIterator[str]:
+    async def subscribe(self, **kwargs: object) -> AsyncIterator[str]:
         self.subscribe_calls += 1
+        self.subscribe_arguments.append(kwargs)
 
         async def events() -> AsyncIterator[str]:
-            yield "event: start\ndata: {}\n\n"
+            for frame in self.frames:
+                yield frame
 
         return events()
+
+
+@pytest.mark.parametrize(
+    ("accept", "expected"),
+    [
+        (None, False),
+        ("*/*", False),
+        (_CANDIDATE_EVENT_STREAM_MEDIA_TYPE, True),
+        (f"{_CANDIDATE_EVENT_STREAM_MEDIA_TYPE};q=0", False),
+        (
+            f"{_CANDIDATE_EVENT_STREAM_MEDIA_TYPE};q=0.5, text/*;q=0.9",
+            False,
+        ),
+        (
+            f"{_CANDIDATE_EVENT_STREAM_MEDIA_TYPE}, text/event-stream",
+            True,
+        ),
+    ],
+)
+def test_candidate_stream_requires_an_explicit_preferred_media_type(
+    accept: str | None,
+    expected: bool,
+) -> None:
+    assert _requests_candidate_stream(accept) is expected
 
 
 @pytest.mark.asyncio
@@ -1141,19 +1173,61 @@ async def test_direct_response_flushes_acceptance_before_durable_subscription() 
         chat=chat,  # type: ignore[arg-type]
         actor=_actor(),
         prefer=None,
-        include_candidates=True,
+        accept=(
+            f"{_CANDIDATE_EVENT_STREAM_MEDIA_TYPE}, text/event-stream, application/json"
+        ),
+        legacy_stream=True,
     )
 
     assert isinstance(response, StreamingResponse)
     assert response.headers["cache-control"] == "no-cache, no-transform"
+    assert response.headers["vary"] == "Accept"
     assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["content-type"] == _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
+    assert response.media_type == _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
     assert chat.subscribe_calls == 0
     assert await anext(response.body_iterator) == ": accepted\n\n"
     assert chat.subscribe_calls == 0
     assert await anext(response.body_iterator) == "event: start\ndata: {}\n\n"
     assert chat.subscribe_calls == 1
+    assert chat.subscribe_arguments[0]["include_assistant_candidates"] is True
     assert [item async for item in response.body_iterator] == []
     chat.cancel.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_legacy_direct_stream_preserves_its_terminal_event_contract() -> None:
+    accepted = ConversationGenerationAccepted(
+        conversation_id=uuid4(),
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        variant_index=1,
+        generation_kind="initial",
+    )
+    chat = _SubscriptionChat(
+        (
+            "id: 2-0\nevent: cancelled\ndata: "
+            f'{{"type":"cancelled","turn_id":"{accepted.turn_id}",'
+            f'"response_id":"{accepted.response_id}"}}\n\n'
+        )
+    )
+
+    response = await _accepted_response(
+        accepted=accepted,
+        chat=chat,  # type: ignore[arg-type]
+        actor=_actor(),
+        prefer=None,
+        accept=(f"{_CANDIDATE_EVENT_STREAM_MEDIA_TYPE};q=0.5, text/event-stream;q=0.9"),
+        legacy_stream=True,
+    )
+
+    assert isinstance(response, StreamingResponse)
+    assert response.media_type == "text/event-stream"
+    assert await anext(response.body_iterator) == ": accepted\n\n"
+    terminal = await anext(response.body_iterator)
+    assert terminal.startswith("id: 2-0\nevent: error\n")
+    assert '"code":"conversation_generation_cancelled"' in terminal
+    assert chat.subscribe_arguments[0]["include_assistant_candidates"] is False
 
 
 @pytest.mark.asyncio
@@ -1171,8 +1245,9 @@ async def test_respond_async_compatibility_returns_202_without_subscribing() -> 
         accepted=accepted,
         chat=chat,  # type: ignore[arg-type]
         actor=_actor(),
-        prefer="respond-async",
-        include_candidates=True,
+        prefer="wait=2, ReSpOnD-AsYnC",
+        accept=_CANDIDATE_EVENT_STREAM_MEDIA_TYPE,
+        legacy_stream=True,
     )
 
     assert isinstance(response, JSONResponse)

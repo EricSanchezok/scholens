@@ -3022,9 +3022,9 @@ export interface components {
         };
         /**
          * ConversationStreamEventSchema
-         * @description Complete event union for a direct durable generation SSE response.
+         * @description Compatible schema for the original direct generation response.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamAssistantCandidateStartEvent"] | components["schemas"]["ConversationStreamAssistantCandidateDeltaEvent"] | components["schemas"]["ConversationStreamAssistantCandidateResetEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -6763,9 +6763,7 @@ export interface operations {
     };
     start_conversation_api_v1_conversations__conversation_id__start_post: {
         parameters: {
-            query?: {
-                include_candidates?: boolean;
-            };
+            query?: never;
             header?: {
                 prefer?: string | null;
             };
@@ -6780,13 +6778,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
+                    "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
                 };
             };
             /** @description Durable generation accepted for background delivery. */
@@ -6880,9 +6879,7 @@ export interface operations {
     };
     create_conversation_turn_api_v1_conversations__conversation_id__turns_post: {
         parameters: {
-            query?: {
-                include_candidates?: boolean;
-            };
+            query?: never;
             header?: {
                 prefer?: string | null;
             };
@@ -6897,12 +6894,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
@@ -6928,9 +6927,7 @@ export interface operations {
     };
     branch_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__branches_post: {
         parameters: {
-            query?: {
-                include_candidates?: boolean;
-            };
+            query?: never;
             header?: {
                 prefer?: string | null;
             };
@@ -6946,12 +6943,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
@@ -6977,9 +6976,7 @@ export interface operations {
     };
     retry_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__responses_post: {
         parameters: {
-            query?: {
-                include_candidates?: boolean;
-            };
+            query?: never;
             header?: {
                 prefer?: string | null;
             };
@@ -6995,12 +6992,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };

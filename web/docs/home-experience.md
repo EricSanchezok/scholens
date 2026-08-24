@@ -128,9 +128,10 @@ The stream accepts `start`, the stable-ID
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`. Direct requests opt into candidates, and the
-additive `/events/candidates` resume subscription returns sanitized partial
-`final_answer` arguments through
+arrive as bounded `progress`. Direct requests opt into candidates with the
+`application/vnd.scholens.conversation-events` representation, and the additive
+`/events/candidates` resume subscription returns sanitized partial `final_answer`
+arguments through
 `assistant_candidate_start`, `assistant_candidate_delta`, and
 `assistant_candidate_reset` while the structured answer is still arriving. A
 bounded suffix and all private citation markers stay server-side, and a model
