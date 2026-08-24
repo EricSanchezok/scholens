@@ -966,7 +966,12 @@ export function PaperCollectionWorkbench({
     [setSidePanelState],
   );
   const effectiveColumns = React.useMemo<PaperCollectionRenderedColumn[]>(
-    () => ["reading_time", ...preferences.visible_columns],
+    () => [
+      "reading_time",
+      ...preferences.visible_columns.filter(
+        (column) => String(column) !== "reading_time",
+      ),
+    ],
     [preferences.visible_columns],
   );
   const compact = listWidth < 640;

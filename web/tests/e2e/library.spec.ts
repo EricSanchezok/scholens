@@ -430,12 +430,29 @@ test("opens paper details as a full-height Library side panel", async ({
   await expect(
     preview.getByRole("button", { name: "Close paper details" }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { exact: true, name: "Active reading" }),
+  ).toBeVisible();
 
   const lastOpenedHeader = page.getByRole("columnheader", {
     exact: true,
     name: "Last opened",
   });
   const table = page.getByRole("table");
+  const scroller = page.locator("[data-paper-collection-scroll]");
+  const overflow = await scroller.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
+  await expect
+    .poll(() =>
+      scroller.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+        return element.scrollWidth - element.scrollLeft - element.clientWidth;
+      }),
+    )
+    .toBeLessThanOrEqual(1);
   const [lastOpenedBox, tableBox] = await Promise.all([
     lastOpenedHeader.boundingBox(),
     table.boundingBox(),
