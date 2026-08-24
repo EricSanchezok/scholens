@@ -281,11 +281,13 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     [papersQuery.data?.pages],
   );
   const paperActivityIds = React.useMemo(
-    () =>
-      paperEntries.flatMap((entry) =>
+    () => [
+      ...paperEntries.flatMap((entry) =>
         entry.entry_type === "paper" ? [entry.document.document_id] : [],
       ),
-    [paperEntries],
+      ...paperSearchResults.map((paper) => paper.document_id),
+    ],
+    [paperEntries, paperSearchResults],
   );
   const paperActivityIdChunks = React.useMemo(
     () => chunkPaperSummaryDocumentIds(paperActivityIds),

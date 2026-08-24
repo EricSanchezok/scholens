@@ -58,10 +58,11 @@ export type PaperCollectionTag = {
 export type PaperCollectionItem = {
   id: string;
   title: string;
-  activity?: React.ReactNode;
+  activityTrail?: React.ReactNode;
   authors: string[];
   publication?: string;
   lastOpened?: string;
+  readingTime?: React.ReactNode;
   addedAt?: string;
   doi?: string;
   status?: PaperStatus;
@@ -80,6 +81,7 @@ const COLUMN_WIDTH_LIMITS: Record<
   { default: number; max: number; min: number }
 > = {
   paper: { default: 360, max: 1600, min: 160 },
+  reading_time: { default: 112, max: 240, min: 96 },
   status: { default: 96, max: 960, min: 88 },
   tags: { default: 160, max: 400, min: 128 },
   authors: { default: 176, max: 520, min: 144 },
@@ -90,6 +92,7 @@ const COLUMN_WIDTH_LIMITS: Record<
 };
 const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
   paper: 200,
+  reading_time: 80,
   status: 64,
   tags: 56,
   authors: 80,
@@ -1313,9 +1316,18 @@ export function PaperCollectionWorkbench({
                               {item.authors.join(" · ") ||
                                 t("preview.unknownAuthors")}
                             </span>
-                            {item.activity ? (
-                              <span className="mt-2 block">
-                                {item.activity}
+                            {item.activityTrail || item.readingTime ? (
+                              <span className="mt-2 flex min-w-0 items-center gap-3">
+                                {item.activityTrail ? (
+                                  <span className="min-w-0 flex-1">
+                                    {item.activityTrail}
+                                  </span>
+                                ) : null}
+                                {item.readingTime ? (
+                                  <span className="shrink-0">
+                                    {item.readingTime}
+                                  </span>
+                                ) : null}
                               </span>
                             ) : null}
                           </Link>
@@ -1365,7 +1377,7 @@ export function PaperCollectionWorkbench({
                               <span
                                 className={cn(
                                   "text-xs leading-4 font-semibold [overflow-wrap:anywhere]",
-                                  item.activity
+                                  item.activityTrail
                                     ? "line-clamp-1"
                                     : "line-clamp-2",
                                 )}
@@ -1377,9 +1389,9 @@ export function PaperCollectionWorkbench({
                                   {item.snippet}
                                 </span>
                               ) : null}
-                              {item.activity ? (
-                                <span className="mt-1 block">
-                                  {item.activity}
+                              {item.activityTrail ? (
+                                <span className="mt-2 block">
+                                  {item.activityTrail}
                                 </span>
                               ) : null}
                             </span>
@@ -1404,6 +1416,8 @@ export function PaperCollectionWorkbench({
                               t("preview.unknownAuthors")
                             ) : column === "publication" ? (
                               item.publication || t("unknown")
+                            ) : column === "reading_time" ? (
+                              item.readingTime || "—"
                             ) : column === "last_opened" ? (
                               item.lastOpened || t("neverOpened")
                             ) : column === "added_at" ? (

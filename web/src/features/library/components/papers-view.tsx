@@ -63,7 +63,8 @@ import type { PaperSearchWorkbenchProps } from "@/features/paper-search";
 import type { PaperSort, PaperStatus as FilterStatus } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
 import {
-  CompactPaperActivity,
+  CompactPaperActivityDuration,
+  CompactPaperActivityTrail,
   type PaperActivitySummary,
 } from "@/features/research-activity";
 import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
@@ -647,8 +648,8 @@ export function PapersView({
         dateStyle: "medium",
       }),
       authors: metadata.authors,
-      activity: activitySummary ? (
-        <CompactPaperActivity summary={activitySummary} />
+      activityTrail: activitySummary ? (
+        <CompactPaperActivityTrail summary={activitySummary} />
       ) : undefined,
       doi: paper.metadata_overrides.doi ?? paper.document.doi ?? undefined,
       href: `/reader/${paper.document.document_id}` as Route,
@@ -658,6 +659,9 @@ export function PapersView({
       lastOpened: format.dateTime(new Date(paper.last_accessed_at), {
         dateStyle: "medium",
       }),
+      readingTime: activitySummary ? (
+        <CompactPaperActivityDuration summary={activitySummary} />
+      ) : undefined,
       previewUrl: paper.preview_url ?? undefined,
       publication,
       status: paper.status,
@@ -955,8 +959,25 @@ export function PapersView({
       onTagFilterChange(tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id]),
     tableFooter: paginationControl,
   };
-  const workbenchProps: PaperCollectionWorkbenchProps =
-    searchWorkbench ?? browseWorkbenchProps;
+  const workbenchProps: PaperCollectionWorkbenchProps = searchWorkbench
+    ? {
+        ...searchWorkbench,
+        items: searchWorkbench.items.map((item) => {
+          const activitySummary = activityByDocumentId?.get(item.id);
+          return activitySummary
+            ? {
+                ...item,
+                activityTrail: (
+                  <CompactPaperActivityTrail summary={activitySummary} />
+                ),
+                readingTime: (
+                  <CompactPaperActivityDuration summary={activitySummary} />
+                ),
+              }
+            : item;
+        }),
+      }
+    : browseWorkbenchProps;
 
   return (
     <div className="h-full min-h-0 min-w-0 overflow-hidden">

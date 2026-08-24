@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.modules.papers.application.preferences import (
+    DEFAULT_PAPER_LIST_COLUMN_WIDTHS,
     PaperListColumn,
     PaperListColumnWidth,
     PaperListPreferencesRecord,
@@ -88,17 +89,34 @@ class SqlAlchemyPaperListPreferences:
 
 
 def _record(model: PaperListPreference) -> PaperListPreferencesRecord:
+    stored_widths = {
+        PaperListSizedColumn(column): width
+        for column, width in model.column_widths.items()
+    }
+    reading_time_is_legacy_missing = (
+        PaperListSizedColumn.READING_TIME not in stored_widths
+    )
+    visible_columns = [PaperListColumn(value) for value in model.visible_columns]
+    if (
+        reading_time_is_legacy_missing
+        and PaperListColumn.READING_TIME not in visible_columns
+    ):
+        # Compatibility owner: Papers preferences. Remove after every retained
+        # preference row has been rewritten or backfilled with a reading-time
+        # width; until then, old accounts receive the new default-visible column.
+        visible_columns.insert(0, PaperListColumn.READING_TIME)
     return PaperListPreferencesRecord(
-        visible_columns=tuple(
-            PaperListColumn(value) for value in model.visible_columns
-        ),
+        visible_columns=tuple(visible_columns),
         preview_open=model.preview_open,
         column_widths=tuple(
             PaperListColumnWidth(
-                column=PaperListSizedColumn(column),
-                width=width,
+                column=column,
+                width=stored_widths.get(
+                    column,
+                    DEFAULT_PAPER_LIST_COLUMN_WIDTHS[column],
+                ),
             )
-            for column, width in model.column_widths.items()
+            for column in PaperListSizedColumn
         ),
         preview_width=model.preview_width,
     )

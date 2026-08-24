@@ -6798,6 +6798,7 @@
       },
       "PaperListColumn": {
         "enum": [
+          "reading_time",
           "status",
           "tags",
           "authors",
@@ -6913,6 +6914,7 @@
       "PaperListSizedColumn": {
         "enum": [
           "paper",
+          "reading_time",
           "status",
           "tags",
           "authors",

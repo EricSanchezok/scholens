@@ -85,15 +85,18 @@ to panel-specific display minima instead of disappearing by breakpoint. If the
 remaining collection width cannot contain them, local horizontal scrolling
 keeps every selected column reachable.
 
-Default columns are Paper, Status, Tags, Authors, Publication, and Last opened.
-Added and DOI are optional; every column except Paper can be hidden and the
-visible columns can be reordered. Column order, per-column widths, preview
-width, and preview disclosure are account-scoped and shared with Project Papers;
-sort and filters remain URL state. The Paper column can contract to 160 px and
-expand to 1,600 px. Dragging an internal column boundary redistributes the
-stored bounded width only between its two adjacent visible columns, keeping
-their combined width and the trailing column edge fixed; preview compression is
-a display projection and is never persisted as an invalid preference. The
+Default columns are Paper, Active reading, Status, Tags, Authors, Publication,
+and Last opened. Added and DOI are optional; every column except Paper can be
+hidden and the visible columns can be reordered. Active reading is a compact
+duration column; the Paper cell keeps a separate, label-backed page-distribution
+trail whose smooth intensity changes show where reading accumulated without
+claiming completion progress. Column order, per-column widths, preview width,
+and preview disclosure are account-scoped and shared with Project Papers; sort
+and filters remain URL state. The Paper column can contract to 160 px and expand
+to 1,600 px. Dragging an internal column boundary redistributes the stored
+bounded width only between its two adjacent visible columns, keeping their
+combined width and the trailing column edge fixed; preview compression is a
+display projection and is never persisted as an invalid preference. The
 boundary stops when either column reaches its limit, and the final data column
 has no resize handle. Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the

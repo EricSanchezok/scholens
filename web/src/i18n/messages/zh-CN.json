@@ -1896,6 +1896,7 @@
     "columns": {
       "actions": "操作",
       "paper": "论文",
+      "reading_time": "主动阅读",
       "thumbnail": "论文缩略图",
       "selection": "选择",
       "status": "状态",
@@ -2204,7 +2205,10 @@
     "library": {
       "summary": "主动阅读估算 {duration}，实质覆盖 {coverage}%",
       "durationOnly": "主动阅读估算 {duration}",
-      "durationAndCoverage": "{duration} · 覆盖 {coverage}%"
+      "durationAndCoverage": "{duration} · 覆盖 {coverage}%",
+      "coverageValue": "覆盖 {coverage}%",
+      "distributionLabel": "页面阅读分布",
+      "distributionDescription": "页面阅读分布。颜色越深，主动阅读时间越长。"
     },
     "home": {
       "title": "研究活动",

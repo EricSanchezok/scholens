@@ -1896,6 +1896,7 @@
     "columns": {
       "actions": "Actions",
       "paper": "Paper",
+      "reading_time": "Active reading",
       "thumbnail": "Paper thumbnail",
       "selection": "Selection",
       "status": "Status",
@@ -2204,7 +2205,10 @@
     "library": {
       "summary": "{duration} active reading estimate, {coverage}% substantial coverage",
       "durationOnly": "{duration} active reading estimate",
-      "durationAndCoverage": "{duration} · {coverage}% covered"
+      "durationAndCoverage": "{duration} · {coverage}% covered",
+      "coverageValue": "{coverage}% covered",
+      "distributionLabel": "Page reading distribution",
+      "distributionDescription": "Page reading distribution. Darker areas indicate more active reading."
     },
     "home": {
       "title": "Research activity",

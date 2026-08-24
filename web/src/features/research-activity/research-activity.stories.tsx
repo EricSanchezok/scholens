@@ -11,7 +11,10 @@ import {
   readingActivityPreferencesFixture,
 } from "./fixtures";
 import { ActivityTrendChart } from "./components/activity-visualizations";
-import { CompactPaperActivity } from "./components/compact-paper-activity";
+import {
+  CompactPaperActivityDuration,
+  CompactPaperActivityTrail,
+} from "./components/compact-paper-activity";
 import { HomeActivitySnapshot } from "./components/home-activity-snapshot";
 import { PaperInsightsPanel } from "./components/paper-insights-panel";
 import { PersonalActivityDashboard } from "./components/personal-activity-dashboard";
@@ -445,8 +448,9 @@ export const PreferencesError: Story = {
 
 export const CompactLibraryActivity: Story = {
   render: () => (
-    <div className="bg-canvas w-80 p-6">
-      <CompactPaperActivity summary={paperActivitySummaryFixture} />
+    <div className="bg-canvas grid w-96 grid-cols-[minmax(0,1fr)_7rem] items-center gap-6 p-6">
+      <CompactPaperActivityTrail summary={paperActivitySummaryFixture} />
+      <CompactPaperActivityDuration summary={paperActivitySummaryFixture} />
     </div>
   ),
 };
