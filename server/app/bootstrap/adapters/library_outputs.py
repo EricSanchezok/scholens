@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
@@ -11,6 +12,7 @@ from app.bootstrap.adapters.research_repository import research_repository
 from app.database.models import (
     CitationOutput,
     Document,
+    AnnotationComment,
     AnnotationThread,
     Project,
     ResearchAudioOverview,
@@ -27,6 +29,12 @@ from app.modules.papers.application.library import (
     LibraryPageDirection,
     LibraryPagePosition,
 )
+from app.modules.research.application.legacy_outputs import (
+    LegacyResearchListItemSize,
+    legacy_research_list_payload_json_utf8_upper_bound,
+    require_legacy_research_list_payload_budget,
+)
+from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchItemKind, ResearchAudienceType
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
@@ -49,6 +57,7 @@ class SqlAlchemyLibraryOutputsGateway:
         direction: LibraryPageDirection,
         position: LibraryPagePosition | None,
         project_id: UUID | None = None,
+        maximum_payload_json_bytes: int | None = None,
     ) -> LibraryOutputPage:
         title = self._title_expression()
         source_title = case(
@@ -59,6 +68,17 @@ class SqlAlchemyLibraryOutputsGateway:
             (
                 ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
                 Project.title,
+            ),
+            else_="Personal Library",
+        )
+        response_source_title = case(
+            (
+                ResearchItem.audience_type == ResearchAudienceType.DOCUMENT.value,
+                func.coalesce(Document.title, Document.original_filename, "Paper"),
+            ),
+            (
+                ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                func.coalesce(Project.title, "Project"),
             ),
             else_="Personal Library",
         )
@@ -111,6 +131,21 @@ class SqlAlchemyLibraryOutputsGateway:
         id_order = (
             ResearchItem.id.asc() if effective_ascending else ResearchItem.id.desc()
         )
+        if maximum_payload_json_bytes is not None:
+            return self._list_legacy_bounded(
+                user_id=user_id,
+                title=self._response_title_expression(),
+                source_title=response_source_title,
+                sort=sort,
+                limit=limit,
+                direction=direction,
+                filters=filters,
+                key=key,
+                order=order,
+                id_order=id_order,
+                total_count=total_count,
+                maximum_payload_json_bytes=maximum_payload_json_bytes,
+            )
         statement = (
             self._base_statement()
             .where(*filters)
@@ -138,6 +173,141 @@ class SqlAlchemyLibraryOutputsGateway:
             positions=[
                 LibraryPagePosition(key=self._key(item, sort=sort), id=item.id)
                 for item in items
+            ],
+            has_more=has_more,
+            total_count=total_count,
+        )
+
+    def _list_legacy_bounded(
+        self,
+        *,
+        user_id: int,
+        title: ColumnElement[str],
+        source_title: ColumnElement[str],
+        sort: LibraryOutputSort,
+        limit: int,
+        direction: LibraryPageDirection,
+        filters: Sequence[ColumnElement[bool]],
+        key: Any,
+        order: Any,
+        id_order: Any,
+        total_count: int,
+        maximum_payload_json_bytes: int,
+    ) -> LibraryOutputPage:
+        """Lock and size a historical full-output page before hydration."""
+
+        scalar_statement = (
+            self._base_statement()
+            .with_only_columns(
+                ResearchItem.id.label("item_id"),
+                ResearchItem.kind,
+                ResearchItem.audience_type,
+                ResearchItem.audience_document_id,
+                ResearchItem.audience_project_id,
+                title.label("title"),
+                source_title.label("source_title"),
+                key.label("sort_key"),
+            )
+            .where(*filters)
+            .order_by(order, id_order)
+            .limit(limit + 1)
+            .with_for_update(of=ResearchItem)
+        )
+        rows = list(self._db.execute(scalar_statement).mappings().all())
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        if direction is LibraryPageDirection.BACKWARD:
+            rows.reverse()
+
+        accesses = [
+            research_repository.authorize_page(
+                self._db,
+                item_id=row["item_id"],
+                user_id=user_id,
+                include_access_url=False,
+            )
+            for row in rows
+        ]
+        payload_upper_bound = legacy_research_list_payload_json_utf8_upper_bound(
+            LegacyResearchListItemSize(
+                item_json_utf8_upper_bound=(
+                    access.legacy_payload_json_utf8_upper_bound
+                    if access.legacy_payload_json_utf8_upper_bound is not None
+                    else access.durable_json_utf8_upper_bound
+                ),
+                title=cast(str | None, row["title"]),
+                source_title=cast(str | None, row["source_title"]),
+                wrapped=True,
+            )
+            for access, row in zip(accesses, rows, strict=True)
+        )
+        require_legacy_research_list_payload_budget(
+            payload_json_utf8_upper_bound=payload_upper_bound,
+            maximum_payload_json_bytes=maximum_payload_json_bytes,
+        )
+
+        item_ids = tuple(row["item_id"] for row in rows)
+        hydrated = list(
+            self._db.scalars(
+                select(ResearchItem)
+                .where(ResearchItem.id.in_(item_ids))
+                .options(
+                    joinedload(ResearchItem.created_by),
+                    joinedload(ResearchItem.citation),
+                    joinedload(ResearchItem.audio_overview),
+                    joinedload(ResearchItem.data_table),
+                    joinedload(ResearchItem.annotation_thread).joinedload(
+                        AnnotationThread.resolved_by
+                    ),
+                    joinedload(ResearchItem.annotation_thread)
+                    .selectinload(AnnotationThread.comments)
+                    .joinedload(AnnotationComment.created_by),
+                )
+            )
+            .unique()
+            .all()
+        )
+        items_by_id = {item.id: item for item in hydrated}
+        if set(items_by_id) != set(item_ids):
+            raise RuntimeError("legacy_research_output_snapshot_incomplete")
+
+        items = [
+            self._response_from_scalar(
+                items_by_id[row["item_id"]],
+                user_id=user_id,
+                title=cast(str, row["title"]),
+                source_title=cast(str, row["source_title"]),
+                audience_type=ResearchAudienceType(row["audience_type"]),
+                audience_document_id=cast(UUID | None, row["audience_document_id"]),
+                audience_project_id=cast(UUID | None, row["audience_project_id"]),
+            )
+            for row in rows
+        ]
+        for expected in accesses:
+            current = research_repository.authorize_page(
+                self._db,
+                item_id=expected.item_id,
+                user_id=user_id,
+                include_access_url=False,
+            )
+            if current.revision != expected.revision:
+                raise AppError(
+                    code="research_output_snapshot_changed",
+                    message="A research output changed while the page was prepared",
+                    kind=FailureKind.CONFLICT,
+                )
+        return LibraryOutputPage(
+            items=items,
+            positions=[
+                LibraryPagePosition(
+                    key=self._scalar_key(
+                        row["sort_key"],
+                        response_title=row["title"],
+                        sort=sort,
+                    ),
+                    id=row["item_id"],
+                )
+                for row in rows
             ],
             has_more=has_more,
             total_count=total_count,
@@ -202,6 +372,32 @@ class SqlAlchemyLibraryOutputsGateway:
             else_="Research output",
         )
 
+    @staticmethod
+    def _response_title_expression() -> ColumnElement[str]:
+        citation_title = CitationOutput.snapshot["data"]["title"].astext
+        return case(
+            (
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                func.left(AnnotationThread.quote_text, 240),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.CITATION.value,
+                func.coalesce(func.nullif(citation_title, ""), "Citation"),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.AUDIO_OVERVIEW.value,
+                func.coalesce(
+                    func.nullif(ResearchAudioOverview.title, ""),
+                    "Audio overview",
+                ),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.DATA_TABLE.value,
+                func.coalesce(func.nullif(ResearchDataTable.title, ""), "Data table"),
+            ),
+            else_="Research output",
+        )
+
     def _response(self, item: ResearchItem, *, user_id: int) -> LibraryOutputResponse:
         title = self._title(item)
         audience_type = ResearchAudienceType(item.audience_type)
@@ -234,6 +430,51 @@ class SqlAlchemyLibraryOutputsGateway:
                 title=source_title,
             ),
         )
+
+    def _response_from_scalar(
+        self,
+        item: ResearchItem,
+        *,
+        user_id: int,
+        title: str,
+        source_title: str,
+        audience_type: ResearchAudienceType,
+        audience_document_id: UUID | None,
+        audience_project_id: UUID | None,
+    ) -> LibraryOutputResponse:
+        audience_id = (
+            audience_document_id
+            if audience_type is ResearchAudienceType.DOCUMENT
+            else (
+                audience_project_id
+                if audience_type is ResearchAudienceType.PROJECT
+                else None
+            )
+        )
+        return LibraryOutputResponse(
+            item=research_repository.serialize(self._db, item=item, user_id=user_id),
+            title=title,
+            source=LibraryOutputSourceResponse(
+                audience_type=audience_type,
+                audience_id=audience_id,
+                title=source_title,
+            ),
+        )
+
+    @staticmethod
+    def _scalar_key(
+        value: object,
+        *,
+        response_title: object,
+        sort: LibraryOutputSort,
+    ) -> str:
+        if sort in {LibraryOutputSort.UPDATED_ASC, LibraryOutputSort.UPDATED_DESC}:
+            if not isinstance(value, datetime):
+                raise RuntimeError("legacy_research_output_timestamp_key_invalid")
+            return value.isoformat()
+        if not isinstance(response_title, str):
+            raise RuntimeError("legacy_research_output_title_key_invalid")
+        return response_title.lower()
 
     @classmethod
     def _key(cls, item: ResearchItem, *, sort: LibraryOutputSort) -> str:

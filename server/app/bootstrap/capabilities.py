@@ -37,6 +37,7 @@ from app.bootstrap.container import (
     build_projects,
     build_research_generation,
     build_research_items,
+    build_research_output_catalog,
     build_research_search,
     build_reading_activity,
     build_reading_activity_retention,
@@ -90,6 +91,7 @@ from app.modules.papers.application.topics import PaperTopics
 from app.modules.projects.application.projects import Projects
 from app.modules.research.application.generation import ResearchGeneration
 from app.modules.research.application.items import ResearchItems
+from app.modules.research.application.catalog import ResearchOutputCatalog
 from app.modules.research.application.search import SearchResearch
 from app.modules.reading_activity.application import (
     ReadingActivity,
@@ -217,7 +219,11 @@ class ApplicationCapabilities:
 
     @cached_property
     def library_tags(self) -> LibraryTags:
-        return build_library_tags(db=self._session, journal=self._journal)
+        return build_library_tags(
+            db=self._session,
+            cursor_secret=self._settings.paper_search_cursor_secret,
+            journal=self._journal,
+        )
 
     @cached_property
     def paper_discovery(self) -> DiscoverPapers:
@@ -286,6 +292,13 @@ class ApplicationCapabilities:
         return build_reading_activity_retention(
             db=self._session,
             journal=self._journal,
+        )
+
+    @cached_property
+    def research_output_catalog(self) -> ResearchOutputCatalog:
+        return build_research_output_catalog(
+            db=self._session,
+            cursor_secret=self._settings.paper_search_cursor_secret,
         )
 
     @cached_property

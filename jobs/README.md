@@ -22,6 +22,15 @@ retention cutoff and database mutation. Jobs owns only the signed hourly trigger
 and repeats bounded batches until Server reports no remaining candidates.
 Zotero keeps its 24-hour due threshold even though the task runs hourly.
 
+Generated-object deletion is additionally fail-closed before a worker claims
+the job or opens S3. Server and Jobs share one `scholens_job_contracts`
+allowlist (`documents/` and `research/audio/`), a 1,024-byte ASCII-safe key
+ceiling, and deterministic batches capped at both 100 keys and 64 KiB of compact
+JSON. Server streams a strictly increasing unique key sequence and persists one
+outbox Job per batch with an ordinal and key digest; Jobs rejects foreign
+namespaces, traversal/control characters, duplicates, noncanonical ordering,
+or an oversized batch before deleting any object.
+
 ## PDF ingestion
 
 The PDF worker follows one explicit, local-first pipeline:
@@ -42,13 +51,16 @@ The PDF worker follows one explicit, local-first pipeline:
      offsets (primary engine);
      b. on failure, `markitdown` is tried as a second engine and is persisted
      as `text_only` because its output has no page boundaries (offsets are
-     approximated from the local page analysis);
+     approximated from the local page analysis); when the primary output
+     contains Unicode replacement characters, the fallback replaces it only
+     if it reduces corruption, retains 80–125% of the substantive length, and
+     matches at least 80% of a bounded semantic-evidence sample;
      c. if both local engines fail, MinerU rescues the document (OCR can
      recover misclassified or malformed PDFs);
      d. if the MinerU rescue fails or times out, the deterministic per-page
      text from step 2 is persisted as `text_only` with exact offsets.
-4. Store Markdown and preview; only the MinerU path produces an audit archive
-   (`mineru-result.zip`).
+4. Store Markdown and, for ordinary ingestion, preview; only the MinerU path
+   produces an audit archive (`mineru-result.zip`).
 5. Extract metadata with DeepSeek unless the caller supplied authoritative
    metadata, as Zotero imports do.
 6. Build the bounded title/keywords/summary/abstract semantic projection with
@@ -64,6 +76,13 @@ exactly once without that field only when a Server 422 body identifies
 transport failure remains terminal. Remove this adapter after the accepting
 Server release is deployed to every callback consumer and callbacks queued
 against the older contract have drained.
+
+Jobs and Server consume one shared callback-size contract. The exact compact
+JSON body is rejected before HTTP above 64 MiB; PDF results separately cap
+canonical text at 40 MiB UTF-8 (the 125% ceiling for a 32 MiB repair source)
+and encoded page offsets at 2 MiB. An over-budget result becomes the stable
+`jobs_callback_too_large` failure instead of opening a request that Server
+cannot accept.
 
 The worker also sends a signed stage projection and heartbeat at bounded
 intervals. Public progress is limited to `queued`, `parsing`, `extracting`,
@@ -84,6 +103,28 @@ MinerU is used only for scanned PDFs and as a rescue for digital PDFs whose
 local extraction failed; its results are persisted as `full` quality. A
 `text_only` result (local fallback or rescue timeout) is persisted so the
 client can warn that layout-dependent content may be incomplete.
+
+Every parser result is checked for the Unicode replacement character U+FFFD.
+Contaminated evidence is preserved byte-for-byte, but its public quality is
+downgraded to `text_only` with the stable
+`unicode_replacement_detected` warning. An equal-length unrelated fallback,
+severely truncated fallback, or repeated oversized fallback can therefore
+never silently replace the primary extraction merely because it contains
+fewer replacement characters.
+
+Targeted historical text repair uses the dedicated consumer-first Celery task
+`repair_pdf_text` on the `document` queue. Its exact kwargs are owned by
+`scholens_job_contracts.PDFTextRepairTaskRequest`: `job_id`, `document_id`,
+`s3_key`, `callback_url`, `claim_url`, `progress_url`,
+`mineru_credential_url`, `repair_revision`, `source_job_id`,
+`source_content_digest`, and `repair_attempt`. The explicit `job_id` must match
+the Celery task ID. This task reuses the ordinary claimed PDF workflow but
+always skips metadata extraction, stores Markdown and any MinerU archive under
+`documents/{sha256}/repairs/{revision}/{job_id}/`, and does not upload a preview
+because the Server callback never adopts repair preview state. The general
+`upload_and_process_file` consumer temporarily retains its optional
+`repair_revision` argument so jobs accepted before the producer switches to
+the dedicated task remain executable during a rolling deployment.
 
 MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
 purpose, document content hash, and credential revision, so two jobs parsing
@@ -190,6 +231,7 @@ src/
 │   ├── models.py    # Parse results and classified errors
 │   ├── mineru.py    # MinerU lifecycle, archive security, normalization
 │   ├── local.py     # PyMuPDF analysis and fallback
+│   ├── quality.py   # ParsedDocument adapter to the shared PDF quality policy
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters

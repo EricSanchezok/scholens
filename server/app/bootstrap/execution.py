@@ -38,6 +38,7 @@ from app.shared.application import (
 from app.shared.domain import FailureKind
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor, SystemClock
 from app.tooling import ToolCatalog, ToolDispatcher
+from app.tooling.paper_content_paging import PaperContentSnapshotCache
 from app.transport.mcp.server import (
     AuthenticatedMcpApplication,
     build_mcp_transport,
@@ -180,6 +181,7 @@ def create_workspace_tooling(
     ingestion: PaperIngestionWorkflow,
     citations: CitationWorkflow,
     settings: AppSettings,
+    paper_content_snapshot_cache: PaperContentSnapshotCache | None = None,
 ) -> tuple[
     ToolCatalog[ApplicationCapabilities],
     ToolDispatcher[ApplicationCapabilities],
@@ -192,6 +194,7 @@ def create_workspace_tooling(
         citations=citations,
         web_base_url=settings.client_domain,
         cursor_secret=settings.paper_search_cursor_secret,
+        paper_content_snapshot_cache=paper_content_snapshot_cache,
     )
     return catalog, ToolDispatcher(catalog=catalog, executor=executor)
 

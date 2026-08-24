@@ -117,8 +117,8 @@ def test_schema_validator_matches_ajv_timezone_requirement() -> None:
     assert not list(_validator(schema).iter_errors("2017-01-01T00:00:00Z"))
 
 
-def test_catalog_has_57_tools_with_output_models() -> None:
-    assert len(_catalog_tools()) == 57
+def test_catalog_has_63_tools_with_output_models() -> None:
+    assert len(_catalog_tools()) == 63
 
 
 def test_every_tool_output_schema_declares_an_object_root() -> None:
@@ -200,7 +200,7 @@ async def test_error_response_carries_no_structured_content_end_to_end() -> None
             )
 
     tools = listed.json()["result"]["tools"]
-    assert len(tools) == 57
+    assert len(tools) == 63
     assert all(tool["outputSchema"].get("type") == "object" for tool in tools)
     schema = next(
         tool["outputSchema"] for tool in tools if tool["name"] == "list_projects"

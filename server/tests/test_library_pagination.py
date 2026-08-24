@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -15,6 +16,7 @@ from app.modules.papers.application.library import (
     LibraryPageDirection,
     LibraryPagePosition,
     LibraryPaperPage,
+    LibraryPaperSummaryPage,
     PaperLibrary,
 )
 from app.shared.application import Actor, SignedCursorCodec
@@ -53,6 +55,55 @@ def _paper_page(*, item_id: UUID, has_more: bool) -> LibraryPaperPage:
         has_more=has_more,
         total_count=2,
     )
+
+
+def _paper_summary_page(*, item_id: UUID, has_more: bool) -> LibraryPaperSummaryPage:
+    return LibraryPaperSummaryPage(
+        items=[LibraryPaperListPaperEntry.model_construct()],
+        positions=[LibraryPagePosition(key="2026-08-11T10:00:00+00:00", id=item_id)],
+        has_more=has_more,
+        total_count=2,
+        content_truncated=True,
+    )
+
+
+def test_durable_summary_cursor_is_bidirectional_and_uses_bounded_gateway() -> None:
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    outputs = MagicMock()
+    gateway.list.side_effect = AssertionError("full Library path must not run")
+    gateway.list_summaries.side_effect = [
+        _paper_summary_page(item_id=first_id, has_more=True),
+        _paper_summary_page(item_id=second_id, has_more=False),
+        _paper_summary_page(item_id=first_id, has_more=False),
+    ]
+    library = _library(gateway=gateway, outputs=outputs)
+
+    first = library.list_summaries(actor=_actor(), query="graph", limit=1)
+    assert first.value.next_cursor is not None
+    assert first.content_truncated is True
+    second = library.list_summaries(
+        actor=_actor(),
+        query="graph",
+        cursor=first.value.next_cursor,
+        limit=2,
+    )
+    assert second.value.previous_cursor is not None
+    assert gateway.list_summaries.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list_summaries.call_args_list[1].kwargs["direction"] is (
+        LibraryPageDirection.FORWARD
+    )
+    library.list_summaries(
+        actor=_actor(),
+        query="graph",
+        cursor=second.value.previous_cursor,
+        limit=1,
+    )
+    assert gateway.list_summaries.call_args_list[2].kwargs["direction"] is (
+        LibraryPageDirection.BACKWARD
+    )
+    gateway.list.assert_not_called()
 
 
 def test_paper_cursor_is_query_bound_and_supports_previous_navigation() -> None:
@@ -148,6 +199,30 @@ def test_paper_cursor_survives_page_size_changes() -> None:
     assert gateway.list.call_args_list[1].kwargs["limit"] == 50
 
 
+def test_durable_paper_cursor_rejects_legacy_collection_scope_reuse() -> None:
+    gateway = MagicMock()
+    outputs = MagicMock()
+    gateway.list.return_value = _paper_page(item_id=uuid4(), has_more=True)
+    library = _library(gateway=gateway, outputs=outputs)
+
+    durable = library.list(
+        actor=_actor(),
+        limit=5,
+        include_active_ingestions=False,
+    )
+    assert durable.next_cursor is not None
+
+    with pytest.raises(AppError, match="cursor") as raised:
+        library.list(
+            actor=_actor(),
+            limit=5,
+            cursor=durable.next_cursor,
+            include_active_ingestions=True,
+        )
+
+    assert raised.value.code == "library_cursor_invalid"
+
+
 def test_outputs_use_the_same_canonical_cursor_envelope() -> None:
     gateway = MagicMock()
     outputs = MagicMock()
@@ -203,3 +278,47 @@ def test_outputs_cursor_survives_page_size_changes() -> None:
     assert resized.total_count == 2
     assert outputs.list.call_args_list[1].kwargs["position"].id == first_id
     assert outputs.list.call_args_list[1].kwargs["limit"] == 50
+
+
+def test_outputs_accept_merge_base_three_value_cursor() -> None:
+    previous_id = uuid4()
+    gateway = MagicMock()
+    outputs = MagicMock()
+    outputs.list.return_value = _output_page(item_id=uuid4(), has_more=False)
+    codec = SignedCursorCodec(
+        "library-test-secret",
+        revision="library-v1",
+        error_code="library_cursor_invalid",
+        error_kind=FailureKind.INVALID_ARGUMENT,
+    )
+    filters = {
+        "q": "citation",
+        "kinds": [],
+        "sort": LibraryOutputSort.UPDATED_DESC.value,
+    }
+    fingerprint = json.dumps(
+        {
+            "revision": "library-v1",
+            "user_id": _actor().id,
+            "collection": "outputs",
+            "filters": filters,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    merge_base_cursor = codec.encode_keyset(
+        fingerprint=fingerprint,
+        values=("forward", "2026-08-11T10:00:00+00:00", str(previous_id)),
+    )
+
+    _library(gateway=gateway, outputs=outputs).list_outputs(
+        actor=_actor(),
+        query="citation",
+        cursor=merge_base_cursor,
+        limit=50,
+    )
+
+    position = outputs.list.call_args.kwargs["position"]
+    assert position.id == previous_id
+    assert position.kind == "paper"
+    assert outputs.list.call_args.kwargs["direction"] is LibraryPageDirection.FORWARD

@@ -22,6 +22,10 @@ from app.modules.conversations.application.contracts.turns import (
 )
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.modules.papers.application.contracts.search import SelectedPaperCollection
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_CHAT_CONTEXT_COLUMNS,
+    DocumentColumns,
+)
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.application import Actor
 from app.shared.domain import AppError, WorkspacePermission
@@ -168,8 +172,10 @@ def test_context_batches_fifty_document_snapshots(
         *,
         document_ids: Iterable[object],
         user: Actor,
+        document_columns: DocumentColumns,
     ) -> list[object]:
         assert user.id == _actor().id
+        assert document_columns == DOCUMENT_CHAT_CONTEXT_COLUMNS
         batches.append(list(document_ids))
         return papers
 

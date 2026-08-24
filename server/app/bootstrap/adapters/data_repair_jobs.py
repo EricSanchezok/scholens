@@ -8,9 +8,17 @@ lives here and is injected into the gateway as a plain callable.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
+from typing import cast
 
-from scholens_job_contracts import JobQueue
+from scholens_job_contracts import (
+    PDF_TEXT_REPAIR_MAX_ATTEMPTS,
+    PDF_TEXT_REPAIR_TASK_NAME,
+    UNICODE_REPLACEMENT_WARNING_CODE,
+    JobQueue,
+    PDFTextRepairTaskRequest,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +30,7 @@ from app.database.models import (
     UploadReservation,
 )
 from app.helpers.celery_config import get_webhook_base_url
+from app.modules.jobs.domain import MAINTENANCE_JOB_VISIBILITY
 from app.modules.jobs.infrastructure.repository import EnqueueJob, job_repository
 from app.shared.domain import JsonValue
 from app.shared.domain.enums import JobOperation
@@ -43,7 +52,10 @@ def enqueue_reprocess_job(
     document: Document,
     reservation: UploadReservation | None,
     source_failure_code: str | None = None,
-) -> bool:
+    repair_revision: str | None = None,
+    source_content_digest: str | None = None,
+    repair_attempt: int | None = None,
+) -> uuid.UUID | None:
     """Enqueue one fresh pdf_process job for an existing canonical document.
 
     The new job reuses the original requester, correlation and origin so the
@@ -58,13 +70,59 @@ def enqueue_reprocess_job(
     """
     new_job_id = uuid.uuid4()
     base_url = get_webhook_base_url().rstrip("/")
+    is_content_repair = repair_revision is not None
+    if is_content_repair:
+        assert repair_revision is not None
+        if (
+            source_content_digest is None
+            or document.raw_content is None
+            or repair_attempt is None
+            or not 1 <= repair_attempt <= PDF_TEXT_REPAIR_MAX_ATTEMPTS
+        ):
+            raise RuntimeError("pdf_repair_source_content_missing")
+        current_digest = hashlib.sha256(
+            document.raw_content.encode("utf-8")
+        ).hexdigest()
+        if current_digest != source_content_digest:
+            raise RuntimeError("pdf_repair_source_content_changed")
+        repair_task = PDFTextRepairTaskRequest(
+            job_id=str(new_job_id),
+            document_id=str(document.id),
+            s3_key=document.s3_object_key,
+            callback_url=f"{base_url}/internal/v1/jobs/{new_job_id}/complete",
+            claim_url=f"{base_url}/internal/v1/jobs/{new_job_id}/claim",
+            progress_url=f"{base_url}/internal/v1/jobs/{new_job_id}/progress",
+            mineru_credential_url=(
+                f"{base_url}/internal/v1/jobs/{new_job_id}"
+                "/integration-credentials/mineru"
+            ),
+            repair_revision=repair_revision,
+            source_job_id=str(source.id),
+            source_content_digest=source_content_digest,
+            repair_attempt=repair_attempt,
+        )
+    else:
+        repair_task = None
     payload: dict[str, JsonValue] = {
         "content_sha256": document.sha256,
         "original_filename": document.original_filename,
         "input_size_bytes": document.size_bytes,
         "s3_object_key": document.s3_object_key,
-        "skip_metadata_extraction": False,
+        "skip_metadata_extraction": is_content_repair,
     }
+    if is_content_repair:
+        assert repair_revision is not None
+        assert source_content_digest is not None
+        payload.update(
+            {
+                "repair_kind": "unicode_replacement",
+                "repair_revision": repair_revision,
+                "repair_source_job_id": str(source.id),
+                "repair_source_content_digest": source_content_digest,
+                "repair_attempt": repair_attempt,
+                "job_visibility": MAINTENANCE_JOB_VISIBILITY,
+            }
+        )
     if source_failure_code is not None:
         payload["recovery_attempt"] = _recovery_attempt(source) + 1
     persisted = job_repository.enqueue(
@@ -74,28 +132,51 @@ def enqueue_reprocess_job(
             requested_by_id=source.requested_by_id,
             correlation_id=source.correlation_id,
             origin_operation_id=source.origin_operation_id,
-            project_id=source.project_id,
+            # Unicode repair is document-global maintenance, not a project
+            # operation. Keeping the historical source Project FK here would
+            # make enqueue acquire a Project key-share lock after the repair
+            # selector has locked Document, opposite to Project deletion's
+            # Project -> Document order. Ordinary user-visible reprocessing
+            # retains its original project attribution.
+            project_id=None if is_content_repair else source.project_id,
             document_id=document.id,
-            idempotency_key=f"pdf-reprocess:{source.id}",
+            idempotency_key=(
+                f"pdf-unicode-repair:{repair_revision}:{document.id}:"
+                f"{source.id}:{source_content_digest}:attempt:{repair_attempt}"
+                if is_content_repair
+                else f"pdf-reprocess:{source.id}"
+            ),
             payload=payload,
-            task_name="upload_and_process_file",
+            task_name=(
+                PDF_TEXT_REPAIR_TASK_NAME
+                if repair_task is not None
+                else "upload_and_process_file"
+            ),
             queue=JobQueue.DOCUMENT,
-            task_kwargs={
-                "s3_object_key": document.s3_object_key,
-                "webhook_url": (f"{base_url}/internal/v1/jobs/{new_job_id}/complete"),
-                "claim_url": f"{base_url}/internal/v1/jobs/{new_job_id}/claim",
-                "credential_url": (
-                    f"{base_url}/internal/v1/jobs/{new_job_id}"
-                    "/integration-credentials/mineru"
-                ),
-                "progress_url": (f"{base_url}/internal/v1/jobs/{new_job_id}/progress"),
-                "skip_metadata_extraction": False,
-            },
+            task_kwargs=(
+                cast(dict[str, JsonValue], repair_task.as_task_kwargs())
+                if repair_task is not None
+                else {
+                    "s3_object_key": document.s3_object_key,
+                    "webhook_url": (
+                        f"{base_url}/internal/v1/jobs/{new_job_id}/complete"
+                    ),
+                    "claim_url": f"{base_url}/internal/v1/jobs/{new_job_id}/claim",
+                    "credential_url": (
+                        f"{base_url}/internal/v1/jobs/{new_job_id}"
+                        "/integration-credentials/mineru"
+                    ),
+                    "progress_url": (
+                        f"{base_url}/internal/v1/jobs/{new_job_id}/progress"
+                    ),
+                    "skip_metadata_extraction": False,
+                }
+            ),
             job_id=new_job_id,
         ),
     )
     if not persisted.created:
-        return False
+        return None
     display_name = (
         reservation.display_name
         if reservation is not None
@@ -124,7 +205,7 @@ def enqueue_reprocess_job(
     )
     new_reservation.job = persisted.job
     db.add(new_reservation)
-    if reservation is not None:
+    if reservation is not None and not is_content_repair:
         # The self-referential supersession FK is immediate in PostgreSQL.
         # Materialize its replacement before an autoflush can update the
         # source reservation to point at that row. This remains part of the
@@ -140,9 +221,13 @@ def enqueue_reprocess_job(
         )
         if not failed:
             raise RuntimeError("stale_pdf_source_cannot_fail")
-    document.processing_status = DocumentProcessingStatus.PROCESSING.value
-    document.processing_job_id = new_job_id
-    return True
+    if is_content_repair:
+        document.parser_quality = "text_only"
+        document.parser_warning_code = UNICODE_REPLACEMENT_WARNING_CODE
+    else:
+        document.processing_status = DocumentProcessingStatus.PROCESSING.value
+        document.processing_job_id = new_job_id
+    return new_job_id
 
 
 def recover_unclaimed_pdf_job(db: Session, source: DurableJob) -> None:
@@ -185,12 +270,15 @@ def recover_unclaimed_pdf_job(db: Session, source: DurableJob) -> None:
         return
 
     reservation = db.get(UploadReservation, source.id)
-    if not enqueue_reprocess_job(
-        db=db,
-        source=source,
-        document=document,
-        reservation=reservation,
-        source_failure_code="paper_ingestion_claim_failed",
+    if (
+        enqueue_reprocess_job(
+            db=db,
+            source=source,
+            document=document,
+            reservation=reservation,
+            source_failure_code="paper_ingestion_claim_failed",
+        )
+        is None
     ):
         raise RuntimeError("stale_pdf_recovery_idempotency_conflict")
 

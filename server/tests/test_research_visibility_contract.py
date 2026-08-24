@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 from app.bootstrap.adapters.project_presenters import _project_counts
+from app.bootstrap.adapters.research_items import SqlAlchemyResearchItemGateway
 from app.bootstrap.adapters.research_access import (
     research_item_policy,
     research_item_visible_to,
@@ -17,6 +18,7 @@ from app.bootstrap.adapters.research_repository import (
     research_repository,
 )
 from app.database.models import (
+    AnnotationColor,
     AnnotationComment,
     AnnotationThread,
     AuthUser,
@@ -30,14 +32,20 @@ from app.database.models import (
 )
 from app.main import app
 from app.modules.research.application.contracts import (
+    AnnotationThreadCapabilities,
     AnnotationThreadMode,
+    AnnotationThreadSummaryResponse,
     AnnotationThreadStatus,
     CitationSnapshot,
     CreateAnnotationThreadRequest,
+    PersonalResearchAudience,
     ProjectResearchAudience,
+    ResearchCreatorResponse,
+    UpdateAnnotationThreadRequest,
 )
 from app.modules.research.application.positions import (
     ParsedTextPosition,
+    PdfTextPageSegment,
     PdfTextPosition,
 )
 from app.shared.domain import AppError
@@ -155,11 +163,11 @@ def test_thread_creation_atomically_attaches_initial_flat_comment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = MagicMock(spec=Session)
+    document = SimpleNamespace(id=uuid.uuid4(), raw_content="Evidence")
+    db.scalar.return_value = document
     monkeypatch.setattr(
         "app.bootstrap.adapters.research_repository.require_document_access",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            document=SimpleNamespace(raw_content="Evidence")
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(document=document),
     )
     item = research_repository.create_annotation_thread(
         db,
@@ -180,6 +188,11 @@ def test_thread_creation_atomically_attaches_initial_flat_comment(
     assert [comment.content for comment in item.annotation_thread.comments] == [
         "This matters."
     ]
+    source_lock = db.scalar.call_args_list[0].args[0]
+    source_lock_sql = str(source_lock.compile(dialect=postgresql.dialect()))
+    assert "documents.id" in source_lock_sql
+    assert "FOR UPDATE" in source_lock_sql
+    assert source_lock.get_execution_options()["populate_existing"] is True
 
 
 def test_parsed_text_annotation_requires_canonical_content() -> None:
@@ -195,7 +208,7 @@ def test_parsed_text_annotation_requires_canonical_content() -> None:
     )
 
     with pytest.raises(AppError) as exc_info:
-        research_repository._validate_quote_position(access, create)
+        research_repository._validate_quote_position(access.document, create)
 
     assert exc_info.value.code == "annotation_content_unavailable"
 
@@ -337,6 +350,7 @@ def test_resolved_thread_blocks_replies_and_reopen_clears_resolution(
         resolved_at=datetime.now(timezone.utc),
     )
     db = MagicMock(spec=Session)
+    db.scalar.return_value = item.annotation_thread
     monkeypatch.setattr(
         research_repository,
         "require_visible",
@@ -372,6 +386,146 @@ def test_resolved_thread_blocks_replies_and_reopen_clears_resolution(
     assert item.annotation_thread.status == "open"
     assert item.annotation_thread.resolved_by_id is None
     assert item.annotation_thread.resolved_at is None
+
+
+def test_resolving_historical_thread_checks_comment_existence_without_hydration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class HistoricalThread:
+        color = "yellow"
+        status = "open"
+        resolved_by_id = None
+        resolved_at = None
+
+        @property
+        def comments(self) -> object:  # pragma: no cover - access is the regression
+            raise AssertionError("historical comment bodies must not be hydrated")
+
+    item = SimpleNamespace(
+        id=uuid.uuid4(),
+        kind=ResearchItemKind.ANNOTATION_THREAD.value,
+        audience_type=ResearchAudienceType.PROJECT.value,
+        annotation_thread=HistoricalThread(),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = uuid.uuid4()
+    monkeypatch.setattr(
+        research_repository,
+        "require_visible",
+        lambda *_args, **_kwargs: item,
+    )
+    monkeypatch.setattr(
+        research_item_policy,
+        "evaluate",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            has_audience_access=True,
+            can_manage=True,
+            can_resolve=True,
+        ),
+    )
+
+    result = research_repository.update_annotation_thread(
+        db,
+        thread_id=item.id,
+        user_id=2,
+        values={"status": AnnotationThreadStatus.RESOLVED},
+    )
+
+    assert result.changed is True
+    assert item.annotation_thread.status == "resolved"
+    statement = db.scalar.call_args.args[0]
+    assert tuple(column.key for column in statement.selected_columns) == ("id",)
+    assert "content" not in str(statement)
+
+
+def test_bounded_annotation_update_gateway_never_calls_full_serializer() -> None:
+    db = MagicMock(spec=Session)
+    item = _item(creator_id=2)
+    bounded_response = MagicMock()
+    gateway = SqlAlchemyResearchItemGateway(db)
+
+    with (
+        patch.object(
+            research_repository,
+            "update_annotation_thread",
+            return_value=SimpleNamespace(value=item, changed=True),
+        ),
+        patch.object(
+            research_repository,
+            "serialize_annotation_mutation_response",
+            return_value=bounded_response,
+        ) as bounded_serializer,
+        patch.object(gateway, "_serialize") as full_serializer,
+    ):
+        result = gateway.update_annotation_thread_bounded(
+            user_id=2,
+            thread_id=item.id,
+            request=UpdateAnnotationThreadRequest(color=AnnotationColor.YELLOW),
+        )
+
+    assert result.value is bounded_response
+    assert result.changed is True
+    bounded_serializer.assert_called_once_with(db, item=item, user_id=2)
+    full_serializer.assert_not_called()
+
+
+def test_bounded_annotation_mutation_preserves_the_existing_item_shape() -> None:
+    now = datetime.now(timezone.utc)
+    item = _item(creator_id=2, audience_type=ResearchAudienceType.PERSONAL)
+    item.updated_at = now
+    summary = AnnotationThreadSummaryResponse(
+        id=item.id,
+        audience=PersonalResearchAudience(),
+        target_document_id=uuid.uuid4(),
+        created_by=ResearchCreatorResponse(id=2, display_name="Researcher"),
+        created_at=now,
+        quote_text="Evidence",
+        position=None,
+        color=AnnotationColor.YELLOW,
+        role="assistant",
+        mode=AnnotationThreadMode.HIGHLIGHT,
+        comment_count=0,
+        last_activity_at=now,
+        status=AnnotationThreadStatus.OPEN,
+        resolved_by=None,
+        resolved_at=None,
+        capabilities=AnnotationThreadCapabilities(
+            reply=True,
+            recolor=True,
+            resolve=False,
+            reopen=False,
+            delete=True,
+        ),
+        comments=[],
+    )
+    db = MagicMock(spec=Session)
+    db.execute.return_value.one.return_value = SimpleNamespace(
+        comment_count=0,
+        last_activity_at=None,
+        foreign_reply_count=0,
+    )
+
+    with patch.object(
+        research_repository,
+        "serialize_annotation_summary",
+        return_value=summary,
+    ):
+        response = research_repository.serialize_annotation_mutation_response(
+            db,
+            item=item,
+            user_id=2,
+        )
+
+    assert response.kind is ResearchItemKind.ANNOTATION_THREAD
+    assert response.updated_at == now
+    assert response.capabilities.edit is True
+    assert response.capabilities.delete is True
+    assert response.annotation_thread is not None
+    assert response.annotation_thread.quote_text == "Evidence"
+    assert response.citation is None
+    assert response.audio_overview is None
+    assert response.data_table is None
 
 
 def test_annotation_request_uses_immutable_discriminated_audience() -> None:
@@ -476,6 +630,57 @@ def test_pdf_text_position_accepts_legacy_and_ordered_page_segments() -> None:
                     },
                 }
             )
+
+
+def test_annotation_positions_match_the_persisted_integer_range() -> None:
+    maximum = (1 << 31) - 1
+    rect = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04}
+
+    assert (
+        ParsedTextPosition(
+            start_offset=maximum - 1,
+            end_offset=maximum,
+            page_number=maximum,
+        ).end_offset
+        == maximum
+    )
+    assert (
+        PdfTextPosition(
+            page_number=maximum,
+            rects=[rect],
+        ).page_number
+        == maximum
+    )
+    assert (
+        PdfTextPageSegment(
+            page_number=maximum,
+            rects=[rect],
+        ).page_number
+        == maximum
+    )
+    with pytest.raises(ValidationError):
+        ParsedTextPosition(start_offset=0, end_offset=maximum + 1)
+    with pytest.raises(ValidationError):
+        ParsedTextPosition(start_offset=maximum + 1, end_offset=maximum + 2)
+    with pytest.raises(ValidationError):
+        ParsedTextPosition(
+            start_offset=0,
+            end_offset=1,
+            page_number=maximum + 1,
+        )
+    with pytest.raises(ValidationError):
+        PdfTextPosition(page_number=maximum + 1, rects=[rect])
+    with pytest.raises(ValidationError):
+        PdfTextPageSegment(page_number=maximum + 1, rects=[rect])
+
+    parsed_schema = ParsedTextPosition.model_json_schema()["properties"]
+    pdf_schema = PdfTextPosition.model_json_schema()["properties"]
+    segment_schema = PdfTextPageSegment.model_json_schema()["properties"]
+    assert parsed_schema["start_offset"]["maximum"] == maximum
+    assert parsed_schema["end_offset"]["maximum"] == maximum
+    assert parsed_schema["page_number"]["anyOf"][0]["maximum"] == maximum
+    assert pdf_schema["page_number"]["maximum"] == maximum
+    assert segment_schema["page_number"]["maximum"] == maximum
 
 
 def test_pdf_text_position_caps_total_segment_rectangles() -> None:

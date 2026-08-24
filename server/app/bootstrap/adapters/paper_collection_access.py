@@ -11,8 +11,8 @@ from app.modules.papers.application.contracts.search import (
     PersonalLibraryPaperCollection,
     SelectedPaperCollection,
 )
-from app.modules.papers.infrastructure.access import get_document_access
-from app.modules.papers.infrastructure.models import LibraryPaper
+from app.modules.papers.infrastructure.access import accessible_document_condition
+from app.modules.papers.infrastructure.models import Document, LibraryPaper
 from app.modules.projects.infrastructure.access import get_project_access
 from app.modules.projects.infrastructure.models import ProjectPaper
 from app.shared.application import Actor
@@ -31,17 +31,11 @@ class SqlPaperCollectionAccess(PaperCollectionAccessPort):
         collection: PaperCollection,
         document_id: UUID,
     ) -> bool:
-        if (
-            get_document_access(
-                self._session,
-                document_id=document_id,
-                user_id=actor.id,
-            )
-            is None
-        ):
-            return False
         if isinstance(collection, LibraryPaperCollection):
-            return True
+            return self._document_is_accessible(
+                actor=actor,
+                document_id=document_id,
+            )
         if isinstance(collection, PersonalLibraryPaperCollection):
             return (
                 self._session.scalar(
@@ -54,7 +48,10 @@ class SqlPaperCollectionAccess(PaperCollectionAccessPort):
             )
         assert isinstance(collection, SelectedPaperCollection)
         if document_id in collection.document_ids:
-            return True
+            return self._document_is_accessible(
+                actor=actor,
+                document_id=document_id,
+            )
         for project_id in collection.project_ids:
             if (
                 get_project_access(
@@ -76,3 +73,21 @@ class SqlPaperCollectionAccess(PaperCollectionAccessPort):
             ):
                 return True
         return False
+
+    def _document_is_accessible(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+    ) -> bool:
+        """Authorize by ID without hydrating the canonical Document text."""
+
+        return (
+            self._session.scalar(
+                select(Document.id).where(
+                    Document.id == document_id,
+                    accessible_document_condition(user_id=actor.id),
+                )
+            )
+            is not None
+        )

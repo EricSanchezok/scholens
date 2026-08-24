@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,6 +13,7 @@ from app.bootstrap.adapters.project_documents import (
 )
 from app.database.models import (
     AnnotationComment,
+    AuthUser,
     Base,
     Document,
     DurableJob,
@@ -34,6 +36,10 @@ from app.bootstrap.adapters.project_repository import project_repository
 from app.modules.projects.application.contracts import (
     ProjectInvitationCreateRequest,
     ProjectPermissionSet,
+)
+from app.modules.projects.application.lifecycle import (
+    ProjectQuotaTransferPlan,
+    ProjectQuotaTransferState,
 )
 from app.shared.application import Actor
 from pydantic import ValidationError
@@ -92,7 +98,7 @@ def test_collaborator_cannot_grant_or_manage_permissions_they_do_not_have(
     db = MagicMock(spec=Session)
     db.scalar.return_value = target
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_repository.require_project_permission",
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
         lambda *_args, **_kwargs: actor,
     )
 
@@ -118,6 +124,39 @@ def test_collaborator_cannot_grant_or_manage_permissions_they_do_not_have(
 
     assert exc_info.value.code == "project_collaborator_not_manageable"
     db.delete.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["update", "remove"])
+def test_missing_project_member_uses_canonical_collaborator_error(
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    project = Project(id=uuid.uuid4(), owner_id=1, title="Project")
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = None
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
+        lambda *_args, **_kwargs: _owner_access(project),
+    )
+
+    with pytest.raises(AppError) as error:
+        if operation == "update":
+            project_repository.update_collaborator(
+                db,
+                project_id=project.id,
+                actor_id=1,
+                target_user_id=99,
+                requested=ProjectPermissionSet(),
+            )
+        else:
+            project_repository.remove_collaborator(
+                db,
+                project_id=project.id,
+                actor_id=1,
+                target_user_id=99,
+            )
+
+    assert error.value.code == "project_collaborator_not_found"
 
 
 def test_project_requests_reject_legacy_roles_and_unknown_fields() -> None:
@@ -155,8 +194,8 @@ def test_project_papers_are_attached_in_one_transaction(
     db.scalars.side_effect = [empty_result, document_result]
 
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_documents.require_project_permission",
-        lambda *_args, **_kwargs: None,
+        "app.bootstrap.adapters.project_documents.require_project_permission_for_update",
+        lambda *_args, **_kwargs: SimpleNamespace(project=project),
     )
     quota_check = MagicMock()
     monkeypatch.setattr(
@@ -180,6 +219,13 @@ def test_project_papers_are_attached_in_one_transaction(
     assert len(associations) == 2
     assert existing_count == 0
     assert all(isinstance(item, ProjectPaper) for item in associations)
+    capacity_statement = db.scalars.call_args_list[1].args[0]
+    capacity_sql = str(capacity_statement).lower()
+    assert "documents.id" in capacity_sql
+    assert "documents.size_bytes" in capacity_sql
+    assert "documents.raw_content" not in capacity_sql
+    assert "documents.page_offset_map" not in capacity_sql
+    assert "documents.summary_citations" not in capacity_sql
     quota_check.assert_called_once()
     db.add_all.assert_called_once_with(associations)
     gc_update = str(db.execute.call_args.args[0])
@@ -204,8 +250,8 @@ def test_project_paper_batch_rejects_partial_library_matches(
     db.scalar.return_value = project
     db.scalars.side_effect = [empty_result, partial_result]
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_documents.require_project_permission",
-        lambda *_args, **_kwargs: None,
+        "app.bootstrap.adapters.project_documents.require_project_permission_for_update",
+        lambda *_args, **_kwargs: SimpleNamespace(project=project),
     )
 
     with pytest.raises(AppError) as exc_info:
@@ -300,35 +346,78 @@ def test_fresh_project_upload_requires_matching_durable_reservation(
 def test_transfer_validates_and_reassigns_owner_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = Project(id=uuid.uuid4(), owner_id=1, title="Project")
+    project = Project(
+        id=uuid.uuid4(),
+        owner_id=1,
+        title="Project",
+        updated_at=datetime.now(timezone.utc),
+    )
     new_owner_membership = ProjectCollaborator(
+        id=uuid.uuid4(),
         project_id=project.id,
         user_id=2,
+        can_edit_project=False,
         can_manage_papers=True,
+        can_manage_collaborators=False,
+        updated_at=datetime.now(timezone.utc),
     )
+    target_user = AuthUser(id=2, email="new-owner@example.com")
     db = MagicMock(spec=Session)
-    db.scalar.side_effect = [project, new_owner_membership]
+    db.scalar.return_value = new_owner_membership
+    db.get.side_effect = lambda model, item_id: {
+        (AuthUser, 2): target_user,
+        (Project, project.id): project,
+        (ProjectCollaborator, new_owner_membership.id): new_owner_membership,
+    }.get((model, item_id))
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_repository.require_project_permission",
-        lambda *_args, **_kwargs: None,
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
+        lambda *_args, **_kwargs: _owner_access(project),
     )
-    quota_reassignment = MagicMock()
+    quota = ProjectQuotaTransferPlan(
+        state=ProjectQuotaTransferState(
+            project_id=project.id,
+            old_owner_id=1,
+            new_owner_id=2,
+            new_owner_project_count=0,
+            new_owner_project_limit=10,
+            project_document_count=0,
+            pending_project_slot_count=0,
+            project_paper_limit=300,
+            active_reservation_count=0,
+            owners=(),
+            reservation_assignment_digest="a" * 64,
+        ),
+        assignments=(),
+    )
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_repository.reassign_project_quota_owner",
-        quota_reassignment,
+        "app.bootstrap.adapters.project_repository.prepare_project_quota_transfer",
+        MagicMock(return_value=quota),
+    )
+    apply_quota = MagicMock()
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_repository.apply_project_quota_transfer",
+        apply_quota,
     )
 
-    transferred = project_repository.transfer(
+    plan = project_repository.plan_transfer(
         db,
         project_id=project.id,
         owner_id=1,
         new_owner_id=2,
     )
+    transferred = project_repository.transfer(
+        db,
+        project_id=project.id,
+        owner_id=1,
+        new_owner_id=2,
+        plan=plan,
+    )
 
-    quota_reassignment.assert_called_once_with(
+    apply_quota.assert_called_once_with(
         db,
         project=project,
         new_owner_id=2,
+        plan=quota,
     )
     assert transferred.owner_id == 2
     db.delete.assert_called_once_with(new_owner_membership)
@@ -366,11 +455,16 @@ def _owner_access(project: Project, *, user_id: int = 1) -> ProjectAccess:
 def test_invitation_creation_queues_delivery_in_the_same_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = Project(id=uuid.uuid4(), owner_id=1, title="Project")
+    project = Project(
+        id=uuid.uuid4(),
+        owner_id=1,
+        title="Project",
+        updated_at=datetime.now(timezone.utc),
+    )
     db = MagicMock(spec=Session)
     db.scalar.side_effect = [None, None]
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_repository.require_project_permission",
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
         lambda *_args, **_kwargs: _owner_access(project),
     )
 
@@ -390,6 +484,61 @@ def test_invitation_creation_queues_delivery_in_the_same_transaction(
     db.commit.assert_not_called()
 
 
+def test_invitation_plan_checks_expired_pending_permissions_before_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    project = Project(
+        id=uuid.uuid4(),
+        owner_id=1,
+        title="Project",
+        updated_at=now,
+    )
+    actor_access = ProjectAccess(
+        project=project,
+        user_id=2,
+        is_owner=False,
+        collaborator=ProjectCollaborator(
+            project_id=project.id,
+            user_id=2,
+            can_edit_project=False,
+            can_manage_papers=False,
+            can_manage_collaborators=True,
+        ),
+        permissions=ProjectPermissions(manage_collaborators=True),
+    )
+    expired = ProjectInvitation(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        email="collaborator@example.com",
+        token_revision=1,
+        invited_by_id=1,
+        can_edit_project=False,
+        can_manage_papers=True,
+        can_manage_collaborators=False,
+        expires_at=now - timedelta(days=1),
+        updated_at=now,
+    )
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [None, expired]
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
+        lambda *_args, **_kwargs: actor_access,
+    )
+
+    with pytest.raises(AppError) as error:
+        project_repository.plan_invitation_creation(
+            db,
+            project_id=project.id,
+            actor_id=2,
+            email="collaborator@example.com",
+            requested=ProjectInvitationCreateRequest(email="collaborator@example.com"),
+        )
+
+    assert error.value.code == "project_permission_escalation"
+    db.add.assert_not_called()
+
+
 def test_manual_resend_reuses_invitation_and_increments_revision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -402,7 +551,7 @@ def test_manual_resend_reuses_invitation_and_increments_revision(
     db = MagicMock(spec=Session)
     db.scalar.return_value = invitation
     monkeypatch.setattr(
-        "app.bootstrap.adapters.project_repository.require_project_permission",
+        "app.bootstrap.adapters.project_repository.require_project_permission_for_update",
         lambda *_args, **_kwargs: _owner_access(project),
     )
 

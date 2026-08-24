@@ -29,13 +29,19 @@ from app.helpers.ai_limits import (
     release_concurrency_by_id,
 )
 from app.helpers.parser import validate_pdf_content, validate_url_and_fetch_pdf
-from app.modules.jobs.infrastructure.repository import job_repository
+from app.modules.jobs.infrastructure.repository import (
+    job_repository,
+    requester_visible_job,
+)
+from app.modules.jobs.domain.lifecycle import can_cancel_job
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.papers.application.ingestion import (
     AcceptedIngestion,
     FetchedPdf,
+    IngestionCancellationPlan,
+    IngestionCancellationState,
     RetrySource,
 )
 from app.modules.papers.application.upload_intent import (
@@ -380,6 +386,113 @@ class SqlPaperIngestionGateway:
             ),
         )
 
+    def _plan_cancel_locked(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+    ) -> IngestionCancellationPlan:
+        job = self._db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == actor.id,
+                DurableJob.operation == JobOperation.PDF_PROCESS.value,
+                requester_visible_job(),
+            )
+            .with_for_update()
+        )
+        if job is None:
+            self._not_found()
+        if job.status == JobStatus.CANCELLED.value:
+            return IngestionCancellationPlan(
+                state=IngestionCancellationState(
+                    job_id=job.id,
+                    status="cancelled",
+                    job_updated_at=job.updated_at,
+                    reservation_id=None,
+                    reservation_updated_at=None,
+                    document_id=job.document_id,
+                    project_id=job.project_id,
+                    library_reference_created=False,
+                    project_reference_created=False,
+                    library_membership_id=None,
+                    project_membership_id=None,
+                    document_gc_will_be_evaluated=False,
+                )
+            )
+        if not can_cancel_job(JobStatus(job.status)):
+            raise AppError(
+                code="paper_ingestion_cancel_not_allowed",
+                message="Only pending or running paper ingestions can be cancelled",
+                kind=FailureKind.CONFLICT,
+            )
+        reservation = self._db.scalar(
+            select(UploadReservation)
+            .where(UploadReservation.id == job.id)
+            .with_for_update()
+        )
+        if reservation is None:
+            self._not_found()
+        library_created, project_created = resolve_created_memberships(
+            library_created=reservation.reference_created_library,
+            project_created=reservation.reference_created_project,
+            legacy_created=reservation.reference_created,
+            project_id=job.project_id,
+        )
+        library_membership_id: UUID | None = None
+        project_membership_id: UUID | None = None
+        if job.document_id is not None and library_created:
+            library_membership_id = self._db.scalar(
+                select(LibraryPaper.id)
+                .where(
+                    LibraryPaper.user_id == actor.id,
+                    LibraryPaper.document_id == job.document_id,
+                )
+                .with_for_update()
+            )
+        if (
+            job.document_id is not None
+            and job.project_id is not None
+            and project_created
+        ):
+            project_membership_id = self._db.scalar(
+                select(ProjectPaper.id)
+                .where(
+                    ProjectPaper.project_id == job.project_id,
+                    ProjectPaper.document_id == job.document_id,
+                )
+                .with_for_update()
+            )
+        return IngestionCancellationPlan(
+            state=IngestionCancellationState(
+                job_id=job.id,
+                status=(
+                    "pending" if job.status == JobStatus.PENDING.value else "running"
+                ),
+                job_updated_at=job.updated_at,
+                reservation_id=reservation.id,
+                reservation_updated_at=reservation.updated_at,
+                document_id=job.document_id,
+                project_id=job.project_id,
+                library_reference_created=library_created,
+                project_reference_created=project_created,
+                library_membership_id=library_membership_id,
+                project_membership_id=project_membership_id,
+                document_gc_will_be_evaluated=(
+                    job.document_id is not None and (library_created or project_created)
+                ),
+            )
+        )
+
+    def plan_cancel(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+    ) -> IngestionCancellationPlan:
+        return self._plan_cancel_locked(actor=actor, job_id=job_id)
+
     def cancel(
         self,
         *,
@@ -387,59 +500,43 @@ class SqlPaperIngestionGateway:
         job_id: UUID,
         correlation_id: UUID,
         origin_operation_id: UUID,
+        plan: IngestionCancellationPlan | None = None,
     ) -> bool:
-        job = self._db.scalar(
-            select(DurableJob)
-            .where(
-                DurableJob.id == job_id,
-                DurableJob.requested_by_id == actor.id,
-                DurableJob.operation == JobOperation.PDF_PROCESS.value,
-            )
-            .with_for_update()
-        )
+        if plan is None:
+            plan = self._plan_cancel_locked(actor=actor, job_id=job_id)
+        state = plan.state
+        if state.job_id != job_id:
+            raise RuntimeError("paper_ingestion_cancel_plan_mismatch")
+        job = self._db.get(DurableJob, job_id)
         if job is None:
             self._not_found()
-        if job.status == JobStatus.CANCELLED.value:
+        if state.status == JobStatus.CANCELLED.value:
             return False
-        if job.status == JobStatus.COMPLETED.value:
-            raise AppError(
-                code="paper_ingestion_cancel_not_allowed",
-                message="Completed paper ingestions cannot be cancelled",
-                kind=FailureKind.CONFLICT,
-            )
-        reservation = self._db.get(UploadReservation, job.id)
-        if reservation is None:
-            self._not_found()
-        if job.document_id is not None:
-            library_created, project_created = resolve_created_memberships(
-                library_created=reservation.reference_created_library,
-                project_created=reservation.reference_created_project,
-                legacy_created=reservation.reference_created,
-                project_id=job.project_id,
-            )
-            if library_created:
-                self._db.execute(
-                    delete(LibraryPaper).where(
-                        LibraryPaper.user_id == actor.id,
-                        LibraryPaper.document_id == job.document_id,
-                    )
+        if job.status != state.status:
+            raise RuntimeError("paper_ingestion_cancel_plan_not_locked")
+        if state.library_membership_id is not None:
+            self._db.execute(
+                delete(LibraryPaper).where(
+                    LibraryPaper.id == state.library_membership_id
                 )
-            if project_created:
-                self._db.execute(
-                    delete(ProjectPaper).where(
-                        ProjectPaper.project_id == job.project_id,
-                        ProjectPaper.document_id == job.document_id,
-                    )
+            )
+        if state.project_membership_id is not None:
+            self._db.execute(
+                delete(ProjectPaper).where(
+                    ProjectPaper.id == state.project_membership_id
                 )
-            if library_created or project_created:
-                from app.bootstrap.adapters.document_gc import schedule_document_gc
+            )
+        if state.document_gc_will_be_evaluated:
+            if state.document_id is None:
+                raise RuntimeError("paper_ingestion_cancel_document_missing")
+            from app.bootstrap.adapters.document_gc import schedule_document_gc
 
-                schedule_document_gc(
-                    self._db,
-                    document_id=job.document_id,
-                    origin_operation_id=origin_operation_id,
-                    correlation_id=correlation_id,
-                )
+            schedule_document_gc(
+                self._db,
+                document_id=state.document_id,
+                origin_operation_id=origin_operation_id,
+                correlation_id=correlation_id,
+            )
         job.status = JobStatus.CANCELLED.value
         job.completed_at = datetime.now(UTC)
         job.lease_expires_at = None
@@ -458,6 +555,7 @@ class SqlPaperIngestionGateway:
             DurableJob.id == job_id,
             DurableJob.requested_by_id == actor.id,
             DurableJob.operation == JobOperation.PDF_PROCESS.value,
+            requester_visible_job(),
         )
         if lock:
             statement = statement.with_for_update()

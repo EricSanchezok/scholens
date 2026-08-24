@@ -1,6 +1,7 @@
 from uuid import UUID, uuid4
 from unittest.mock import MagicMock
 
+from app.bootstrap.adapters.citation_provider import CitationProviderResult
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.llm.backend import LLMResponse
 from app.llm.citation_recovery import MetadataRecoveryAgent
@@ -12,6 +13,7 @@ from app.modules.papers.application.contracts.citation import (
     CitationData,
     CitationResult,
 )
+from app.modules.papers.application.citations import CitationMetadataPatch
 from app.modules.papers.application.contracts.extraction import ToolCall
 from app.modules.papers.domain.citations import CitationFields
 from app.shared.application import (
@@ -104,6 +106,91 @@ def test_cached_citation_does_not_call_external_metadata_paths() -> None:
     assert result.method == "cached"
     assert result.data.title == "A Paper"
     assert executor.query_count == 1
+
+
+def test_resolution_combines_provider_patches_into_one_metadata_command() -> None:
+    class Citations:
+        def __init__(self) -> None:
+            self.fields = CitationFields(title="A Paper", authors=["A. Author"])
+            self.patches: list[CitationMetadataPatch] = []
+
+        def read(self, **_kwargs: object) -> CitationFields:
+            return self.fields
+
+        def apply_missing(
+            self,
+            *,
+            patch: CitationMetadataPatch,
+            **_kwargs: object,
+        ) -> CitationFields:
+            self.patches.append(patch)
+            self.fields = CitationFields(
+                title=self.fields.title,
+                authors=self.fields.authors,
+                publish_date=self.fields.publish_date or patch.publish_date,
+                journal=self.fields.journal or patch.journal,
+                publisher=self.fields.publisher or patch.publisher,
+                doi=self.fields.doi or patch.doi,
+            )
+            return self.fields
+
+    class Capabilities:
+        def __init__(self) -> None:
+            self.citations = Citations()
+
+    class Executor:
+        def __init__(self) -> None:
+            self.capabilities = Capabilities()
+            self.command_count = 0
+
+        def query(self, callback: object) -> object:
+            return callback(self.capabilities)  # type: ignore[operator]
+
+        def command(self, callback: object) -> object:
+            self.command_count += 1
+            return callback(self.capabilities)  # type: ignore[operator]
+
+    class Provider:
+        def deterministic(self, **_kwargs: object) -> CitationProviderResult:
+            return CitationProviderResult(
+                patch=CitationMetadataPatch(
+                    doi="10.1000/example",
+                    journal="Journal",
+                ),
+                filled_fields={"doi": "10.1000/example", "journal": "Journal"},
+            )
+
+        def agentic(self, **_kwargs: object) -> CitationProviderResult:
+            return CitationProviderResult(
+                patch=CitationMetadataPatch(publish_date="2026-08-24"),
+                filled_fields={"publish_date": "2026-08-24"},
+                confidence=float("nan"),
+            )
+
+    executor = Executor()
+    workflow = CitationWorkflow(
+        executor=executor,  # type: ignore[arg-type]
+        provider=Provider(),  # type: ignore[arg-type]
+        operation_factory=OperationContextFactory(),
+    )
+
+    result = workflow.run(
+        actor=actor(),
+        operation=operation(),
+        document_id=uuid4(),
+        style="APA",
+    )
+
+    assert executor.command_count == 1
+    assert len(executor.capabilities.citations.patches) == 1
+    assert executor.capabilities.citations.patches[0] == CitationMetadataPatch(
+        doi="10.1000/example",
+        journal="Journal",
+        publish_date="2026-08-24",
+    )
+    assert result.method == "agentic"
+    assert result.missing_fields == []
+    assert result.confidence is None
 
 
 def test_citation_is_one_shared_public_paper_capability() -> None:

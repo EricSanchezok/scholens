@@ -14,6 +14,7 @@ from app.modules.jobs.application.failures import actionable_job_failure
         ("mineru_unavailable", True, None),
         ("mineru_content_insufficient", False, None),
         ("mineru_response_unsafe", False, None),
+        ("document_reflow_source_revision_changed", True, None),
     ],
 )
 def test_actionable_mineru_failures_preserve_product_semantics(

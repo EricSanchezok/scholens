@@ -6060,7 +6060,17 @@ export interface components {
         UpdateAnnotationThreadRequest: {
             color?: components["schemas"]["AnnotationColor"] | null;
             status?: components["schemas"]["AnnotationThreadStatus"] | null;
-        };
+        } & ({
+            /** @description Replacement highlight color. */
+            color: unknown;
+            /** @description Must be null when color is changed. */
+            status?: null;
+        } | {
+            /** @description Must be null when status is changed. */
+            color?: null;
+            /** @description Replacement discussion status. */
+            status: unknown;
+        });
         /**
          * UpdateProfileBody
          * @description Body for ``PUT``/``PATCH /profile`` — only supplied fields are updated.

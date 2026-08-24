@@ -55,6 +55,7 @@ def _document() -> AccessiblePaperContent:
         raw_content="body",
         storage_key="papers/source.pdf",
         parser_markdown_storage_key="papers/content.md",
+        content_revision="revision-1",
     )
 
 

@@ -9,7 +9,13 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from scholens_job_contracts import MAX_ZOTERO_CALLBACK_BYTES
+from scholens_job_contracts import (
+    MAX_JOBS_CALLBACK_BODY_BYTES,
+    MAX_ZOTERO_CALLBACK_BYTES,
+    UNICODE_REPLACEMENT_CHARACTER,
+    UNICODE_REPLACEMENT_WARNING_CODE,
+    require_pdf_callback_content_size,
+)
 
 from app.shared.domain import JsonValue
 from app.modules.papers.application.contracts.extraction import ResponseCitation
@@ -324,24 +330,44 @@ class PDFProcessingResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     success: bool
-    job_id: str
+    job_id: str = Field(min_length=1, max_length=128)
     raw_content: str | None = None
     page_offset_map: dict[int, list[int]] | None = None
     page_count: int | None = Field(default=None, ge=1, le=10_000)
     metadata: PaperMetadataExtraction | None = None
-    s3_object_key: str | None = None
-    preview_s3_key: str | None = None
-    parser_markdown_s3_key: str | None = None
-    parser_archive_s3_key: str | None = None
+    s3_object_key: str | None = Field(default=None, max_length=1_024)
+    preview_s3_key: str | None = Field(default=None, max_length=1_024)
+    parser_markdown_s3_key: str | None = Field(default=None, max_length=1_024)
+    parser_archive_s3_key: str | None = Field(default=None, max_length=1_024)
     parser_backend: Literal["mineru", "pymupdf4llm", "markitdown"] | None = None
     parser_quality: Literal["full", "text_only"] | None = None
-    parser_version: str | None = None
-    parser_warning_code: str | None = None
-    error: str | None = None
-    duration: float | None = None
+    parser_version: str | None = Field(default=None, max_length=160)
+    parser_warning_code: str | None = Field(default=None, max_length=128)
+    error: str | None = Field(default=None, max_length=128)
+    duration: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_uncoerced_parser_content(cls, value: object) -> object:
+        if isinstance(value, dict):
+            raw_content = value.get("raw_content")
+            page_offset_map = value.get("page_offset_map")
+            require_pdf_callback_content_size(
+                raw_content=raw_content if isinstance(raw_content, str) else None,
+                page_offset_map=(
+                    page_offset_map if isinstance(page_offset_map, dict) else None
+                ),
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_result_state(self) -> "PDFProcessingResult":
+        require_pdf_callback_content_size(
+            raw_content=self.raw_content,
+            page_offset_map=self.page_offset_map,
+        )
+        if self.duration is not None and not math.isfinite(self.duration):
+            raise ValueError("PDF result duration must be finite")
         if self.success:
             if (
                 not self.raw_content
@@ -351,6 +377,11 @@ class PDFProcessingResult(BaseModel):
                 or not self.parser_version
             ):
                 raise ValueError("successful PDF result is incomplete")
+            if UNICODE_REPLACEMENT_CHARACTER in self.raw_content:
+                # An older worker may still complete during a rolling deploy.
+                # Preserve the original text, but never label it full-quality.
+                self.parser_quality = "text_only"
+                self.parser_warning_code = UNICODE_REPLACEMENT_WARNING_CODE
         elif not self.error:
             raise ValueError("failed PDF result requires an error code")
         if (
@@ -371,6 +402,12 @@ class PdfProcessingWebhookData(BaseModel):
     error: str | None = None
     usage_events: list[TokenUsageEventPayload] = Field(default_factory=list)
     integration_events: list[IntegrationUseEventPayload] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_callback_size(self) -> "PdfProcessingWebhookData":
+        if len(self.model_dump_json().encode()) > MAX_JOBS_CALLBACK_BODY_BYTES:
+            raise ValueError("Jobs callback payload is too large")
+        return self
 
 
 class JobResponse(BaseModel):

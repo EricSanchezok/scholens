@@ -37,7 +37,10 @@ def _job_wait_metadata(
             requested_seconds=requested_seconds,
             elapsed_ms=elapsed_ms,
             next_action="use_result",
-            guidance="Use the completed job result; no further status call is needed.",
+            guidance=(
+                "Use the completed status and returned resource identifiers with the "
+                "corresponding paper, Project, or research-output tool."
+            ),
         )
     if job.status == "failed":
         return JobWaitMetadata(
@@ -141,7 +144,8 @@ class JobWaiter:
             elapsed_ms=elapsed_ms,
             next_action="inspect_items" if all_terminal else "wait_for_remaining",
             guidance=(
-                "Inspect each terminal job result; no further wait is needed."
+                "Inspect each terminal status and continue with its returned resource "
+                "identifiers; no further wait is needed."
                 if all_terminal
                 else (
                     "Wait again for only the active job IDs. Do not issue rapid "
@@ -151,7 +155,8 @@ class JobWaiter:
         )
         items = [
             WaitableJobResponse(
-                **job.model_dump(),
+                **job.model_dump(exclude={"result"}),
+                result=None,
                 wait=_job_wait_metadata(
                     job,
                     requested_seconds=wait_seconds,
@@ -186,7 +191,7 @@ class JobWaiter:
     ) -> list[JobResponse]:
         return await asyncio.to_thread(
             self._executor.query,
-            lambda capabilities: capabilities.jobs.get_many(
+            lambda capabilities: capabilities.jobs.get_many_statuses(
                 actor=actor,
                 job_ids=job_ids,
             ),

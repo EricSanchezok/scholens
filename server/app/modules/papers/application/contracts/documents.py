@@ -45,6 +45,11 @@ PublicUtcDateTime = Annotated[
     WithJsonSchema({"type": "string", "format": "date-time"}, mode="serialization"),
 ]
 
+MetadataOverrideListValue = Annotated[
+    str,
+    Field(min_length=1, max_length=500),
+]
+
 
 class LibraryPaperSort(StrEnum):
     ADDED_DESC = "added_desc"
@@ -168,7 +173,7 @@ class DocumentMetadataOverrides(BaseModel):
         max_length=1_000,
         description="Personal replacement title; null clears the existing override.",
     )
-    authors: list[str] | None = Field(
+    authors: list[MetadataOverrideListValue] | None = Field(
         default=None,
         max_length=100,
         description="Personal ordered author-name replacement; null clears it.",
@@ -178,7 +183,7 @@ class DocumentMetadataOverrides(BaseModel):
         max_length=100_000,
         description="Personal abstract replacement; null clears it.",
     )
-    institutions: list[str] | None = Field(
+    institutions: list[MetadataOverrideListValue] | None = Field(
         default=None,
         max_length=100,
         description="Personal ordered institution replacement; null clears it.",
@@ -202,18 +207,6 @@ class DocumentMetadataOverrides(BaseModel):
         default=None,
         description="Personal publication timestamp replacement; null clears it.",
     )
-
-    @field_validator("authors", "institutions")
-    @classmethod
-    def validate_list_values(cls, values: list[str] | None) -> list[str] | None:
-        if values is None:
-            return None
-        normalized = [value.strip() for value in values]
-        if any(not value or len(value) > 500 for value in normalized):
-            raise ValueError(
-                "metadata list values must be between 1 and 500 characters"
-            )
-        return normalized
 
 
 class LibraryPaperUpdateRequest(BaseModel):

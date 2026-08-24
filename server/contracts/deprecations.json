@@ -1,4 +1,89 @@
 {
   "contract_version": 1,
-  "entries": []
+  "entries": [
+    {
+      "id": "mcp-get-annotation-thread-v1",
+      "boundary": "mcp",
+      "target": "get_annotation_thread",
+      "owner": "scholens-platform",
+      "replacement": "get_annotation_thread_page",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.get-annotation-thread",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "mcp-get-paper-v1",
+      "boundary": "mcp",
+      "target": "get_paper",
+      "owner": "scholens-platform",
+      "replacement": "get_paper_page",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.get-paper",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "mcp-get-library-paper-v1",
+      "boundary": "mcp",
+      "target": "get_library_paper",
+      "owner": "scholens-platform",
+      "replacement": "get_library_paper_page",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.get-library-paper",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "mcp-get-research-output-v1",
+      "boundary": "mcp",
+      "target": "get_research_output",
+      "owner": "scholens-platform",
+      "replacement": "get_research_output_page",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.get-research-output",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "mcp-list-research-outputs-v1",
+      "boundary": "mcp",
+      "target": "list_research_outputs",
+      "owner": "scholens-platform",
+      "replacement": "list_research_output_summaries",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.list-research-outputs",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "mcp-list-library-papers-v1",
+      "boundary": "mcp",
+      "target": "list_library_papers",
+      "owner": "scholens-platform",
+      "replacement": "list_library_paper_summaries",
+      "deprecated_on": "2026-08-24",
+      "earliest_removal_on": "2026-11-22",
+      "telemetry_key": "mcp.deprecated.list-library-papers",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    }
+  ]
 }

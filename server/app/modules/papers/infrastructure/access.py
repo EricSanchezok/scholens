@@ -3,6 +3,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import ColumnElement, and_, exists, or_, select
+from sqlalchemy.orm import Session, load_only
+
 from app.database.models import (
     Document,
     LibraryPaper,
@@ -14,9 +17,11 @@ from app.modules.papers.domain import (
     DocumentAccessDecision,
     classify_document_access,
 )
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_ACCESS_COLUMNS,
+    DocumentColumns,
+)
 from app.shared.domain import AppError, FailureKind
-from sqlalchemy import ColumnElement, and_, exists, or_, select
-from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +113,10 @@ def get_document_access(
     document_id: uuid.UUID,
     user_id: int,
     project_id: uuid.UUID | None = None,
+    document_columns: DocumentColumns = DOCUMENT_ACCESS_COLUMNS,
 ) -> ResolvedDocumentAccess | None:
+    """Resolve access without hydrating canonical content by default."""
+
     library_paper = get_library_paper(
         db,
         document_id=document_id,
@@ -127,7 +135,11 @@ def get_document_access(
     )
     if decision is None:
         return None
-    document = db.get(Document, document_id)
+    document = db.scalar(
+        select(Document)
+        .where(Document.id == document_id)
+        .options(load_only(*document_columns, raiseload=True))
+    )
     if document is None:
         return None
     return ResolvedDocumentAccess(
@@ -143,12 +155,14 @@ def require_document_access(
     document_id: uuid.UUID,
     user_id: int,
     project_id: uuid.UUID | None = None,
+    document_columns: DocumentColumns = DOCUMENT_ACCESS_COLUMNS,
 ) -> ResolvedDocumentAccess:
     access = get_document_access(
         db,
         document_id=document_id,
         user_id=user_id,
         project_id=project_id,
+        document_columns=document_columns,
     )
     if access is None:
         raise AppError(

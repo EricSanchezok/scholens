@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -127,9 +128,29 @@ class JobQueryPort(Protocol):
 
     def get(self, *, requested_by_id: int, job_id: UUID) -> JobResponse: ...
 
+    def list_statuses(
+        self,
+        *,
+        requested_by_id: int,
+        project_id: UUID | None,
+        document_id: UUID | None,
+        operation: JobOperation | None,
+        statuses: tuple[JobStatus, ...] | None,
+        before_created_at: datetime | None,
+        before_id: UUID | None,
+        limit: int,
+    ) -> builtins.list[JobResponse]: ...
+
 
 class JobBatchQueryPort(JobQueryPort, Protocol):
     def get_many(
+        self,
+        *,
+        requested_by_id: int,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]: ...
+
+    def get_many_statuses(
         self,
         *,
         requested_by_id: int,
@@ -171,3 +192,38 @@ class Jobs:
         job_ids: tuple[UUID, ...],
     ) -> builtins.list[JobResponse]:
         return self._queries.get_many(requested_by_id=actor.id, job_ids=job_ids)
+
+    def list_statuses(
+        self,
+        *,
+        actor: Actor,
+        project_id: UUID | None,
+        document_id: UUID | None,
+        operation: JobOperation | None,
+        active: bool,
+        before_created_at: datetime | None,
+        before_id: UUID | None,
+        limit: int,
+    ) -> builtins.list[JobResponse]:
+        statuses = (JobStatus.PENDING, JobStatus.RUNNING) if active else None
+        return self._queries.list_statuses(
+            requested_by_id=actor.id,
+            project_id=project_id,
+            document_id=document_id,
+            operation=operation,
+            statuses=statuses,
+            before_created_at=before_created_at,
+            before_id=before_id,
+            limit=limit,
+        )
+
+    def get_many_statuses(
+        self,
+        *,
+        actor: Actor,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]:
+        return self._queries.get_many_statuses(
+            requested_by_id=actor.id,
+            job_ids=job_ids,
+        )

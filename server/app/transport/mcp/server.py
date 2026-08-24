@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import cast
-from urllib.parse import urlsplit
 
 import mcp.types as mcp_types
 from app.bootstrap.capabilities import ApplicationCapabilities
@@ -25,6 +23,11 @@ from app.shared.application import (
     OperationInitiator,
     RequestReference,
 )
+from app.shared.application.json_values import (
+    JsonNormalizationError,
+    normalize_json_value,
+)
+from app.shared.application.text import json_bounded_prefix
 from app.shared.domain import AppError, FailureKind, JsonValue
 from app.tooling import (
     ToolAccess,
@@ -33,6 +36,7 @@ from app.tooling import (
     ToolExecutionContext,
     ToolResourceLink,
     ToolSourceCandidate,
+    serialize_tool_success,
 )
 from app.tooling.workspace import MCP_TOOL_PROFILE
 from app.transport.client_ip import UNKNOWN_CLIENT_IP, normalize_client_ip
@@ -42,18 +46,19 @@ from app.transport.mcp.references import (
     mcp_session_reference,
     validate_mcp_session_id,
 )
+from app.transport.mcp.resource_loader import ScholensResourceLoader
 from mcp.server import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.lowlevel.server import request_ctx
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
-from starlette.types import Receive, Scope, Send
+from mcp.shared.exceptions import McpError
+from starlette.types import Message, Receive, Scope, Send
 from pydantic import (
     AnyUrl,
     BaseModel,
     Field,
     TypeAdapter,
-    ValidationError,
     create_model,
 )
 from scholens_observability import (
@@ -67,11 +72,6 @@ from scholens_observability import (
 )
 
 logger = logging.getLogger(__name__)
-_SOURCE_LIST: TypeAdapter[list[ToolSourceCandidate]] = TypeAdapter(
-    list[ToolSourceCandidate]
-)
-_JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
-
 AccessKeyAuthenticator = Callable[[str], Awaitable[AuthenticatedAccessKey]]
 ListToolsHandler = Callable[[], Awaitable[list[mcp_types.Tool]]]
 CallToolHandler = Callable[
@@ -82,7 +82,14 @@ ListResourcesHandler = Callable[[], Awaitable[list[mcp_types.Resource]]]
 ListResourceTemplatesHandler = Callable[[], Awaitable[list[mcp_types.ResourceTemplate]]]
 ReadResourceHandler = Callable[[AnyUrl], Awaitable[list[ReadResourceContents]]]
 
-_MAX_RESOURCE_CHARACTERS = 200_000
+_MCP_RESOURCE_NOT_FOUND = -32002
+_MCP_RESOURCE_ACCESS_DENIED = -32003
+_MCP_ERROR_DETAILS_MAX_UTF8_BYTES = 8 * 1024
+_MCP_ERROR_RESULT_MAX_UTF8_BYTES = 16 * 1024
+_MCP_RESOURCE_ERROR_MAX_UTF8_BYTES = 16 * 1024
+_MCP_RESOURCE_ERROR_CODE_JSON_BYTES = 256
+_MCP_RESOURCE_ERROR_MESSAGE_JSON_BYTES = 2 * 1024
+MCP_REQUEST_MAX_BODY_BYTES = 2 * 1024 * 1024
 
 _authenticated_context: ContextVar[AuthenticatedAccessKey | None] = ContextVar(
     "mcp_authenticated_access_key",
@@ -106,6 +113,55 @@ _request_reference_context: ContextVar[RequestReference | None] = ContextVar(
 )
 
 
+def _strict_json(value: object) -> str:
+    return json.dumps(
+        normalize_json_value(value),
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _safe_error_details(
+    details: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if details is None:
+        return None
+    try:
+        normalized = normalize_json_value(details)
+    except JsonNormalizationError:
+        return None
+    if not isinstance(normalized, dict):  # pragma: no cover - typed invariant
+        return None
+    if (
+        len(_strict_json(normalized).encode("utf-8"))
+        > _MCP_ERROR_DETAILS_MAX_UTF8_BYTES
+    ):
+        return None
+    return cast(dict[str, object], normalized)
+
+
+def _error_content_text(error: dict[str, object]) -> str:
+    text = _strict_json({"error": error})
+    if len(text.encode("utf-8")) <= _MCP_ERROR_RESULT_MAX_UTF8_BYTES:
+        return text
+    bounded = {
+        **error,
+        "code": (
+            error.get("code")
+            if isinstance(error.get("code"), str)
+            and len(cast(str, error["code"]).encode("utf-8")) <= 256
+            else "tool_execution_failed"
+        ),
+        "message": "The tool call failed; use the error code and diagnostic ID.",
+        "remediation": (
+            "Review the bounded error code and diagnostic ID; do not retry blindly."
+        ),
+    }
+    bounded.pop("details", None)
+    return _strict_json({"error": bounded})
+
+
 def _error_result(
     *,
     kind: FailureKind,
@@ -114,14 +170,7 @@ def _error_result(
     details: dict[str, object] | None = None,
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
 ) -> mcp_types.CallToolResult:
-    safe_details: dict[str, object] | None = None
-    if details is not None:
-        try:
-            validated_details = _JSON_VALUE.validate_python(details)
-        except ValidationError:
-            validated_details = None
-        if isinstance(validated_details, dict):
-            safe_details = cast(dict[str, object], validated_details)
+    safe_details = _safe_error_details(details)
     app_error = AppError(
         code=code,
         message=message,
@@ -144,7 +193,16 @@ def _error_result(
         correlation_id=context.correlation_id,
         diagnostic_id=str(snapshot_id) if snapshot_id is not None else None,
     ).to_dict()
-    error["remediation"] = _error_remediation(kind=kind, code=code)
+    replacement_tool = (
+        safe_details.get("replacement_tool") if safe_details is not None else None
+    )
+    error["remediation"] = _error_remediation(
+        kind=kind,
+        code=code,
+        replacement_tool=(
+            replacement_tool if isinstance(replacement_tool, str) else None
+        ),
+    )
     add_counter(
         "scholens.mcp.errors",
         attributes={"code": code, "kind": kind.value},
@@ -165,33 +223,10 @@ def _error_result(
         content=[
             mcp_types.TextContent(
                 type="text",
-                text=json.dumps({"error": error}, separators=(",", ":")),
+                text=_error_content_text(error),
             )
         ],
         isError=True,
-    )
-
-
-def _resource_json(*, uri: str, value: object, continuation_tool: str) -> str:
-    """Serialize one bounded resource without exposing private storage details."""
-    if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json")
-    validated = _JSON_VALUE.validate_python(value)
-    text = json.dumps(validated, ensure_ascii=False, separators=(",", ":"))
-    if len(text) <= _MAX_RESOURCE_CHARACTERS:
-        return text
-    return json.dumps(
-        {
-            "resource_uri": uri,
-            "truncated": True,
-            "preview": text[:_MAX_RESOURCE_CHARACTERS],
-            "guidance": (
-                f"This resource exceeded the bounded MCP representation. Use "
-                f"{continuation_tool} with its cursor or range arguments."
-            ),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
     )
 
 
@@ -249,7 +284,12 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     return schema
 
 
-def _error_remediation(*, kind: FailureKind, code: str) -> str:
+def _error_remediation(
+    *,
+    kind: FailureKind,
+    code: str,
+    replacement_tool: str | None = None,
+) -> str:
     if code == "tool_arguments_invalid":
         return (
             "Correct the named arguments using this tool's input schema, then call "
@@ -259,6 +299,22 @@ def _error_remediation(*, kind: FailureKind, code: str) -> str:
         return (
             "Return the exact opaque cursor from the previous response with "
             "unchanged filters, or omit it to start over."
+        )
+    if replacement_tool is not None:
+        return (
+            f"Do not retry the same unbounded request. Use {replacement_tool} "
+            "and continue its opaque cursor until the complete result is read."
+        )
+    if code == "tool_result_budget_exceeded":
+        return (
+            "Do not retry the same unbounded request. Reduce limit or filters, or "
+            "continue from a returned cursor or Resource; report the diagnostic ID "
+            "if the documented bounded request still fails."
+        )
+    if code == "mcp_request_too_large":
+        return (
+            "Send one JSON-RPC request within the advertised MCP request-body limit. "
+            "Use bounded tool pages instead of embedding stored content in arguments."
         )
     if code in {"confirmation_required", "confirmation_stale"}:
         return (
@@ -282,7 +338,8 @@ def _error_remediation(*, kind: FailureKind, code: str) -> str:
         )
     if kind is FailureKind.PAYLOAD_TOO_LARGE:
         return (
-            "Use a PDF within the advertised size limit and start a new upload session."
+            "Reduce the request to its advertised limit. For reads, use bounded pages "
+            "or summary tools; for uploads, choose a smaller PDF and start a new session."
         )
     if kind is FailureKind.RATE_LIMITED:
         return (
@@ -337,29 +394,128 @@ def _record_mcp_diagnostic(
         )
 
 
-def _outcome_payload(
+def _resource_jsonrpc_code(kind: FailureKind) -> int:
+    if kind is FailureKind.INVALID_ARGUMENT:
+        return mcp_types.INVALID_PARAMS
+    if kind is FailureKind.NOT_FOUND:
+        return _MCP_RESOURCE_NOT_FOUND
+    if kind in {FailureKind.UNAUTHENTICATED, FailureKind.PERMISSION_DENIED}:
+        return _MCP_RESOURCE_ACCESS_DENIED
+    return mcp_types.INTERNAL_ERROR
+
+
+def _resource_error(
+    error: AppError,
     *,
-    payload: JsonValue,
-    sources: tuple[ToolSourceCandidate, ...],
-    artifacts: list[dict[str, JsonValue]],
-    action: dict[str, JsonValue] | None,
-    resource_links: tuple[object, ...],
-) -> dict[str, object]:
-    return {
-        "result": payload,
-        "sources": _SOURCE_LIST.dump_python(list(sources), mode="json"),
-        "artifacts": artifacts,
-        "action": action,
-        "resource_links": [
-            {
-                "uri": getattr(link, "uri"),
-                "name": getattr(link, "name"),
-                "description": getattr(link, "description"),
-                "mime_type": getattr(link, "mime_type"),
+    diagnostic_recorder: DiagnosticSnapshotRecorder | None,
+) -> McpError:
+    """Map one application failure to a bounded MCP resource error."""
+    try:
+        bounded_code = json_bounded_prefix(
+            error.code,
+            max_bytes=_MCP_RESOURCE_ERROR_CODE_JSON_BYTES,
+        )
+        safe_code = bounded_code if bounded_code == error.code else "mcp_resource_error"
+        safe_message = json_bounded_prefix(
+            error.message,
+            max_bytes=_MCP_RESOURCE_ERROR_MESSAGE_JSON_BYTES,
+        )
+    except JsonNormalizationError:
+        safe_code = "mcp_resource_error"
+        safe_message = "The Scholens resource request failed"
+    if not safe_code:
+        safe_code = "mcp_resource_error"
+    if not safe_message:
+        safe_message = "The Scholens resource request failed"
+    safe_error = AppError(
+        code=safe_code,
+        message=safe_message,
+        kind=error.kind,
+    )
+    context = current_context()
+    diagnostic_id: uuid.UUID | None = None
+    if error.kind in {
+        FailureKind.DEPENDENCY_FAILURE,
+        FailureKind.UNAVAILABLE,
+        FailureKind.INTERNAL,
+    }:
+        diagnostic_id = uuid.uuid4()
+        _record_mcp_diagnostic(
+            diagnostic_recorder or NullDiagnosticSnapshotRecorder(),
+            snapshot_id=diagnostic_id,
+            code=safe_code,
+            kind=error.kind,
+        )
+    envelope = ErrorEnvelope.from_app_error(
+        safe_error,
+        stage="mcp_resource_read",
+        request_id=context.request_id,
+        correlation_id=context.correlation_id,
+        diagnostic_id=str(diagnostic_id) if diagnostic_id is not None else None,
+    ).to_dict()
+    # Resource errors never echo arbitrary application details. The stable code,
+    # category, remediation, and optional diagnostic ID are sufficient for a
+    # client without risking another serialization amplification.
+    envelope.pop("details", None)
+    envelope["remediation"] = _error_remediation(
+        kind=error.kind,
+        code=safe_code,
+    )
+    data = normalize_json_value({"error": envelope})
+    rpc_code = _resource_jsonrpc_code(error.kind)
+    serialized_error = _strict_json(
+        {
+            "code": rpc_code,
+            "message": safe_message,
+            "data": data,
+        }
+    )
+    if len(serialized_error.encode("utf-8")) > _MCP_RESOURCE_ERROR_MAX_UTF8_BYTES:
+        safe_code = "mcp_resource_error"
+        safe_message = "The Scholens resource request failed"
+        fallback = ErrorEnvelope.from_app_error(
+            AppError(
+                code=safe_code,
+                message=safe_message,
+                kind=error.kind,
+            ),
+            stage="mcp_resource_read",
+            request_id=context.request_id,
+            correlation_id=context.correlation_id,
+            diagnostic_id=(str(diagnostic_id) if diagnostic_id is not None else None),
+        ).to_dict()
+        fallback["remediation"] = (
+            "Use the bounded error category and diagnostic ID; do not retry blindly."
+        )
+        data = normalize_json_value({"error": fallback})
+    add_counter(
+        "scholens.mcp.errors",
+        attributes={"code": safe_code, "kind": error.kind.value},
+    )
+    log_event(
+        logger,
+        (
+            logging.ERROR
+            if error.kind
+            in {
+                FailureKind.DEPENDENCY_FAILURE,
+                FailureKind.UNAVAILABLE,
+                FailureKind.INTERNAL,
             }
-            for link in resource_links
-        ],
-    }
+            else logging.WARNING
+        ),
+        "mcp.resource.error",
+        error_code=safe_code,
+        error_kind=error.kind.value,
+        diagnostic_id=str(diagnostic_id) if diagnostic_id is not None else None,
+    )
+    return McpError(
+        mcp_types.ErrorData(
+            code=rpc_code,
+            message=safe_message,
+            data=data,
+        )
+    )
 
 
 class AuthenticatedMcpApplication:
@@ -379,9 +535,10 @@ class AuthenticatedMcpApplication:
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        raw_headers = scope.get("headers", [])
         headers = {
             key.decode("latin-1").lower(): value.decode("latin-1")
-            for key, value in scope.get("headers", [])
+            for key, value in raw_headers
         }
         authorization = headers.get("authorization", "")
         scheme, _, token = authorization.partition(" ")
@@ -420,6 +577,52 @@ class AuthenticatedMcpApplication:
         scope.setdefault("state", {})["authenticated"] = True
         scope["state"]["actor_id"] = str(authenticated.actor.id)
         update_context(actor_id=str(authenticated.actor.id), origin="mcp")
+        try:
+            declared_length = self._declared_content_length(raw_headers)
+        except ValueError:
+            await self._send_request_error(
+                send,
+                status_code=400,
+                code="mcp_content_length_invalid",
+                message="The MCP Content-Length header is invalid",
+                kind=FailureKind.INVALID_ARGUMENT,
+            )
+            return
+        if declared_length is not None and declared_length > MCP_REQUEST_MAX_BODY_BYTES:
+            await self._send_request_error(
+                send,
+                status_code=413,
+                code="mcp_request_too_large",
+                message="The MCP request body exceeds the supported limit",
+                kind=FailureKind.PAYLOAD_TOO_LARGE,
+                details={"maximum_body_bytes": MCP_REQUEST_MAX_BODY_BYTES},
+            )
+            return
+
+        manager_receive = receive
+        if scope.get("method", "").upper() == "POST":
+            try:
+                first_message = await self._read_request_body(receive)
+            except ValueError:
+                await self._send_request_error(
+                    send,
+                    status_code=413,
+                    code="mcp_request_too_large",
+                    message="The MCP request body exceeds the supported limit",
+                    kind=FailureKind.PAYLOAD_TOO_LARGE,
+                    details={"maximum_body_bytes": MCP_REQUEST_MAX_BODY_BYTES},
+                )
+                return
+            delivered = False
+
+            async def replay_receive() -> Message:
+                nonlocal delivered
+                if not delivered:
+                    delivered = True
+                    return first_message
+                return await receive()
+
+            manager_receive = replay_receive
         supplied_session_id = headers.get("mcp-session-id")
         if supplied_session_id is not None:
             try:
@@ -444,13 +647,82 @@ class AuthenticatedMcpApplication:
         session_reference_token = _session_reference_context.set(session_reference)
         request_reference_token = _request_reference_context.set(request_reference)
         try:
-            await self._manager.handle_request(scope, receive, send)
+            await self._manager.handle_request(scope, manager_receive, send)
         finally:
             _request_reference_context.reset(request_reference_token)
             _session_reference_context.reset(session_reference_token)
             _invocation_session_context.reset(invocation_session_token)
             _client_ip_context.reset(client_token)
             _authenticated_context.reset(authenticated_token)
+
+    @staticmethod
+    def _declared_content_length(
+        raw_headers: list[tuple[bytes, bytes]],
+    ) -> int | None:
+        values = [
+            value.decode("latin-1").strip()
+            for key, value in raw_headers
+            if key.decode("latin-1").casefold() == "content-length"
+        ]
+        if not values:
+            return None
+        if len(values) != 1 or not values[0].isdigit():
+            raise ValueError("invalid Content-Length")
+        return int(values[0])
+
+    @staticmethod
+    async def _read_request_body(receive: Receive) -> Message:
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                return message
+            chunk = message.get("body", b"")
+            if len(chunk) > MCP_REQUEST_MAX_BODY_BYTES - len(body):
+                raise ValueError("MCP request body too large")
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                return {
+                    "type": "http.request",
+                    "body": bytes(body),
+                    "more_body": False,
+                }
+
+    @staticmethod
+    async def _send_request_error(
+        send: Send,
+        *,
+        status_code: int,
+        code: str,
+        message: str,
+        kind: FailureKind,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        context = current_context()
+        error = ErrorEnvelope.from_app_error(
+            AppError(code=code, message=message, kind=kind, details=details),
+            stage="mcp_request_body",
+            request_id=context.request_id,
+            correlation_id=context.correlation_id,
+            diagnostic_id=None,
+        ).to_dict()
+        error["remediation"] = _error_remediation(kind=kind, code=code)
+        body = _strict_json({"error": error}).encode("utf-8")
+        add_counter(
+            "scholens.mcp.errors",
+            attributes={"code": code, "kind": kind.value},
+        )
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status_code,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
     @staticmethod
     async def _send_auth_error(
@@ -497,7 +769,9 @@ class AuthenticatedMcpApplication:
             status_code=status_code,
         )
         body = json.dumps(
-            {"error": error.to_dict()},
+            normalize_json_value({"error": error.to_dict()}),
+            allow_nan=False,
+            ensure_ascii=False,
             separators=(",", ":"),
         ).encode()
         await send(
@@ -548,7 +822,9 @@ class AuthenticatedMcpApplication:
             diagnostic_id=str(snapshot_id),
         )
         body = json.dumps(
-            {"error": error.to_dict()},
+            normalize_json_value({"error": error.to_dict()}),
+            allow_nan=False,
+            ensure_ascii=False,
             separators=(",", ":"),
         ).encode()
         await send(
@@ -725,17 +1001,44 @@ def build_mcp_transport(
                 diagnostic_recorder=diagnostic_recorder,
             )
 
-        structured = _outcome_payload(
-            payload=outcome.payload,
-            sources=outcome.sources,
-            artifacts=outcome.artifacts,
-            action=outcome.action,
-            resource_links=cast(tuple[object, ...], outcome.resource_links),
-        )
+        try:
+            serialized = serialize_tool_success(outcome)
+        except JsonNormalizationError:
+            return _error_result(
+                kind=FailureKind.INTERNAL,
+                code="tool_result_invalid",
+                message="The tool produced an invalid result",
+                details={"tool": name},
+                diagnostic_recorder=diagnostic_recorder,
+            )
+        try:
+            definition = catalog.definition_for(access, name)
+        except KeyError:
+            return _error_result(
+                kind=FailureKind.NOT_FOUND,
+                code="tool_not_found",
+                message="Tool not found",
+                diagnostic_recorder=diagnostic_recorder,
+            )
+        if serialized.call_tool_result_utf8_bytes > definition.max_output_bytes:
+            details: dict[str, object] = {
+                "tool": name,
+                "max_output_bytes": definition.max_output_bytes,
+                "actual_output_bytes": serialized.call_tool_result_utf8_bytes,
+            }
+            if definition.replacement_tool is not None:
+                details["replacement_tool"] = definition.replacement_tool
+            return _error_result(
+                kind=FailureKind.INTERNAL,
+                code="tool_result_budget_exceeded",
+                message="The tool result exceeded its safe output budget",
+                details=details,
+                diagnostic_recorder=diagnostic_recorder,
+            )
         content: list[mcp_types.ContentBlock] = [
             mcp_types.TextContent(
                 type="text",
-                text=json.dumps(structured, separators=(",", ":")),
+                text=serialized.text_content,
             )
         ]
         content.extend(
@@ -746,14 +1049,15 @@ def build_mcp_transport(
                 description=link.description,
                 mimeType=link.mime_type,
             )
-            for link in outcome.resource_links
+            for link in serialized.outcome.resource_links
         )
         return mcp_types.CallToolResult(
             content=content,
-            structuredContent=structured,
+            structuredContent=serialized.structured_content,
             isError=False,
         )
 
+    resource_loader = ScholensResourceLoader(executor=executor) if executor else None
     register_list_resources = cast(
         Callable[[], Callable[[ListResourcesHandler], ListResourcesHandler]],
         server.list_resources,
@@ -765,50 +1069,10 @@ def build_mcp_transport(
         if (
             authenticated is None
             or not authenticated.can_read_workspace
-            or executor is None
+            or resource_loader is None
         ):
             return []
-        projects = await asyncio.to_thread(
-            executor.query,
-            lambda capabilities: capabilities.projects.list(
-                actor=authenticated.actor,
-                limit=100,
-            ),
-        )
-        resources = [
-            mcp_types.Resource(
-                uri=AnyUrl("scholens://library"),
-                name="library",
-                title="Personal Scholens Library",
-                description=(
-                    "Bounded manifest of saved papers, active ingestions, stored "
-                    "outputs, and attention counts."
-                ),
-                mimeType="application/json",
-            ),
-            mcp_types.Resource(
-                uri=AnyUrl("scholens://projects"),
-                name="projects",
-                title="Accessible Scholens Projects",
-                description=(
-                    "Bounded Project index for restoring repository-to-Scholens bindings."
-                ),
-                mimeType="application/json",
-            ),
-        ]
-        resources.extend(
-            mcp_types.Resource(
-                uri=AnyUrl(f"scholens://projects/{project.id}"),
-                name=f"project-{project.id}",
-                title=project.title,
-                description=(
-                    "Project manifest, papers, collaborators, and existing research outputs."
-                ),
-                mimeType="application/json",
-            )
-            for project in projects.items
-        )
-        return resources
+        return await resource_loader.list_resources(actor=authenticated.actor)
 
     register_list_resource_templates = cast(
         Callable[
@@ -823,44 +1087,14 @@ def build_mcp_transport(
         authenticated = _authenticated_context.get()
         if authenticated is None or not authenticated.can_read_workspace:
             return []
-        return [
-            mcp_types.ResourceTemplate(
-                uriTemplate="scholens://papers/{document_id}",
-                name="paper",
-                title="Scholens paper",
-                description="Canonical metadata and a bounded extracted-text preview.",
-                mimeType="application/json",
-            ),
-            mcp_types.ResourceTemplate(
-                uriTemplate="scholens://projects/{project_id}",
-                name="project",
-                title="Scholens Project",
-                description="Durable long-running research Project manifest.",
-                mimeType="application/json",
-            ),
-            mcp_types.ResourceTemplate(
-                uriTemplate="scholens://annotation-threads/{thread_id}",
-                name="annotation-thread",
-                title="Scholens annotation thread",
-                description="Anchored quote and visible collaborative discussion.",
-                mimeType="application/json",
-            ),
-            mcp_types.ResourceTemplate(
-                uriTemplate="scholens://research-outputs/{item_id}",
-                name="research-output",
-                title="Scholens research output",
-                description="Existing citation, audio overview, or data-table output.",
-                mimeType="application/json",
-            ),
-        ]
+        return ScholensResourceLoader.list_templates()
 
     register_read_resource = cast(
         Callable[[], Callable[[ReadResourceHandler], ReadResourceHandler]],
         server.read_resource,
     )
 
-    @register_read_resource()
-    async def read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
+    async def _read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
         authenticated = _authenticated_context.get()
         if authenticated is None:
             raise AppError(
@@ -868,7 +1102,7 @@ def build_mcp_transport(
                 message="Authentication is required",
                 kind=FailureKind.UNAUTHENTICATED,
             )
-        if executor is None:
+        if resource_loader is None:
             raise AppError(
                 code="mcp_resources_unavailable",
                 message="Scholens resources are unavailable in this server configuration",
@@ -880,144 +1114,33 @@ def build_mcp_transport(
                 message="Read permission is required for Scholens resources",
                 kind=FailureKind.PERMISSION_DENIED,
             )
-        uri_text = str(uri)
-        parsed_uri = urlsplit(uri_text)
-        if parsed_uri.scheme != "scholens" or parsed_uri.query or parsed_uri.fragment:
-            raise AppError(
-                code="mcp_resource_uri_invalid",
-                message="The Scholens resource URI is invalid",
-                kind=FailureKind.INVALID_ARGUMENT,
-            )
-        resource_kind = parsed_uri.netloc
-        identifier = parsed_uri.path.strip("/")
+        return await resource_loader.read(actor=authenticated.actor, uri=uri)
 
-        def load(capabilities: ApplicationCapabilities) -> tuple[object, str]:
-            actor = authenticated.actor
-            if resource_kind == "library" and not identifier:
-                return (
-                    {
-                        "resource_uri": uri_text,
-                        "summary": capabilities.paper_library.summary(actor=actor),
-                        "papers": capabilities.paper_library.list(
-                            actor=actor, limit=50
-                        ),
-                        "research_outputs": capabilities.paper_library.list_outputs(
-                            actor=actor, limit=50
-                        ),
-                    },
-                    "list_library_papers",
-                )
-            if resource_kind == "projects" and not identifier:
-                return (
-                    {
-                        "resource_uri": uri_text,
-                        "projects": capabilities.projects.list(actor=actor, limit=100),
-                    },
-                    "list_projects",
-                )
-            try:
-                resource_id = uuid.UUID(identifier)
-            except ValueError as exc:
-                raise AppError(
-                    code="mcp_resource_uri_invalid",
-                    message="The resource URI must contain a valid UUID",
-                    kind=FailureKind.INVALID_ARGUMENT,
-                ) from exc
-            if resource_kind == "projects":
-                project = capabilities.projects.get(actor=actor, project_id=resource_id)
-                return (
-                    {
-                        "resource_uri": uri_text,
-                        "project": project,
-                        "papers": capabilities.projects.documents(
-                            actor=actor,
-                            project_id=resource_id,
-                            load_urls=False,
-                            load_preview_urls=False,
-                            limit=50,
-                        ),
-                        "members": capabilities.projects.members(
-                            actor=actor, project_id=resource_id
-                        ),
-                        "research_outputs": capabilities.projects.outputs(
-                            actor=actor, project_id=resource_id, limit=50
-                        ),
-                    },
-                    "list_project_papers",
-                )
-            if resource_kind == "papers":
-                capabilities.paper_collection_access(
-                    actor=actor,
-                    collection=LibraryPaperCollection(),
-                    document_id=resource_id,
-                    anchor_document_id=None,
-                )
-                paper = capabilities.paper_details(actor=actor, document_id=resource_id)
-                content = capabilities.paper_content.read(
-                    actor=actor, document_id=resource_id
-                )
-                lines = (content.raw_content or "").splitlines()
-                return (
-                    {
-                        "resource_uri": uri_text,
-                        "paper": paper,
-                        "content_preview": {
-                            "start_line": 1,
-                            "end_line": min(len(lines), 200),
-                            "total_lines": len(lines),
-                            "lines": [
-                                f"{index}: {line}"
-                                for index, line in enumerate(lines[:200], start=1)
-                            ],
-                            "truncated": len(lines) > 200,
-                        },
-                        "projects": capabilities.projects.projects_for_document(
-                            actor=actor, document_id=resource_id
-                        ),
-                    },
-                    "get_paper_content",
-                )
-            if resource_kind == "annotation-threads":
-                return (
-                    {
-                        "resource_uri": uri_text,
-                        "thread": capabilities.research_items.get_annotation_thread(
-                            actor=actor, thread_id=resource_id
-                        ),
-                    },
-                    "get_annotation_thread",
-                )
-            if resource_kind == "research-outputs":
-                item = capabilities.research_items.get_item(
-                    actor=actor, item_id=resource_id
-                )
-                if item.kind.value == "annotation_thread":
-                    raise AppError(
-                        code="research_output_not_found",
-                        message="The resource identifies an annotation thread",
-                        kind=FailureKind.NOT_FOUND,
-                    )
-                return (
-                    {"resource_uri": uri_text, "research_output": item},
-                    "get_research_output",
-                )
-            raise AppError(
-                code="mcp_resource_not_found",
-                message="The Scholens resource kind is not supported",
-                kind=FailureKind.NOT_FOUND,
+    @register_read_resource()
+    async def read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
+        try:
+            return await _read_resource(uri)
+        except AppError as exc:
+            raise _resource_error(
+                exc,
+                diagnostic_recorder=diagnostic_recorder,
+            ) from exc
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.ERROR,
+                "mcp.resource.failed",
+                exc_info=exc,
+                error_code="mcp_resource_read_failed",
             )
-
-        value, continuation_tool = await asyncio.to_thread(executor.query, load)
-        return [
-            ReadResourceContents(
-                content=_resource_json(
-                    uri=uri_text,
-                    value=value,
-                    continuation_tool=continuation_tool,
+            raise _resource_error(
+                AppError(
+                    code="mcp_resource_read_failed",
+                    message="The Scholens resource could not be read",
+                    kind=FailureKind.INTERNAL,
                 ),
-                mime_type="application/json",
-            )
-        ]
+                diagnostic_recorder=diagnostic_recorder,
+            ) from exc
 
     manager = StreamableHTTPSessionManager(
         app=server,

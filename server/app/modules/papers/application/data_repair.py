@@ -2,9 +2,10 @@
 
 The MCP tooling audit found production annotation anchors whose offsets do
 not cover the quote and current completed job results whose ``s3_object_key``
-does not match the document. These commands repair only candidates that can
-be identified from durable local evidence, in bounded restartable batches.
-Every command is dry-run by default; ``--apply`` is the explicit opt-in.
+does not match the document, plus canonical text containing Unicode replacement
+characters. These commands repair only candidates that can be identified from
+durable local evidence, in bounded restartable batches. Every command is
+dry-run by default; ``--apply`` is the explicit opt-in.
 """
 
 from __future__ import annotations
@@ -23,6 +24,11 @@ CONTAMINATED_DOCUMENTS_REPROCESSED = OperationAction(
     "papers.contaminated_documents_reprocessed"
 )
 STUCK_PAPER_INGESTION_RECOVERED = OperationAction("papers.stuck_ingestion_recovered")
+UNICODE_REPLACEMENT_DOCUMENTS_REPROCESSED = OperationAction(
+    "papers.unicode_replacement_documents_reprocessed"
+)
+UNICODE_REPLACEMENT_REPAIR_REVISION = "unicode-replacement-v1"
+UNICODE_REPLACEMENT_REPAIR_MAX_BATCH_SIZE = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +44,11 @@ class ReprocessResult:
     candidates: int
     reprocessed: int
     sample_job_ids: tuple[str, ...] = ()
+    enqueued: int = 0
+    scanned: int = 0
+    skipped: int = 0
+    work_bytes: int = 0
+    sample_document_ids: tuple[str, ...] = ()
 
 
 class DataRepairGateway(Protocol):
@@ -49,6 +60,13 @@ class DataRepairGateway(Protocol):
     ) -> AnnotationOffsetRepairResult: ...
 
     def reprocess_contaminated_documents(
+        self,
+        *,
+        batch_size: int,
+        apply: bool,
+    ) -> ReprocessResult: ...
+
+    def reprocess_unicode_replacement_documents(
         self,
         *,
         batch_size: int,
@@ -130,6 +148,33 @@ class DataRepair:
             )
         return result
 
+    def reprocess_unicode_replacement_documents(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        batch_size: int,
+        apply: bool,
+    ) -> ReprocessResult:
+        self._require_admin(actor)
+        if not 1 <= batch_size <= UNICODE_REPLACEMENT_REPAIR_MAX_BATCH_SIZE:
+            raise ValueError(
+                "Unicode replacement repair batch size must be between 1 and "
+                f"{UNICODE_REPLACEMENT_REPAIR_MAX_BATCH_SIZE}"
+            )
+        result = self._gateway.reprocess_unicode_replacement_documents(
+            batch_size=batch_size,
+            apply=apply,
+        )
+        if apply and result.reprocessed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=UNICODE_REPLACEMENT_DOCUMENTS_REPROCESSED,
+                resources=(ResourceRef("jobs", UNICODE_REPLACEMENT_REPAIR_REVISION),),
+            )
+        return result
+
     def recover_stuck_paper_ingestion(
         self,
         *,
@@ -160,4 +205,6 @@ __all__ = [
     "DataRepair",
     "DataRepairGateway",
     "ReprocessResult",
+    "UNICODE_REPLACEMENT_REPAIR_MAX_BATCH_SIZE",
+    "UNICODE_REPLACEMENT_REPAIR_REVISION",
 ]

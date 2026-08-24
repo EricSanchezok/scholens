@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from app.bootstrap.adapters.annotation_summary_catalog import (
+    SqlAlchemyAnnotationSummaryCatalog,
+)
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
     AnnotationThreadSummaryResponse,
@@ -13,7 +16,14 @@ from app.modules.research.application.contracts import (
     UpdateAnnotationCommentRequest,
     UpdateAnnotationThreadRequest,
 )
-from app.modules.research.application.items import ResearchItemChange
+from app.modules.research.application.items import (
+    AnnotationThreadSummaryKeyset,
+    AnnotationThreadSummaryPage,
+    LegacyResearchDocumentPage,
+    ResearchItemChange,
+    ResearchItemPageAccess,
+)
+from app.modules.research.application.lifecycle import AnnotationThreadDeletionPlan
 from app.bootstrap.adapters.research_repository import (
     AnnotationThreadCreate,
     research_repository,
@@ -39,6 +49,30 @@ class SqlAlchemyResearchItemGateway:
         if not isinstance(item, ResearchItem):
             raise TypeError("expected ResearchItem")
         return research_repository.serialize(self._db, item=item, user_id=user_id)
+
+    def authorize_page(
+        self,
+        *,
+        user_id: int,
+        item_id: UUID,
+    ) -> ResearchItemPageAccess:
+        return research_repository.authorize_page(
+            self._db,
+            item_id=item_id,
+            user_id=user_id,
+        )
+
+    def lock_legacy_read(
+        self,
+        *,
+        user_id: int,
+        item_id: UUID,
+    ) -> ResearchItemPageAccess:
+        return research_repository.lock_legacy_read(
+            self._db,
+            item_id=item_id,
+            user_id=user_id,
+        )
 
     def get_item(self, *, user_id: int, item_id: UUID) -> ResearchItemResponse:
         return self._serialize(
@@ -83,6 +117,32 @@ class SqlAlchemyResearchItemGateway:
             )
         ]
 
+    def list_document_legacy(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        project_id: UUID | None,
+        query: str | None,
+        kinds: tuple[ResearchItemKind, ...],
+        limit: int,
+        maximum_payload_json_bytes: int,
+    ) -> LegacyResearchDocumentPage:
+        items, total_count = research_repository.list_document_legacy(
+            self._db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+            query=query,
+            kinds=kinds,
+            limit=limit,
+            maximum_payload_json_bytes=maximum_payload_json_bytes,
+        )
+        return LegacyResearchDocumentPage(
+            items=items,
+            total_count=total_count,
+        )
+
     def list_project(
         self,
         *,
@@ -118,6 +178,29 @@ class SqlAlchemyResearchItemGateway:
             status=status,
         )
 
+    def list_annotation_thread_summaries_page(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        project_id: UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+        after: AnnotationThreadSummaryKeyset | None,
+        limit: int,
+    ) -> AnnotationThreadSummaryPage:
+        return SqlAlchemyAnnotationSummaryCatalog(self._db).list_page(
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+            audience=audience,
+            mode=mode,
+            status=status,
+            after=after,
+            limit=limit,
+        )
+
     def get_annotation_thread(
         self,
         *,
@@ -130,6 +213,18 @@ class SqlAlchemyResearchItemGateway:
                 thread_id=thread_id,
                 user_id=user_id,
             ),
+            user_id=user_id,
+        )
+
+    def plan_annotation_thread_delete(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+    ) -> AnnotationThreadDeletionPlan:
+        return research_repository.plan_annotation_thread_delete(
+            self._db,
+            thread_id=thread_id,
             user_id=user_id,
         )
 
@@ -172,6 +267,28 @@ class SqlAlchemyResearchItemGateway:
         )
         return ResearchItemChange(
             value=self._serialize(item=result.value, user_id=user_id),
+            changed=result.changed,
+        )
+
+    def update_annotation_thread_bounded(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+        request: UpdateAnnotationThreadRequest,
+    ) -> ResearchItemChange[ResearchItemResponse]:
+        result = research_repository.update_annotation_thread(
+            self._db,
+            thread_id=thread_id,
+            user_id=user_id,
+            values=request.model_dump(exclude_unset=True),
+        )
+        return ResearchItemChange(
+            value=research_repository.serialize_annotation_mutation_response(
+                self._db,
+                item=result.value,
+                user_id=user_id,
+            ),
             changed=result.changed,
         )
 

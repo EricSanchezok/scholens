@@ -23,7 +23,7 @@ from app.shared.application import (
     RequestReference,
 )
 from app.shared.domain import AppError, FailureKind
-from app.tooling.contracts import ToolExecutionContext
+from app.tooling.contracts import ToolExecutionContext, ToolOutcome
 from app.tooling.workspace_contracts import (
     BatchPaperIngestionResponse,
     GetJobInput,
@@ -79,7 +79,9 @@ class _Jobs:
         self._ingestion = ingestion
         self.calls: list[tuple[UUID, ...]] = []
 
-    def get_many(self, *, actor: Actor, job_ids: tuple[UUID, ...]) -> list[JobResponse]:
+    def get_many_statuses(
+        self, *, actor: Actor, job_ids: tuple[UUID, ...]
+    ) -> list[JobResponse]:
         assert actor.id == 7
         self.calls.append(job_ids)
         now = datetime.now(UTC)
@@ -148,6 +150,10 @@ def _handler(ingestion: _Ingestion, jobs: _Jobs) -> WorkspaceToolHandlers:
     )
 
 
+def _finalize_outcome(outcome: ToolOutcome) -> ToolOutcome:
+    return outcome
+
+
 def test_wait_defaults_and_upper_bound_are_explicit() -> None:
     job_id = uuid4()
 
@@ -173,6 +179,7 @@ async def test_batch_ingestion_accepts_thirty_sources_with_one_batched_job_read(
         _context(),
         IngestPapersInput(sources=sources, wait_seconds=0),
         "batch-invocation",
+        _finalize_outcome,
     )
 
     payload = BatchPaperIngestionResponse.model_validate(outcome.payload)
@@ -213,6 +220,7 @@ async def test_batch_ingestion_preserves_partial_success() -> None:
             wait_seconds=0,
         ),
         "partial-batch",
+        _finalize_outcome,
     )
 
     payload = BatchPaperIngestionResponse.model_validate(outcome.payload)
@@ -222,6 +230,7 @@ async def test_batch_ingestion_preserves_partial_success() -> None:
     assert payload.items[1].model_dump(mode="json") == {
         "index": 1,
         "source": {"kind": "doi", "doi": "10.1000/bad"},
+        "source_truncated": False,
         "status": "rejected",
         "ingestion": None,
         "job": None,

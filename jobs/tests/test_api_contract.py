@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from src.app import app
 from src.celery_app import celery_app
-from src.tasks import upload_and_process_file
+from src.tasks import repair_pdf_text, upload_and_process_file
 
 
 def test_jobs_api_exposes_only_health() -> None:
@@ -41,5 +41,8 @@ def test_pdf_task_budget_reserves_time_after_mineru_retries() -> None:
     assert "upgrade_pdf_parser" not in task_routes
     assert upload_and_process_file.soft_time_limit == 1200
     assert upload_and_process_file.time_limit == 1260
+    assert task_routes["repair_pdf_text"]["queue"] == "document"
+    assert repair_pdf_text.soft_time_limit == 1200
+    assert repair_pdf_text.time_limit == 1260
     assert "--soft-time-limit" not in worker_script
     assert "--time-limit" not in worker_script

@@ -14,18 +14,16 @@ import psutil
 import requests
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-
-from src.schemas import (
-    DataTableSchema,
-    DataTableTaskRequest,
-    DocumentReflowRequest,
-    IntegrationUseEvent,
-    JobIntegrationCredentialResponse,
-    ZoteroJobCredentialResponse,
-    ResearchDataTableResult,
+from scholens_ai import EMBEDDING_MODEL_REVISION, embed_text
+from scholens_job_contracts import (
+    PDF_TEXT_REPAIR_TASK_NAME,
+    ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS,
+    PDFTextRepairTaskRequest,
+    require_storage_delete_batch,
 )
+
 from src.audio import generate_audio
-from src.reflow import generate_document_reflow
+from src.celery_app import celery_app
 from src.data_table_processor import construct_data_table
 from src.pdf.models import (
     MinerUCredential,
@@ -34,22 +32,33 @@ from src.pdf.models import (
     ParserTransientError,
 )
 from src.pdf.pipeline import process_pdf_file
-from src.celery_app import celery_app
+from src.reflow import generate_document_reflow
 from src.s3_service import s3_service
+from src.schemas import (
+    AudioOverviewRequest,
+    DataTableSchema,
+    DataTableTaskRequest,
+    DocumentReflowRequest,
+    IntegrationUseEvent,
+    JobIntegrationCredentialResponse,
+    ResearchDataTableResult,
+    ZoteroJobCredentialResponse,
+)
 from src.token_usage import collect_token_usage
 from src.utils import time_it
-from src.webhook_signing import post_signed_json
+from src.webhook_signing import CallbackPayloadTooLarge, post_signed_json
 from src.zotero import (
     ZoteroJobCredential,
     ZoteroJobError,
     discard_unsubmitted_items,
-    import_items as import_zotero_items,
-    sync_items as sync_zotero_items,
     validate_zotero_callback_payload,
 )
-from scholens_job_contracts import ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
-from scholens_ai import EMBEDDING_MODEL_REVISION, embed_text
-from src.schemas import AudioOverviewRequest
+from src.zotero import (
+    import_items as import_zotero_items,
+)
+from src.zotero import (
+    sync_items as sync_zotero_items,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -474,30 +483,19 @@ class _MinerUCredentialSession:
         return [self.event.model_dump(mode="json")] if self.event is not None else []
 
 
-@celery_app.task(
-    bind=True,
-    name="upload_and_process_file",
-    soft_time_limit=PDF_TASK_SOFT_TIME_LIMIT_SECONDS,
-    time_limit=PDF_TASK_TIME_LIMIT_SECONDS,
-)
-def upload_and_process_file(
-    self,
+def _process_pdf_task(
+    task: Task,
     s3_object_key: str,
     webhook_url: str,
     progress_url: str,
     claim_url: str,
     credential_url: str,
     skip_metadata_extraction: bool = False,
+    repair_revision: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Process a PDF file from S3 object key and send results to webhook.
-
-    When skip_metadata_extraction is True, the LLM metadata/summary step is
-    skipped and only deterministic outputs (preview, raw text, page offsets)
-    are produced. Used by the Zotero import path.
-    """
-    task_id = self.request.id
-    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
+    """Run the shared claimed PDF workflow behind ingestion and repair tasks."""
+    task_id = str(task.request.id)
+    if not _claim_job_with_retry(task, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
     progress: ProgressReporter | None = None
@@ -529,6 +527,7 @@ def upload_and_process_file(
                         task_id,
                         status_callback=progress.update,
                         skip_metadata_extraction=skip_metadata_extraction,
+                        repair_revision=repair_revision,
                         mineru_credential_loader=mineru.load,
                         mineru_outcome_callback=mineru.record,
                     )
@@ -580,9 +579,10 @@ def upload_and_process_file(
 
     except Exception as exc:
         failure_stage = progress.stage if progress is not None else "downloading"
+        explicit_error_code = getattr(exc, "error_code", None)
         failure_code = (
-            exc.error_code
-            if isinstance(exc, ParserError)
+            explicit_error_code
+            if isinstance(explicit_error_code, str)
             else _pdf_failure_code(failure_stage)
         )
         if mineru.credential is not None and mineru.event is None:
@@ -612,8 +612,91 @@ def upload_and_process_file(
             "usage_events": usage_events,
             "integration_events": mineru.events(),
         }
+        if isinstance(exc, CallbackPayloadTooLarge):
+            # The rejected success body can be large because of any one
+            # producer-controlled projection. Keep the diagnostic callback
+            # independently deliverable instead of replaying that projection.
+            failure_payload["usage_events"] = []
+            failure_payload["integration_events"] = []
         _deliver_webhook(webhook_url, failure_payload, task_id=task_id)
         raise
+
+
+@celery_app.task(
+    bind=True,
+    name="upload_and_process_file",
+    soft_time_limit=PDF_TASK_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=PDF_TASK_TIME_LIMIT_SECONDS,
+)
+def upload_and_process_file(
+    self,
+    s3_object_key: str,
+    webhook_url: str,
+    progress_url: str,
+    claim_url: str,
+    credential_url: str,
+    skip_metadata_extraction: bool = False,
+    repair_revision: str | None = None,
+) -> dict[str, Any]:
+    """Process ordinary ingestion and already-accepted legacy repair jobs."""
+    return _process_pdf_task(
+        self,
+        s3_object_key,
+        webhook_url,
+        progress_url,
+        claim_url,
+        credential_url,
+        skip_metadata_extraction=skip_metadata_extraction,
+        repair_revision=repair_revision,
+    )
+
+
+@celery_app.task(
+    bind=True,
+    name=PDF_TEXT_REPAIR_TASK_NAME,
+    soft_time_limit=PDF_TASK_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=PDF_TASK_TIME_LIMIT_SECONDS,
+)
+def repair_pdf_text(
+    self,
+    job_id: str,
+    document_id: str,
+    s3_key: str,
+    callback_url: str,
+    claim_url: str,
+    progress_url: str,
+    mineru_credential_url: str,
+    repair_revision: str,
+    source_job_id: str,
+    source_content_digest: str,
+    repair_attempt: int,
+) -> dict[str, Any]:
+    """Consume one targeted, metadata-free canonical-text repair attempt."""
+    request = PDFTextRepairTaskRequest(
+        job_id=job_id,
+        document_id=document_id,
+        s3_key=s3_key,
+        callback_url=callback_url,
+        claim_url=claim_url,
+        progress_url=progress_url,
+        mineru_credential_url=mineru_credential_url,
+        repair_revision=repair_revision,
+        source_job_id=source_job_id,
+        source_content_digest=source_content_digest,
+        repair_attempt=repair_attempt,
+    )
+    if request.job_id != str(self.request.id):
+        raise ValueError("pdf_text_repair_job_id_mismatch")
+    return _process_pdf_task(
+        self,
+        request.s3_key,
+        request.callback_url,
+        request.progress_url,
+        request.claim_url,
+        request.mineru_credential_url,
+        skip_metadata_extraction=True,
+        repair_revision=request.repair_revision,
+    )
 
 
 @celery_app.task(
@@ -874,16 +957,17 @@ def delete_storage_objects_task(
 ) -> dict[str, Any]:
     """Idempotently remove generated objects and acknowledge the durable job."""
     task_id = self.request.id
+    validated_keys = require_storage_delete_batch(object_keys)
     if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
-    failed = [key for key in object_keys if not s3_service.delete_file(key)]
+    failed = [key for key in validated_keys if not s3_service.delete_file(key)]
     if failed:
         logger.error(
             "storage.cleanup.failed",
             extra={"job_id": task_id, "failed_object_count": len(failed)},
         )
         raise RuntimeError("storage_delete_failed")
-    payload = {"task_id": task_id, "deleted_count": len(object_keys)}
+    payload = {"task_id": task_id, "deleted_count": len(validated_keys)}
     if not _deliver_webhook(callback_url, payload, task_id=task_id):
         raise RuntimeError("storage_delete_callback_failed")
     return {**payload, "status": "completed"}

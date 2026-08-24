@@ -22,6 +22,10 @@ from app.database.models import (
 )
 from app.shared.domain import AppError, FailureKind
 from app.modules.papers.infrastructure.repository import document_repository
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_CAPACITY_COLUMNS,
+    DocumentColumns,
+)
 from app.modules.billing.infrastructure.quotas import (
     require_library_document_capacity,
     require_project_document_capacity,
@@ -29,6 +33,7 @@ from app.modules.billing.infrastructure.quotas import (
 from app.modules.projects.infrastructure.access import (
     require_project_access,
     require_project_permission,
+    require_project_permission_for_update,
 )
 from app.shared.application import Actor
 from sqlalchemy import delete, func, or_, select, update
@@ -54,22 +59,13 @@ class ProjectDocumentRepository:
         user: Actor,
     ) -> tuple[list[ProjectPaper], int]:
         """Atomically attach new Library documents and report duplicate count."""
-        require_project_permission(
+        access = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=user.id,
             permission="manage_papers",
         )
-        # Serialize membership, transfer, and paper mutations on this Project.
-        project = db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if project is None:
-            raise AppError(
-                code="project_not_found",
-                message="Project not found",
-                kind=FailureKind.NOT_FOUND,
-            )
+        project = access.project
 
         unique_ids = list(dict.fromkeys(document_ids))
         existing_ids = set(
@@ -90,10 +86,14 @@ class ProjectDocumentRepository:
             db.scalars(
                 select(Document)
                 .join(LibraryPaper, LibraryPaper.document_id == Document.id)
+                .options(load_only(*DOCUMENT_CAPACITY_COLUMNS, raiseload=True))
                 .where(
                     Document.id.in_(new_ids),
                     LibraryPaper.user_id == user.id,
                 )
+                .order_by(Document.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             ).all()
         )
         found_ids = {document.id for document in documents}
@@ -190,121 +190,18 @@ class ProjectDocumentRepository:
         document_id: uuid.UUID,
         project_id: uuid.UUID,
         user: Actor,
+        document_columns: DocumentColumns,
     ) -> Document | None:
         require_project_access(db, project_id=project_id, user_id=user.id)
 
-        project_paper = db.scalars(
-            select(ProjectPaper).where(
+        return db.scalar(
+            select(Document)
+            .join(ProjectPaper, ProjectPaper.document_id == Document.id)
+            .options(load_only(*document_columns, raiseload=True))
+            .where(
                 ProjectPaper.project_id == project_id,
                 ProjectPaper.document_id == document_id,
             )
-        ).first()
-
-        if not project_paper:
-            return None
-
-        return db.get(Document, project_paper.document_id)
-
-    def get_all_papers_by_project_id(
-        self, db: Session, *, project_id: uuid.UUID, user: Actor
-    ) -> list[Document]:
-        require_project_access(db, project_id=project_id, user_id=user.id)
-
-        document_ids = db.scalars(
-            select(ProjectPaper.document_id).where(
-                ProjectPaper.project_id == project_id
-            )
-        ).all()
-        papers = db.scalars(select(Document).where(Document.id.in_(document_ids))).all()
-        return list(papers)
-
-    def get_papers_metadata_by_project_id(
-        self, db: Session, *, project_id: uuid.UUID, user: Actor
-    ) -> list[Document]:
-        """
-        Lightweight variant of get_all_papers_by_project_id for the project
-        papers listing endpoint.
-
-        Loads only the columns needed to render the list and to generate
-        presigned URLs, deliberately avoiding heavy columns such as
-        raw_content, ts_vector, summary, summary_citations and
-        page_offset_map. Those columns can be megabytes per row and were
-        previously fetched and discarded on every list request.
-        """
-        require_project_access(db, project_id=project_id, user_id=user.id)
-
-        papers = db.scalars(
-            select(Document)
-            .join(ProjectPaper, ProjectPaper.document_id == Document.id)
-            .where(ProjectPaper.project_id == project_id)
-            .options(
-                load_only(
-                    Document.title,
-                    Document.abstract,
-                    Document.authors,
-                    Document.institutions,
-                    Document.journal,
-                    Document.publisher,
-                    Document.doi,
-                    Document.publish_date,
-                    Document.created_at,
-                    Document.s3_object_key,
-                    Document.preview_s3_key,
-                    Document.size_bytes,
-                )
-            )
-        ).all()
-        return list(papers)
-
-    def get_library_document_ids(
-        self,
-        db: Session,
-        *,
-        document_ids: list[uuid.UUID],
-        user: Actor,
-    ) -> list[uuid.UUID]:
-        if not document_ids:
-            return []
-        return list(
-            db.scalars(
-                select(LibraryPaper.document_id).where(
-                    LibraryPaper.user_id == user.id,
-                    LibraryPaper.document_id.in_(document_ids),
-                )
-            ).all()
-        )
-
-    def get_project_document_ids_by_project_id(
-        self, db: Session, *, project_id: uuid.UUID, user: Actor
-    ) -> list[uuid.UUID]:
-        require_project_access(db, project_id=project_id, user_id=user.id)
-
-        return list(
-            db.scalars(
-                select(ProjectPaper.document_id).where(
-                    ProjectPaper.project_id == project_id
-                )
-            ).all()
-        )
-
-    def get_paper_count_by_project_id(
-        self, db: Session, *, project_id: uuid.UUID, user: Actor
-    ) -> int:
-        """Number of papers in a project. Returns 0 if the user has no access."""
-        require_project_permission(
-            db,
-            project_id=project_id,
-            user_id=user.id,
-            permission="manage_papers",
-        )
-
-        return int(
-            db.scalar(
-                select(func.count(ProjectPaper.id)).where(
-                    ProjectPaper.project_id == project_id
-                )
-            )
-            or 0
         )
 
     def remove_by_paper_and_project(
@@ -317,19 +214,30 @@ class ProjectDocumentRepository:
         origin_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
     ) -> ScheduledDocumentGc | None:
-        require_project_permission(
+        require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=user.id,
             permission="manage_papers",
         )
-
-        project_paper = db.scalars(
-            select(ProjectPaper).where(
+        locked_document_id = db.scalar(
+            select(Document.id).where(Document.id == document_id).with_for_update()
+        )
+        if locked_document_id is None:
+            raise AppError(
+                code="project_document_not_found",
+                message="Document not found in this Project",
+                kind=FailureKind.NOT_FOUND,
+            )
+        project_paper = db.scalar(
+            select(ProjectPaper)
+            .where(
                 ProjectPaper.project_id == project_id,
                 ProjectPaper.document_id == document_id,
             )
-        ).first()
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
 
         if project_paper is None:
             raise AppError(
@@ -412,6 +320,7 @@ class ProjectDocumentRepository:
             document_id=document_id,
             project_id=project_id,
             user=current_user,
+            document_columns=DOCUMENT_CAPACITY_COLUMNS,
         )
         if document is None:
             return ProjectLibraryAttachment(document=None, created=False)

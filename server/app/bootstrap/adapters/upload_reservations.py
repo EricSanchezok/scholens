@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -33,7 +35,15 @@ from app.modules.billing.infrastructure.quotas import (
     get_quota_user,
     get_user_entitlements,
 )
-from app.modules.projects.infrastructure.access import require_project_permission
+from app.modules.projects.infrastructure.access import (
+    require_project_permission_for_update,
+)
+from app.modules.projects.application.lifecycle import (
+    ProjectQuotaOwnerState,
+    ProjectQuotaTransferPlan,
+    ProjectQuotaTransferState,
+    ProjectReservationAssignment,
+)
 from app.modules.papers.application.upload_intent import resolve_add_to_library
 from app.shared.application import Actor
 from app.modules.jobs.infrastructure.repository import CreateJob, job_repository
@@ -294,13 +304,13 @@ def _reprice_active_reservations(
     return pricing
 
 
-def reassign_project_quota_owner(
+def prepare_project_quota_transfer(
     db: Session,
     *,
     project: Project,
     new_owner_id: int,
-) -> None:
-    """Validate a transfer and move every active reservation to the new owner.
+) -> ProjectQuotaTransferPlan:
+    """Validate and describe every quota mutation for an ownership transfer.
 
     The caller must hold a row lock on ``project``. Completed account usage is
     the unique document union; Project membership and pending associations are
@@ -375,6 +385,7 @@ def reassign_project_quota_owner(
         )
         for owner_id in owner_ids
     }
+    owner_states: list[ProjectQuotaOwnerState] = []
     for owner_id in owner_ids:
         documents = completed_by_owner[owner_id]
         pricing = pricing_by_owner[owner_id]
@@ -396,6 +407,17 @@ def reassign_project_quota_owner(
                 message="The transfer would exceed an owner's storage limit",
                 kind=FailureKind.CONFLICT,
             )
+        owner_states.append(
+            ProjectQuotaOwnerState(
+                owner_id=owner_id,
+                completed_document_count=len(documents),
+                completed_size_kb=completed_size_kb,
+                active_reference_count=active_count,
+                active_size_kb=active_size_kb,
+                paper_limit=limits[PAPER_UPLOAD_KEY],
+                storage_limit_kb=limits[KB_SIZE_KEY],
+            )
+        )
 
     pending_project_slots = sum(
         1
@@ -412,11 +434,12 @@ def reassign_project_quota_owner(
             kind=FailureKind.CONFLICT,
         )
 
-    assignments = {
+    pricing_assignments = {
         (reservation.id, role): (reference_count, size_kb)
         for pricing in pricing_by_owner.values()
         for reservation, _job, role, reference_count, size_kb in pricing
     }
+    planned_assignments: list[ProjectReservationAssignment] = []
     for reservation, job in active_rows:
         primary_owner_id, library_owner_id = _post_transfer_owners(
             reservation,
@@ -424,23 +447,135 @@ def reassign_project_quota_owner(
             new_owner_id=new_owner_id,
             project_id=project.id,
         )
+        current_reserved_reference_count = int(
+            reservation.reserved_reference_count or 0
+        )
+        current_reserved_size_kb = int(reservation.reserved_size_kb or 0)
+        current_library_reserved_reference_count = int(
+            reservation.library_reserved_reference_count or 0
+        )
+        current_library_reserved_size_kb = int(
+            reservation.library_reserved_size_kb or 0
+        )
+        reserved_reference_count = current_reserved_reference_count
+        reserved_size_kb = current_reserved_size_kb
+        library_reserved_reference_count = current_library_reserved_reference_count
+        library_reserved_size_kb = current_library_reserved_size_kb
         if primary_owner_id in owner_ids:
-            (
-                reservation.reserved_reference_count,
-                reservation.reserved_size_kb,
-            ) = assignments.get((reservation.id, "primary"), (0, 0))
+            reserved_reference_count, reserved_size_kb = pricing_assignments.get(
+                (reservation.id, "primary"), (0, 0)
+            )
         if library_owner_id in owner_ids:
             (
-                reservation.library_reserved_reference_count,
-                reservation.library_reserved_size_kb,
-            ) = assignments.get((reservation.id, "library"), (0, 0))
+                library_reserved_reference_count,
+                library_reserved_size_kb,
+            ) = pricing_assignments.get((reservation.id, "library"), (0, 0))
+        quota_owner_id = reservation.quota_owner_id
+        final_library_owner_id = reservation.library_quota_owner_id
         if job.project_id == project.id:
-            reservation.quota_owner_id = primary_owner_id
-            reservation.library_quota_owner_id = library_owner_id
+            quota_owner_id = primary_owner_id
+            final_library_owner_id = library_owner_id
             if library_owner_id is None:
-                reservation.library_reserved_reference_count = 0
-                reservation.library_reserved_size_kb = 0
+                library_reserved_reference_count = 0
+                library_reserved_size_kb = 0
+        planned_assignments.append(
+            ProjectReservationAssignment(
+                reservation_id=reservation.id,
+                job_status=job.status,
+                job_project_id=job.project_id,
+                job_document_id=job.document_id,
+                content_sha256=reservation.content_sha256,
+                current_quota_owner_id=reservation.quota_owner_id,
+                current_library_quota_owner_id=reservation.library_quota_owner_id,
+                current_reserved_reference_count=current_reserved_reference_count,
+                current_reserved_size_kb=current_reserved_size_kb,
+                current_library_reserved_reference_count=(
+                    current_library_reserved_reference_count
+                ),
+                current_library_reserved_size_kb=current_library_reserved_size_kb,
+                quota_owner_id=quota_owner_id,
+                library_quota_owner_id=final_library_owner_id,
+                reserved_reference_count=reserved_reference_count,
+                reserved_size_kb=reserved_size_kb,
+                library_reserved_reference_count=(library_reserved_reference_count),
+                library_reserved_size_kb=library_reserved_size_kb,
+            )
+        )
+    assignment_payload = [
+        assignment.model_dump(mode="json") for assignment in planned_assignments
+    ]
+    assignment_digest = hashlib.sha256(
+        json.dumps(
+            assignment_payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    return ProjectQuotaTransferPlan(
+        state=ProjectQuotaTransferState(
+            project_id=project.id,
+            old_owner_id=old_owner_id,
+            new_owner_id=new_owner_id,
+            new_owner_project_count=owned_project_count,
+            new_owner_project_limit=new_owner_limits[PROJECTS_KEY],
+            project_document_count=project_document_count,
+            pending_project_slot_count=pending_project_slots,
+            project_paper_limit=new_owner_limits[PROJECT_PAPERS_KEY],
+            active_reservation_count=len(planned_assignments),
+            owners=tuple(owner_states),
+            reservation_assignment_digest=assignment_digest,
+        ),
+        assignments=tuple(planned_assignments),
+    )
+
+
+def apply_project_quota_transfer(
+    db: Session,
+    *,
+    project: Project,
+    new_owner_id: int,
+    plan: ProjectQuotaTransferPlan,
+) -> None:
+    """Apply a quota plan prepared while the same account locks are held."""
+    if (
+        plan.state.project_id != project.id
+        or plan.state.old_owner_id != project.owner_id
+        or plan.state.new_owner_id != new_owner_id
+    ):
+        raise RuntimeError("project_quota_transfer_plan_mismatch")
+    for assignment in plan.assignments:
+        reservation = db.get(UploadReservation, assignment.reservation_id)
+        if reservation is None:
+            raise RuntimeError("project_quota_transfer_reservation_missing")
+        reservation.quota_owner_id = assignment.quota_owner_id
+        reservation.library_quota_owner_id = assignment.library_quota_owner_id
+        reservation.reserved_reference_count = assignment.reserved_reference_count
+        reservation.reserved_size_kb = assignment.reserved_size_kb
+        reservation.library_reserved_reference_count = (
+            assignment.library_reserved_reference_count
+        )
+        reservation.library_reserved_size_kb = assignment.library_reserved_size_kb
     db.flush()
+
+
+def reassign_project_quota_owner(
+    db: Session,
+    *,
+    project: Project,
+    new_owner_id: int,
+) -> None:
+    """Prepare and apply a transfer for non-confirming application callers."""
+    plan = prepare_project_quota_transfer(
+        db,
+        project=project,
+        new_owner_id=new_owner_id,
+    )
+    apply_project_quota_transfer(
+        db,
+        project=project,
+        new_owner_id=new_owner_id,
+        plan=plan,
+    )
 
 
 def reserve_upload(
@@ -478,21 +613,13 @@ def reserve_upload(
         owner_id = requester.id
         project = None
     else:
-        require_project_permission(
+        access = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=requester.id,
             permission="manage_papers",
         )
-        project = db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if project is None:
-            raise AppError(
-                code="project_not_found",
-                message="Project not found",
-                kind=FailureKind.NOT_FOUND,
-            )
+        project = access.project
         owner_id = project.owner_id
 
     # Library-side billing is credited to the requester only when they upload

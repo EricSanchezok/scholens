@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from collections.abc import Callable
 from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID
 
-from app.modules.jobs.application.contracts import (
-    JobClaimResponse,
-    JobFailureCallback,
-    IntegrationUseEventPayload,
-    TokenUsageEventPayload,
-)
+from pydantic import BaseModel, ValidationError
+
 from app.modules.jobs.application.actions import (
     JOB_COMPLETED,
     JOB_CREATED,
     JOB_FAILED,
+)
+from app.modules.jobs.application.contracts import (
+    IntegrationUseEventPayload,
+    JobClaimResponse,
+    JobFailureCallback,
+    TokenUsageEventPayload,
 )
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import (
@@ -25,10 +27,8 @@ from app.modules.operation_journal.domain import (
     ResourceRef,
 )
 from app.shared.application import Actor, OperationContext
-from app.shared.domain import JsonValue
-from app.shared.domain import AppError, FailureKind
+from app.shared.domain import AppError, FailureKind, JsonValue
 from app.shared.domain.enums import JobOperation, JobStatus
-from pydantic import BaseModel, ValidationError
 
 
 class JobLifecyclePort(Protocol):
@@ -140,7 +140,7 @@ type JobPostCommitAction = ReleaseJobConcurrency | SettleJobUsage | RecordJobTel
 @dataclass(frozen=True, slots=True)
 class JobHandlerResult:
     value: object
-    changes: tuple[OperationChange, ...] = ()
+    changes: Iterable[OperationChange] = ()
     post_commit: tuple[JobPostCommitAction, ...] = ()
 
 
@@ -316,19 +316,20 @@ class JobCallbacks:
         handler_result: JobHandlerResult,
     ) -> JobCompletionResult:
         after = self._lifecycle.status(job_id=job_id)
-        changes = list(handler_result.changes)
         terminal_action = _terminal_action(before=before, after=after)
-        if terminal_action is not None:
-            changes.append(
-                OperationChange(
+
+        def completion_changes() -> Iterator[OperationChange]:
+            yield from handler_result.changes
+            if terminal_action is not None:
+                yield OperationChange(
                     action=terminal_action,
                     resources=(ResourceRef("job", str(job_id)),),
                 )
-            )
-        self._journal.append_many(
+
+        self._journal.append_many_batched(
             actor=actor,
             operation=operation,
-            changes=changes,
+            changes=completion_changes(),
         )
         return JobCompletionResult(
             value=handler_result.value,

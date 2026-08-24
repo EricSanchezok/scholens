@@ -113,6 +113,83 @@ def require_project_permission(
     return access
 
 
+def _locked_project_access(
+    db: Session,
+    *,
+    project_id: uuid.UUID,
+    user_id: int,
+) -> ProjectAccess:
+    project = db.scalar(
+        select(Project)
+        .where(Project.id == project_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if project is None:
+        raise AppError(
+            code="project_not_found",
+            message="Project not found",
+            kind=FailureKind.NOT_FOUND,
+        )
+    if project.owner_id == user_id:
+        access = ProjectAccess(
+            project=project,
+            user_id=user_id,
+            is_owner=True,
+            collaborator=None,
+            permissions=ProjectPermissions.all(),
+        )
+    else:
+        collaborator = db.scalar(
+            select(ProjectCollaborator)
+            .where(
+                ProjectCollaborator.project_id == project_id,
+                ProjectCollaborator.user_id == user_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if collaborator is None:
+            raise AppError(
+                code="project_not_found",
+                message="Project not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        access = ProjectAccess(
+            project=project,
+            user_id=user_id,
+            is_owner=False,
+            collaborator=collaborator,
+            permissions=collaborator_permissions(collaborator),
+        )
+    return access
+
+
+def require_project_access_for_update(
+    db: Session,
+    *,
+    project_id: uuid.UUID,
+    user_id: int,
+) -> ProjectAccess:
+    """Re-authorize membership against locked, refreshed Project state."""
+
+    return _locked_project_access(db, project_id=project_id, user_id=user_id)
+
+
+def require_project_permission_for_update(
+    db: Session,
+    *,
+    project_id: uuid.UUID,
+    user_id: int,
+    permission: ProjectPermissionName,
+) -> ProjectAccess:
+    """Re-authorize one permission against locked Project membership state."""
+
+    access = _locked_project_access(db, project_id=project_id, user_id=user_id)
+    require_permission(access.facts, ProjectPermission(permission))
+    return access
+
+
 def collaborator_permissions(
     collaborator: ProjectCollaborator,
 ) -> ProjectPermissions:

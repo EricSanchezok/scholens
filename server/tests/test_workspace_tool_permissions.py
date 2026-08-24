@@ -40,10 +40,12 @@ from app.tooling import (
     ToolAccess,
     ToolExecutionContext,
     ToolCatalog,
+    ToolConfirmationPolicy,
     ToolDefinition,
     ToolDispatcher,
     ToolExecutionKind,
     ToolOutcome,
+    ToolOutcomeFinalizer,
     ToolProfile,
 )
 from app.tooling.workspace import (
@@ -74,6 +76,7 @@ async def _workflow_handler(
     _context: ToolExecutionContext,
     arguments: BaseModel,
     _invocation_key: str,
+    _finalize_outcome: ToolOutcomeFinalizer,
 ) -> ToolOutcome:
     parsed = RequiredInput.model_validate(arguments)
     return ToolOutcome(payload={"value": parsed.value})
@@ -353,6 +356,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
         WorkspacePermission.READ: {
             "search_scholens_knowledge",
             "get_paper",
+            "get_paper_page",
             "get_paper_content",
             "search_paper_content",
             "get_paper_citation",
@@ -364,15 +368,20 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
             "list_project_members",
             "get_library_summary",
             "list_library_papers",
+            "list_library_paper_summaries",
             "get_library_paper",
+            "get_library_paper_page",
             "list_library_tags",
             "list_annotation_threads",
             "get_annotation_thread",
+            "get_annotation_thread_page",
             "list_jobs",
             "get_job",
             "wait_for_jobs",
             "list_research_outputs",
+            "list_research_output_summaries",
             "get_research_output",
+            "get_research_output_page",
         },
         WorkspacePermission.WRITE: {
             "resolve_paper_citation",
@@ -439,6 +448,36 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
     }
     assert actual == expected
     assert set(definitions) == set().union(*expected.values())
+    assert {
+        definition.name
+        for definition in definitions.values()
+        if definition.confirmation_policy is ToolConfirmationPolicy.REQUIRED
+    } == {
+        "accept_project_invitation",
+        "cancel_paper_ingestion",
+        "create_project_invitation",
+        "delete_annotation_comment",
+        "delete_annotation_thread",
+        "delete_library_tag",
+        "delete_project",
+        "leave_project",
+        "remove_library_papers",
+        "remove_paper_from_project",
+        "remove_project_member",
+        "resend_project_invitation",
+        "revoke_project_invitation",
+        "share_library_paper",
+        "transfer_project_ownership",
+        "unshare_library_paper",
+        "update_project_member",
+    }
+    for name in (
+        "cancel_paper_ingestion",
+        "create_project_invitation",
+        "resend_project_invitation",
+    ):
+        assert definitions[name].execution is ToolExecutionKind.WORKFLOW
+        assert definitions[name].persist_result is False
 
     full_mcp_access = ToolAccess(
         profile_name=MCP_TOOL_PROFILE,

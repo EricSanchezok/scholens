@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_PDF_TEXT_RECTS = 200
+MAX_PERSISTED_POSITION_INTEGER = (1 << 31) - 1
 
 
 class PdfTextRect(BaseModel):
@@ -49,6 +50,7 @@ class PdfTextPageSegment(BaseModel):
 
     page_number: int = Field(
         ge=1,
+        le=MAX_PERSISTED_POSITION_INTEGER,
         description="One-based PDF page containing this rectangle segment.",
     )
     rects: list[PdfTextRect] = Field(
@@ -67,6 +69,7 @@ class PdfTextPosition(BaseModel):
     )
     page_number: int = Field(
         ge=1,
+        le=MAX_PERSISTED_POSITION_INTEGER,
         description="One-based PDF page containing the first supplied segment.",
     )
     rects: list[PdfTextRect] = Field(
@@ -113,15 +116,18 @@ class ParsedTextPosition(BaseModel):
     )
     start_offset: int = Field(
         ge=0,
+        le=MAX_PERSISTED_POSITION_INTEGER,
         description="Inclusive zero-based character offset in canonical parsed text.",
     )
     end_offset: int = Field(
         gt=0,
+        le=MAX_PERSISTED_POSITION_INTEGER,
         description="Exclusive zero-based character offset after the selected quote.",
     )
     page_number: int | None = Field(
         default=None,
         ge=1,
+        le=MAX_PERSISTED_POSITION_INTEGER,
         description="Optional one-based source page projection for the parsed-text span.",
     )
 

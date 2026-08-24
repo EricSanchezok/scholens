@@ -71,6 +71,9 @@ change what the accepted record decided.
 - [ADR 0037: Registry intake without a second UI system](./0037-registry-intake-without-a-second-ui-system.md)
 - [ADR 0038: Durable direct Conversation streaming](./0038-durable-direct-conversation-stream.md)
 - [ADR 0039: First-party research activity ledger](./0039-first-party-research-activity-ledger.md)
+- [ADR 0040: Bounded MCP public projections and lossless continuation](./0040-bounded-mcp-public-projections.md)
+- [ADR 0041: Versioned PDF text repair without destructive re-ingestion](./0041-versioned-pdf-text-repair.md)
+- [ADR 0042: Versioned migration for bounded MCP reads](./0042-versioned-mcp-bounded-read-migration.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

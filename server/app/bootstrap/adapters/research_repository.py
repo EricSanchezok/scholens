@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, cast as type_cast
 
 from app.database.models import (
     AnnotationComment,
@@ -16,7 +19,10 @@ from app.database.models import (
     CitationOutput,
     Conversation,
     ConversationScopeType,
+    Document,
+    ResearchAudioOverview,
     ResearchAudienceType,
+    ResearchDataTable,
     ResearchItem,
     ResearchItemKind,
     RoleType,
@@ -25,7 +31,6 @@ from app.shared.domain.enums import AnnotationAudienceFilter, AnnotationThreadMo
 from app.shared.domain import AppError, FailureKind
 from app.helpers.s3 import s3_service
 from app.modules.papers.infrastructure.access import (
-    ResolvedDocumentAccess,
     require_document_access,
 )
 from app.bootstrap.adapters.research_access import (
@@ -49,14 +54,31 @@ from app.modules.research.application.contracts import (
     ResearchItemCapabilities,
     ResearchItemResponse,
 )
+from app.modules.research.application.items import (
+    ResearchItemPageAccess,
+)
+from app.modules.research.application.lifecycle import (
+    AnnotationThreadDeletionPlan,
+    AnnotationThreadDeletionState,
+)
+from app.modules.research.application.legacy_outputs import (
+    LEGACY_RESEARCH_AUDIO_URL_JSON_UTF8_BYTES,
+    LEGACY_RESEARCH_COMMENT_FIXED_JSON_UTF8_BYTES,
+    LEGACY_RESEARCH_ITEM_FIXED_JSON_UTF8_BYTES,
+    LEGACY_RESEARCH_LIST_FIXED_JSON_UTF8_BYTES,
+    LegacyResearchListItemSize,
+    legacy_research_list_payload_json_utf8_upper_bound,
+    require_legacy_research_list_payload_budget,
+)
 from app.modules.research.application.positions import (
     ParsedTextPosition,
     ResearchPosition,
     position_columns,
 )
 from pydantic import TypeAdapter
-from sqlalchemy import Float, and_, cast, func, or_, select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import Float, Text, and_, case, cast, func, literal, or_, select
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
 
@@ -84,7 +106,344 @@ class ResearchItemWrite[T]:
     changed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _AnnotationSummaryRecord:
+    item: ResearchItem
+    comment_count: int
+    last_activity_at: datetime
+    has_foreign_replies: bool
+
+
 class ResearchRepository:
+    def lock_legacy_read(
+        self,
+        db: Session,
+        *,
+        item_id: uuid.UUID,
+        user_id: int,
+    ) -> ResearchItemPageAccess:
+        """Lock one visible item before a deprecated complete-object preflight."""
+
+        locked_id = db.scalar(
+            select(ResearchItem.id)
+            .where(
+                ResearchItem.id == item_id,
+                research_item_visible_to(user_id),
+            )
+            .with_for_update(of=ResearchItem)
+        )
+        if locked_id is None:
+            raise AppError(
+                code="research_item_not_found",
+                message="Research item not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return self.authorize_page(
+            db,
+            item_id=item_id,
+            user_id=user_id,
+            include_access_url=False,
+        )
+
+    def authorize_page(
+        self,
+        db: Session,
+        *,
+        item_id: uuid.UUID,
+        user_id: int,
+        include_access_url: bool = True,
+    ) -> ResearchItemPageAccess:
+        """Authorize a full read using bounded scalar revision and size facts."""
+
+        creator_revision = (
+            select(AuthUser.updated_at)
+            .where(AuthUser.id == ResearchItem.created_by_id)
+            .scalar_subquery()
+        )
+        creator_bytes = (
+            select(
+                self._octets(
+                    func.coalesce(
+                        func.nullif(func.btrim(AuthUser.display_name), ""),
+                        AuthUser.email,
+                        "",
+                    )
+                )
+            )
+            .where(AuthUser.id == ResearchItem.created_by_id)
+            .scalar_subquery()
+        )
+        resolved_user = aliased(AuthUser, name="page_resolved_user")
+        payload_digest = case(
+            (
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                func.md5(
+                    func.concat_ws(
+                        "|",
+                        func.md5(AnnotationThread.quote_text),
+                        func.md5(cast(AnnotationThread.position, Text)),
+                        AnnotationThread.color,
+                        AnnotationThread.role,
+                        AnnotationThread.status,
+                        cast(AnnotationThread.resolved_by_id, Text),
+                        cast(AnnotationThread.resolved_at, Text),
+                    )
+                ),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.CITATION.value,
+                func.md5(cast(CitationOutput.snapshot, Text)),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.AUDIO_OVERVIEW.value,
+                func.md5(
+                    func.concat_ws(
+                        "|",
+                        func.md5(func.coalesce(ResearchAudioOverview.title, "")),
+                        func.md5(ResearchAudioOverview.transcript),
+                        func.md5(cast(ResearchAudioOverview.citations, Text)),
+                        ResearchAudioOverview.s3_object_key,
+                        ResearchAudioOverview.voice_id,
+                        ResearchAudioOverview.model_version,
+                    )
+                ),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.DATA_TABLE.value,
+                func.md5(
+                    func.concat_ws(
+                        "|",
+                        func.md5(func.coalesce(ResearchDataTable.title, "")),
+                        func.md5(
+                            cast(func.array_to_json(ResearchDataTable.columns), Text)
+                        ),
+                        func.md5(cast(ResearchDataTable.rows, Text)),
+                        func.md5(cast(ResearchDataTable.citations, Text)),
+                        func.md5(cast(ResearchDataTable.row_failures, Text)),
+                    )
+                ),
+            ),
+            else_=None,
+        )
+        payload_json_utf8_bytes = case(
+            (
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                self._octets(cast(AnnotationThread.position, Text)),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.CITATION.value,
+                self._octets(cast(CitationOutput.snapshot, Text)),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.AUDIO_OVERVIEW.value,
+                self._octets(cast(ResearchAudioOverview.citations, Text)),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.DATA_TABLE.value,
+                self._octets(cast(func.array_to_json(ResearchDataTable.columns), Text))
+                + self._octets(cast(ResearchDataTable.rows, Text))
+                + self._octets(cast(ResearchDataTable.citations, Text))
+                + self._octets(cast(ResearchDataTable.row_failures, Text)),
+            ),
+            else_=0,
+        )
+        payload_string_utf8_bytes = case(
+            (
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                self._octets(AnnotationThread.quote_text),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.AUDIO_OVERVIEW.value,
+                self._octets(ResearchAudioOverview.title)
+                + self._octets(ResearchAudioOverview.transcript)
+                + self._octets(ResearchAudioOverview.s3_object_key)
+                + self._octets(ResearchAudioOverview.voice_id)
+                + self._octets(ResearchAudioOverview.model_version),
+            ),
+            (
+                ResearchItem.kind == ResearchItemKind.DATA_TABLE.value,
+                self._octets(ResearchDataTable.title),
+            ),
+            else_=0,
+        )
+        row = db.execute(
+            select(
+                ResearchItem.id.label("item_id"),
+                ResearchItem.kind,
+                ResearchItem.updated_at.label("item_updated_at"),
+                AnnotationThread.updated_at.label("annotation_updated_at"),
+                CitationOutput.updated_at.label("citation_updated_at"),
+                ResearchAudioOverview.updated_at.label("audio_updated_at"),
+                ResearchDataTable.updated_at.label("table_updated_at"),
+                payload_digest.label("payload_digest"),
+                payload_json_utf8_bytes.label("payload_json_utf8_bytes"),
+                payload_string_utf8_bytes.label("payload_string_utf8_bytes"),
+                creator_revision.label("creator_updated_at"),
+                creator_bytes.label("creator_utf8_bytes"),
+                resolved_user.updated_at.label("resolved_user_updated_at"),
+                self._octets(
+                    func.coalesce(
+                        func.nullif(func.btrim(resolved_user.display_name), ""),
+                        resolved_user.email,
+                        "",
+                    )
+                ).label("resolved_user_utf8_bytes"),
+                ResearchAudioOverview.s3_object_key.label("audio_object_key"),
+            )
+            .select_from(ResearchItem)
+            .outerjoin(
+                AnnotationThread,
+                AnnotationThread.research_item_id == ResearchItem.id,
+            )
+            .outerjoin(
+                CitationOutput,
+                CitationOutput.research_item_id == ResearchItem.id,
+            )
+            .outerjoin(
+                ResearchAudioOverview,
+                ResearchAudioOverview.research_item_id == ResearchItem.id,
+            )
+            .outerjoin(
+                ResearchDataTable,
+                ResearchDataTable.research_item_id == ResearchItem.id,
+            )
+            .outerjoin(
+                resolved_user,
+                resolved_user.id == AnnotationThread.resolved_by_id,
+            )
+            .where(
+                ResearchItem.id == item_id,
+                research_item_visible_to(user_id),
+            )
+        ).one_or_none()
+        if row is None or row.payload_digest is None:
+            raise AppError(
+                code="research_item_not_found",
+                message="Research item not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+
+        comment_count = 0
+        comment_utf8_bytes = 0
+        comment_digest = ""
+        comment_updated_at: datetime | None = None
+        if row.kind == ResearchItemKind.ANNOTATION_THREAD.value:
+            comment_creator = aliased(AuthUser, name="page_comment_creator")
+            comment_token = func.md5(
+                func.concat_ws(
+                    "|",
+                    cast(AnnotationComment.id, Text),
+                    cast(AnnotationComment.created_by_id, Text),
+                    cast(AnnotationComment.created_at, Text),
+                    cast(AnnotationComment.updated_at, Text),
+                    func.md5(AnnotationComment.content),
+                    cast(comment_creator.updated_at, Text),
+                )
+            )
+            comment_row: Any = db.execute(
+                select(
+                    func.count(AnnotationComment.id).label("comment_count"),
+                    func.coalesce(
+                        func.sum(self._octets(AnnotationComment.content)),
+                        0,
+                    ).label("content_utf8_bytes"),
+                    func.coalesce(
+                        func.sum(
+                            self._octets(
+                                func.coalesce(
+                                    func.nullif(
+                                        func.btrim(comment_creator.display_name), ""
+                                    ),
+                                    comment_creator.email,
+                                    "",
+                                )
+                            )
+                        ),
+                        0,
+                    ).label("creator_utf8_bytes"),
+                    func.max(AnnotationComment.updated_at).label("updated_at"),
+                    func.md5(
+                        func.coalesce(
+                            func.string_agg(
+                                comment_token,
+                                literal("").op("ORDER BY")(AnnotationComment.id),
+                            ),
+                            "",
+                        )
+                    ).label("revision_digest"),
+                )
+                .select_from(AnnotationComment)
+                .outerjoin(
+                    comment_creator,
+                    comment_creator.id == AnnotationComment.created_by_id,
+                )
+                .where(AnnotationComment.thread_id == item_id)
+            ).one()
+            comment_count = int(comment_row.comment_count)
+            comment_utf8_bytes = int(comment_row.content_utf8_bytes) + int(
+                comment_row.creator_utf8_bytes
+            )
+            comment_digest = str(comment_row.revision_digest)
+            comment_updated_at = comment_row.updated_at
+
+        revision = hashlib.sha256(
+            "|".join(
+                str(value) if value is not None else ""
+                for value in (
+                    row.item_updated_at,
+                    row.annotation_updated_at,
+                    row.citation_updated_at,
+                    row.audio_updated_at,
+                    row.table_updated_at,
+                    row.payload_digest,
+                    row.creator_updated_at,
+                    row.resolved_user_updated_at,
+                    comment_count,
+                    comment_updated_at,
+                    comment_digest,
+                )
+            ).encode("utf-8")
+        ).hexdigest()
+        raw_string_utf8_bytes = (
+            int(row.payload_string_utf8_bytes)
+            + int(row.creator_utf8_bytes)
+            + int(row.resolved_user_utf8_bytes)
+            + comment_utf8_bytes
+        )
+        serialized_json_utf8_bytes = int(row.payload_json_utf8_bytes)
+        retained_utf8_bytes = serialized_json_utf8_bytes + raw_string_utf8_bytes
+        return ResearchItemPageAccess(
+            item_id=row.item_id,
+            kind=ResearchItemKind(row.kind),
+            revision=revision,
+            durable_json_utf8_upper_bound=(
+                6 * retained_utf8_bytes + 2_048 * comment_count + 65_536
+            ),
+            legacy_payload_json_utf8_upper_bound=(
+                serialized_json_utf8_bytes
+                + 6 * raw_string_utf8_bytes
+                + LEGACY_RESEARCH_COMMENT_FIXED_JSON_UTF8_BYTES * comment_count
+                + LEGACY_RESEARCH_ITEM_FIXED_JSON_UTF8_BYTES
+                + (
+                    LEGACY_RESEARCH_AUDIO_URL_JSON_UTF8_BYTES
+                    if row.kind == ResearchItemKind.AUDIO_OVERVIEW.value
+                    else 0
+                )
+            ),
+            access_url=(
+                s3_service.generate_presigned_url(row.audio_object_key)
+                if include_access_url and row.audio_object_key is not None
+                else None
+            ),
+        )
+
+    @staticmethod
+    def _octets(value: object) -> ColumnElement[int]:
+        return type_cast(
+            ColumnElement[int],
+            func.coalesce(func.octet_length(value), 0),
+        )
+
     def require_visible(
         self,
         db: Session,
@@ -98,7 +457,9 @@ class ResearchRepository:
             research_item_visible_to(user_id),
         )
         if for_update:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
         item = db.scalar(statement)
         if item is None:
             raise AppError(
@@ -127,6 +488,77 @@ class ResearchRepository:
                 kind=FailureKind.NOT_FOUND,
             )
         return item
+
+    def plan_annotation_thread_delete(
+        self,
+        db: Session,
+        *,
+        thread_id: uuid.UUID,
+        user_id: int,
+    ) -> AnnotationThreadDeletionPlan:
+        item = self.require_creator_owned(
+            db,
+            item_id=thread_id,
+            user_id=user_id,
+            for_update=True,
+        )
+        if item.kind != ResearchItemKind.ANNOTATION_THREAD.value:
+            raise AppError(
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        thread_updated_at = db.scalar(
+            select(AnnotationThread.updated_at)
+            .where(AnnotationThread.research_item_id == thread_id)
+            .with_for_update()
+        )
+        if thread_updated_at is None:
+            raise AppError(
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+
+        revision = hashlib.sha256()
+        comment_count = 0
+        foreign_reply_count = 0
+        for comment_id, creator_id, updated_at in db.execute(
+            select(
+                AnnotationComment.id,
+                AnnotationComment.created_by_id,
+                AnnotationComment.updated_at,
+            )
+            .where(AnnotationComment.thread_id == thread_id)
+            .order_by(AnnotationComment.id)
+            .with_for_update()
+            .execution_options(yield_per=100)
+        ):
+            comment_count += 1
+            if creator_id != user_id:
+                foreign_reply_count += 1
+            for field in (comment_id, creator_id, updated_at):
+                encoded = ("" if field is None else str(field)).encode("utf-8")
+                revision.update(len(encoded).to_bytes(8, "big"))
+                revision.update(encoded)
+
+        if foreign_reply_count:
+            raise AppError(
+                code="annotation_thread_has_other_replies",
+                message="Resolve this thread to preserve other contributors' replies",
+                kind=FailureKind.CONFLICT,
+                details={"affected_reply_count": foreign_reply_count},
+            )
+        return AnnotationThreadDeletionPlan(
+            state=AnnotationThreadDeletionState(
+                thread_id=thread_id,
+                creator_id=user_id,
+                item_updated_at=item.updated_at,
+                thread_updated_at=thread_updated_at,
+                comment_count=comment_count,
+                comment_revision_digest=revision.hexdigest(),
+            )
+        )
 
     def require_creator_owned(
         self,
@@ -223,7 +655,202 @@ class ResearchRepository:
             statement = statement.where(ResearchItem.kind == kind.value)
         return list(db.scalars(statement).unique().all())
 
-    def list_annotation_summaries(
+    def list_document_legacy(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        user_id: int,
+        project_id: uuid.UUID | None,
+        query: str | None,
+        kinds: tuple[ResearchItemKind, ...],
+        limit: int,
+        maximum_payload_json_bytes: int,
+    ) -> tuple[list[ResearchItemResponse], int]:
+        """Preserve the historical paper branch without preflight bypasses.
+
+        The old branch searched the complete serialized item, so a query must
+        inspect every candidate. We first lock and size only scalar candidates;
+        complete relationships are loaded only when that entire legacy search
+        can fit the published result budget.
+        """
+
+        if not 1 <= limit <= 100:
+            raise ValueError("legacy Research-output limit must be between 1 and 100")
+        self._require_annotation_collection_access(
+            db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+        )
+        personal_filter = and_(
+            ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
+            ResearchItem.created_by_id == user_id,
+        )
+        audience_filter = (
+            personal_filter
+            if project_id is None
+            else or_(
+                personal_filter,
+                and_(
+                    ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                    ResearchItem.audience_project_id == project_id,
+                ),
+            )
+        )
+        scope_filter = or_(
+            and_(
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                ResearchItem.target_document_id == document_id,
+                audience_filter,
+            ),
+            and_(
+                ResearchItem.kind != ResearchItemKind.ANNOTATION_THREAD.value,
+                ResearchItem.audience_type == ResearchAudienceType.DOCUMENT.value,
+                ResearchItem.audience_document_id == document_id,
+            ),
+        )
+        filters = [scope_filter]
+        if kinds:
+            filters.append(ResearchItem.kind.in_([kind.value for kind in kinds]))
+
+        total_count = int(
+            db.scalar(select(func.count(ResearchItem.id)).where(*filters)) or 0
+        )
+        if query is not None:
+            minimum_payload_upper_bound = (
+                LEGACY_RESEARCH_LIST_FIXED_JSON_UTF8_BYTES
+                + total_count
+                * LegacyResearchListItemSize(
+                    item_json_utf8_upper_bound=(
+                        LEGACY_RESEARCH_ITEM_FIXED_JSON_UTF8_BYTES
+                    )
+                ).payload_json_utf8_upper_bound()
+            )
+            require_legacy_research_list_payload_budget(
+                payload_json_utf8_upper_bound=minimum_payload_upper_bound,
+                maximum_payload_json_bytes=maximum_payload_json_bytes,
+            )
+        id_statement = (
+            select(ResearchItem.id)
+            .where(*filters)
+            .order_by(ResearchItem.created_at.asc(), ResearchItem.id.asc())
+            .with_for_update(of=ResearchItem)
+        )
+        if query is None:
+            id_statement = id_statement.limit(limit)
+        item_ids = tuple(db.scalars(id_statement).all())
+        accesses = [
+            self.authorize_page(
+                db,
+                item_id=item_id,
+                user_id=user_id,
+                include_access_url=False,
+            )
+            for item_id in item_ids
+        ]
+        payload_upper_bound = legacy_research_list_payload_json_utf8_upper_bound(
+            LegacyResearchListItemSize(
+                item_json_utf8_upper_bound=(
+                    access.legacy_payload_json_utf8_upper_bound
+                    if access.legacy_payload_json_utf8_upper_bound is not None
+                    else access.durable_json_utf8_upper_bound
+                )
+            )
+            for access in accesses
+        )
+        require_legacy_research_list_payload_budget(
+            payload_json_utf8_upper_bound=payload_upper_bound,
+            maximum_payload_json_bytes=maximum_payload_json_bytes,
+        )
+
+        hydrated = list(
+            db.scalars(
+                select(ResearchItem)
+                .where(ResearchItem.id.in_(item_ids))
+                .options(
+                    joinedload(ResearchItem.created_by),
+                    joinedload(ResearchItem.citation),
+                    joinedload(ResearchItem.audio_overview),
+                    joinedload(ResearchItem.data_table),
+                    joinedload(ResearchItem.annotation_thread).joinedload(
+                        AnnotationThread.resolved_by
+                    ),
+                    joinedload(ResearchItem.annotation_thread)
+                    .selectinload(AnnotationThread.comments)
+                    .joinedload(AnnotationComment.created_by),
+                )
+            )
+            .unique()
+            .all()
+        )
+        by_id = {item.id: item for item in hydrated}
+        if set(by_id) != set(item_ids):
+            raise RuntimeError("legacy_research_output_snapshot_incomplete")
+        responses = [
+            self.serialize(db, item=by_id[item_id], user_id=user_id)
+            for item_id in item_ids
+        ]
+        for expected in accesses:
+            current = self.authorize_page(
+                db,
+                item_id=expected.item_id,
+                user_id=user_id,
+                include_access_url=False,
+            )
+            if current.revision != expected.revision:
+                raise AppError(
+                    code="research_output_snapshot_changed",
+                    message="A research output changed while the page was prepared",
+                    kind=FailureKind.CONFLICT,
+                )
+        if query is not None:
+            folded_query = query.casefold()
+            responses = [
+                item
+                for item in responses
+                if folded_query
+                in json.dumps(
+                    item.model_dump(mode="json"),
+                    ensure_ascii=False,
+                ).casefold()
+            ]
+            total_count = len(responses)
+            responses = responses[:limit]
+        return responses, total_count
+
+    @staticmethod
+    def _require_annotation_collection_access(
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        user_id: int,
+        project_id: uuid.UUID | None,
+    ) -> None:
+        require_document_access(db, document_id=document_id, user_id=user_id)
+        if project_id is None:
+            return
+
+        from app.modules.projects.infrastructure.access import require_project_access
+        from app.modules.projects.infrastructure.models import ProjectPaper
+
+        require_project_access(db, project_id=project_id, user_id=user_id)
+        if (
+            db.scalar(
+                select(ProjectPaper.id).where(
+                    ProjectPaper.project_id == project_id,
+                    ProjectPaper.document_id == document_id,
+                )
+            )
+            is None
+        ):
+            raise AppError(
+                code="project_document_not_found",
+                message="Document not found in this Project",
+                kind=FailureKind.NOT_FOUND,
+            )
+
+    def _list_annotation_summary_records(
         self,
         db: Session,
         *,
@@ -233,29 +860,13 @@ class ResearchRepository:
         audience: AnnotationAudienceFilter | None,
         mode: AnnotationThreadMode | None,
         status: AnnotationThreadStatus,
-    ) -> list[AnnotationThreadSummaryResponse]:
-        require_document_access(db, document_id=document_id, user_id=user_id)
-        if project_id is not None:
-            from app.modules.projects.infrastructure.access import (
-                require_project_access,
-            )
-            from app.modules.projects.infrastructure.models import ProjectPaper
-
-            require_project_access(db, project_id=project_id, user_id=user_id)
-            if (
-                db.scalar(
-                    select(ProjectPaper.id).where(
-                        ProjectPaper.project_id == project_id,
-                        ProjectPaper.document_id == document_id,
-                    )
-                )
-                is None
-            ):
-                raise AppError(
-                    code="project_document_not_found",
-                    message="Document not found in this Project",
-                    kind=FailureKind.NOT_FOUND,
-                )
+    ) -> list[_AnnotationSummaryRecord]:
+        self._require_annotation_collection_access(
+            db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+        )
 
         personal_filter = and_(
             ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
@@ -351,12 +962,9 @@ class ResearchRepository:
                 ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
                 comment_count > 0,
             )
-
         return [
-            self.serialize_annotation_summary(
-                db,
+            _AnnotationSummaryRecord(
                 item=item,
-                user_id=user_id,
                 comment_count=int(count),
                 last_activity_at=last_activity_at_value,
                 has_foreign_replies=int(foreign_count) > 0,
@@ -365,6 +973,51 @@ class ResearchRepository:
                 statement
             ).unique()
         ]
+
+    def _serialize_annotation_summary_records(
+        self,
+        db: Session,
+        *,
+        records: list[_AnnotationSummaryRecord],
+        user_id: int,
+    ) -> list[AnnotationThreadSummaryResponse]:
+        return [
+            self.serialize_annotation_summary(
+                db,
+                item=record.item,
+                user_id=user_id,
+                comment_count=record.comment_count,
+                last_activity_at=record.last_activity_at,
+                has_foreign_replies=record.has_foreign_replies,
+            )
+            for record in records
+        ]
+
+    def list_annotation_summaries(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        user_id: int,
+        project_id: uuid.UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]:
+        records = self._list_annotation_summary_records(
+            db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+            audience=audience,
+            mode=mode,
+            status=status,
+        )
+        return self._serialize_annotation_summary_records(
+            db,
+            records=records,
+            user_id=user_id,
+        )
 
     def list_for_project(
         self,
@@ -404,32 +1057,61 @@ class ResearchRepository:
         create: AnnotationThreadCreate,
         refresh_result: bool = True,
     ) -> ResearchItem:
-        access = require_document_access(
+        require_document_access(
             db,
             document_id=document_id,
             user_id=user_id,
         )
-        self._validate_quote_position(access, create)
         if create.audience_type not in {
             ResearchAudienceType.PERSONAL,
             ResearchAudienceType.PROJECT,
         }:
             raise ValueError("annotation audience must be personal or project")
+        audience_project_id = (
+            create.audience_project_id
+            if create.audience_type is ResearchAudienceType.PROJECT
+            else None
+        )
         if create.audience_type is ResearchAudienceType.PROJECT:
             from app.modules.projects.infrastructure.access import (
-                require_project_access,
+                require_project_access_for_update,
             )
+
+            if audience_project_id is None:
+                raise ValueError("project annotation requires audience_project_id")
+            require_project_access_for_update(
+                db, project_id=audience_project_id, user_id=user_id
+            )
+
+        # Project-scoped creates lock Project then Document. Personal creates and
+        # text-repair/removal workflows lock only Document, so all overlapping
+        # mutation paths share a single acyclic lock order.
+        locked_document = db.scalar(
+            select(Document)
+            .where(Document.id == document_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if locked_document is None:
+            raise AppError(
+                code="paper_not_found",
+                message="Paper not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        require_document_access(
+            db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=audience_project_id,
+        )
+        self._validate_quote_position(locked_document, create)
+        if audience_project_id is not None:
             from app.modules.projects.infrastructure.models import ProjectPaper
 
-            if create.audience_project_id is None:
-                raise ValueError("project annotation requires audience_project_id")
-            require_project_access(
-                db, project_id=create.audience_project_id, user_id=user_id
-            )
             if (
                 db.scalar(
                     select(ProjectPaper.id).where(
-                        ProjectPaper.project_id == create.audience_project_id,
+                        ProjectPaper.project_id == audience_project_id,
                         ProjectPaper.document_id == document_id,
                     )
                 )
@@ -481,7 +1163,7 @@ class ResearchRepository:
 
     @staticmethod
     def _validate_quote_position(
-        access: ResolvedDocumentAccess,
+        document: Document,
         create: AnnotationThreadCreate,
     ) -> None:
         """Reject parsed-text anchors whose window does not cover the quote.
@@ -499,7 +1181,7 @@ class ResearchRepository:
         quote = create.quote_text
         if not quote:
             return
-        raw_content = access.document.raw_content
+        raw_content = document.raw_content
         if not raw_content:
             raise AppError(
                 code="annotation_content_unavailable",
@@ -747,7 +1429,12 @@ class ResearchRepository:
         content_role: RoleType,
         refresh_result: bool = True,
     ) -> AnnotationComment:
-        item = self.require_visible(db, item_id=thread_id, user_id=user_id)
+        item = self.require_visible(
+            db,
+            item_id=thread_id,
+            user_id=user_id,
+            for_update=True,
+        )
         if item.kind != ResearchItemKind.ANNOTATION_THREAD.value:
             raise AppError(
                 code="annotation_thread_not_found",
@@ -761,9 +1448,15 @@ class ResearchRepository:
                 message="This thread is read-only until scope access is restored",
                 kind=FailureKind.CONFLICT,
             )
-        if item.annotation_thread is None:
+        thread = db.scalar(
+            select(AnnotationThread)
+            .where(AnnotationThread.research_item_id == thread_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if thread is None:
             raise RuntimeError("annotation_item_without_thread")
-        if item.annotation_thread.status == "resolved":
+        if thread.status == "resolved":
             raise AppError(
                 code="annotation_thread_resolved",
                 message="Reopen this thread before replying",
@@ -804,7 +1497,40 @@ class ResearchRepository:
             )
         )
         if for_update:
-            statement = statement.with_for_update()
+            thread_id = db.scalar(
+                select(AnnotationComment.thread_id)
+                .join(
+                    ResearchItem,
+                    ResearchItem.id == AnnotationComment.thread_id,
+                )
+                .where(
+                    AnnotationComment.id == comment_id,
+                    AnnotationComment.created_by_id == user_id,
+                    research_item_visible_to(user_id),
+                )
+            )
+            if thread_id is None:
+                raise AppError(
+                    code="annotation_comment_not_found",
+                    message="Annotation comment not found",
+                    kind=FailureKind.NOT_FOUND,
+                )
+            self.require_visible(
+                db,
+                item_id=thread_id,
+                user_id=user_id,
+                for_update=True,
+            )
+            statement = (
+                select(AnnotationComment)
+                .where(
+                    AnnotationComment.id == comment_id,
+                    AnnotationComment.thread_id == thread_id,
+                    AnnotationComment.created_by_id == user_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
         comment = db.scalar(statement)
         if comment is None:
             raise AppError(
@@ -867,7 +1593,15 @@ class ResearchRepository:
                     kind=FailureKind.PERMISSION_DENIED,
                 )
             next_status = getattr(status, "value", status)
-            if next_status == "resolved" and not item.annotation_thread.comments:
+            if (
+                next_status == "resolved"
+                and db.scalar(
+                    select(AnnotationComment.id)
+                    .where(AnnotationComment.thread_id == thread_id)
+                    .limit(1)
+                )
+                is None
+            ):
                 raise AppError(
                     code="annotation_thread_has_no_discussion",
                     message="A commentless mark is deleted instead of resolved",
@@ -888,6 +1622,61 @@ class ResearchRepository:
         db.flush()
         db.refresh(item)
         return ResearchItemWrite(value=item, changed=True)
+
+    def serialize_annotation_mutation_response(
+        self,
+        db: Session,
+        *,
+        item: ResearchItem,
+        user_id: int,
+    ) -> ResearchItemResponse:
+        """Build an exact mutation receipt without loading comment bodies."""
+
+        stats = db.execute(
+            select(
+                func.count(AnnotationComment.id).label("comment_count"),
+                func.max(AnnotationComment.updated_at).label("last_activity_at"),
+                func.count(AnnotationComment.id)
+                .filter(AnnotationComment.created_by_id.is_distinct_from(user_id))
+                .label("foreign_reply_count"),
+            ).where(AnnotationComment.thread_id == item.id)
+        ).one()
+        summary = self.serialize_annotation_summary(
+            db,
+            item=item,
+            user_id=user_id,
+            comment_count=int(stats.comment_count),
+            last_activity_at=stats.last_activity_at or item.created_at,
+            has_foreign_replies=bool(stats.foreign_reply_count),
+            include_comments=False,
+        )
+        return ResearchItemResponse(
+            id=summary.id,
+            kind=ResearchItemKind.ANNOTATION_THREAD,
+            audience=summary.audience,
+            target_document_id=summary.target_document_id,
+            created_by=summary.created_by,
+            created_at=summary.created_at,
+            updated_at=item.updated_at,
+            capabilities=ResearchItemCapabilities(
+                edit=summary.capabilities.recolor,
+                delete=summary.capabilities.delete,
+            ),
+            annotation_thread=AnnotationThreadContent(
+                quote_text=summary.quote_text,
+                position=summary.position,
+                color=summary.color,
+                role=summary.role,
+                mode=summary.mode,
+                comment_count=summary.comment_count,
+                last_activity_at=summary.last_activity_at,
+                status=summary.status,
+                resolved_by=summary.resolved_by,
+                resolved_at=summary.resolved_at,
+                capabilities=summary.capabilities,
+                comments=list(summary.comments),
+            ),
+        )
 
     def update_comment(
         self,
@@ -1140,6 +1929,7 @@ class ResearchRepository:
         comment_count: int,
         last_activity_at: datetime,
         has_foreign_replies: bool,
+        include_comments: bool = True,
     ) -> AnnotationThreadSummaryResponse:
         if item.annotation_thread is None or item.target_document_id is None:
             raise RuntimeError("annotation_summary_without_thread")
@@ -1205,14 +1995,18 @@ class ResearchRepository:
                 reopen=access.can_resolve and thread.status == "resolved",
                 delete=can_delete,
             ),
-            comments=[
-                self.serialize_comment(
-                    comment,
-                    user_id=user_id,
-                    has_audience_access=access.has_audience_access,
-                )
-                for comment in thread.comments
-            ],
+            comments=(
+                [
+                    self.serialize_comment(
+                        comment,
+                        user_id=user_id,
+                        has_audience_access=access.has_audience_access,
+                    )
+                    for comment in thread.comments
+                ]
+                if include_comments
+                else []
+            ),
         )
 
     @staticmethod

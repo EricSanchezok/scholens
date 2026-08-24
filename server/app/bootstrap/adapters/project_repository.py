@@ -3,40 +3,57 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session, joinedload
+
+from app.bootstrap.adapters.project_lifecycle import (
+    apply_project_deletion,
+    inspect_project_deletion,
+    remove_project_papers_and_schedule_gc,
+    schedule_project_storage_cleanup,
+)
+from app.bootstrap.adapters.storage_cleanup import iter_created_cleanup_job_ids
+from app.bootstrap.adapters.upload_reservations import (
+    apply_project_quota_transfer,
+    prepare_project_quota_transfer,
+)
 from app.database.models import (
     AuthUser,
+    JobOperation,
     Project,
     ProjectCollaborator,
     ProjectInvitation,
 )
-from app.shared.domain import AppError, FailureKind
+from app.modules.projects.application.contracts import ProjectPermissionSet
+from app.modules.projects.application.lifecycle import (
+    PendingProjectInvitationState,
+    ProjectDeletionPlan,
+    ProjectInvitationCreationPlan,
+    ProjectInvitationCreationState,
+    ProjectOwnershipTransferPlan,
+    ProjectOwnershipTransferState,
+)
+from app.modules.projects.domain import (
+    ProjectPermissions,
+    require_grant_subset,
+    require_member_can_leave,
+    require_member_management_target,
+    require_member_permission_scope,
+)
 from app.modules.projects.infrastructure.access import (
     ProjectAccess,
     collaborator_permissions,
     get_project_access,
     require_project_access,
+    require_project_access_for_update,
     require_project_permission,
+    require_project_permission_for_update,
 )
-from app.modules.projects.application.contracts import ProjectPermissionSet
-from app.modules.projects.domain import (
-    ProjectPermissions,
-    is_distinct_non_owner_member,
-    require_grant_subset,
-    require_member_can_leave,
-)
-from app.bootstrap.adapters.project_lifecycle import (
-    schedule_orphan_documents,
-    prepare_project_deletion,
-    schedule_project_storage_cleanup,
-)
-from app.bootstrap.adapters.upload_reservations import (
-    reassign_project_quota_owner,
-)
-from sqlalchemy import or_, select
-from sqlalchemy.orm import Session, joinedload
+from app.shared.domain import AppError, FailureKind
 
 INVITATION_TTL = timedelta(days=7)
 
@@ -61,7 +78,8 @@ class UpdatedProjectCollaborator:
 
 @dataclass(frozen=True, slots=True)
 class ProjectDeletionJobs:
-    created_job_ids: tuple[uuid.UUID, ...]
+    created_job_count: int
+    created_job_ids: Iterator[uuid.UUID]
 
 
 def _normalized_email(email: str) -> str:
@@ -132,7 +150,7 @@ class ProjectRepository:
         user_id: int,
         changes: dict[str, object],
     ) -> UpdatedProject:
-        access = require_project_permission(
+        access = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=user_id,
@@ -147,6 +165,21 @@ class ProjectRepository:
         db.refresh(access.project)
         return UpdatedProject(project=access.project, changed=changed)
 
+    def plan_delete(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        user_id: int,
+    ) -> ProjectDeletionPlan:
+        access = require_project_permission_for_update(
+            db,
+            project_id=project_id,
+            user_id=user_id,
+            permission="owner",
+        )
+        return inspect_project_deletion(db, project=access.project)
+
     def delete(
         self,
         db: Session,
@@ -155,46 +188,49 @@ class ProjectRepository:
         user_id: int,
         origin_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
+        plan: ProjectDeletionPlan | None = None,
     ) -> ProjectDeletionJobs:
-        require_project_permission(
-            db,
-            project_id=project_id,
-            user_id=user_id,
-            permission="owner",
-        )
-        project = db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if project is None:
+        if plan is None:
+            plan = self.plan_delete(
+                db,
+                project_id=project_id,
+                user_id=user_id,
+            )
+        project = db.get(Project, project_id)
+        if project is None or plan.state.owner_id != user_id:
             raise AppError(
                 code="project_not_found",
                 message="Project not found",
                 kind=FailureKind.NOT_FOUND,
             )
-        plan = prepare_project_deletion(db, project=project)
-        db.delete(project)
-        db.flush()
-        document_gc = schedule_orphan_documents(
-            db,
-            plan=plan,
-            origin_operation_id=origin_operation_id,
-            correlation_id=correlation_id,
-        )
+        # Read Project-owned object keys while the locked Project and its
+        # Research rows still exist. The producer yields unique sorted keys, so
+        # storage batch ordinals and digests are stable across retries.
         storage_cleanup = schedule_project_storage_cleanup(
             db,
             project_id=project_id,
-            plan=plan,
             origin_operation_id=origin_operation_id,
             correlation_id=correlation_id,
         )
+        document_gc = remove_project_papers_and_schedule_gc(
+            db,
+            project_id=project_id,
+            origin_operation_id=origin_operation_id,
+            correlation_id=correlation_id,
+        )
+        apply_project_deletion(db, project=project, plan=plan)
+        db.delete(project)
         db.flush()
-        created_job_ids = [
-            scheduled.job_id for scheduled in document_gc if scheduled.created
-        ]
-        if storage_cleanup is not None and storage_cleanup.created:
-            created_job_ids.append(storage_cleanup.job_id)
+        created_job_count = document_gc.created_job_count
+        if storage_cleanup is not None:
+            created_job_count += storage_cleanup.created_job_count
         return ProjectDeletionJobs(
-            created_job_ids=tuple(dict.fromkeys(created_job_ids)),
+            created_job_count=created_job_count,
+            created_job_ids=iter_created_cleanup_job_ids(
+                db,
+                origin_operation_id=origin_operation_id,
+                operations=(JobOperation.DOCUMENT_GC, JobOperation.STORAGE_DELETE),
+            ),
         )
 
     def list_collaborators(
@@ -220,27 +256,24 @@ class ProjectRepository:
         target_user_id: int,
         requested: ProjectPermissionSet,
     ) -> UpdatedProjectCollaborator:
-        actor = require_project_permission(
+        actor = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=actor_id,
             permission="manage_collaborators",
         )
-        if not is_distinct_non_owner_member(
-            actor_id=actor_id,
+        require_member_management_target(
+            actor.facts,
             target_user_id=target_user_id,
-            owner_id=actor.project.owner_id,
-        ):
-            raise AppError(
-                code="project_collaborator_not_manageable",
-                message="This Project collaborator cannot be modified",
-                kind=FailureKind.CONFLICT,
-            )
+        )
         target = db.scalar(
-            select(ProjectCollaborator).where(
+            select(ProjectCollaborator)
+            .where(
                 ProjectCollaborator.project_id == project_id,
                 ProjectCollaborator.user_id == target_user_id,
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if target is None:
             raise AppError(
@@ -252,12 +285,10 @@ class ProjectRepository:
         requested_permissions = _permission_set(requested)
         current_permissions = collaborator_permissions(target)
         require_grant_subset(actor.facts, requested_permissions)
-        if not actor.is_owner and not actor.permissions.contains(current_permissions):
-            raise AppError(
-                code="project_collaborator_not_manageable",
-                message="You cannot modify a collaborator with permissions you do not have",
-                kind=FailureKind.PERMISSION_DENIED,
-            )
+        require_member_permission_scope(
+            actor.facts,
+            target_permissions=current_permissions,
+        )
 
         changed = (
             target.can_edit_project != requested.edit_project
@@ -283,27 +314,24 @@ class ProjectRepository:
         actor_id: int,
         target_user_id: int,
     ) -> None:
-        actor = require_project_permission(
+        actor = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=actor_id,
             permission="manage_collaborators",
         )
-        if not is_distinct_non_owner_member(
-            actor_id=actor_id,
+        require_member_management_target(
+            actor.facts,
             target_user_id=target_user_id,
-            owner_id=actor.project.owner_id,
-        ):
-            raise AppError(
-                code="project_collaborator_not_manageable",
-                message="This Project collaborator cannot be removed",
-                kind=FailureKind.CONFLICT,
-            )
+        )
         target = db.scalar(
-            select(ProjectCollaborator).where(
+            select(ProjectCollaborator)
+            .where(
                 ProjectCollaborator.project_id == project_id,
                 ProjectCollaborator.user_id == target_user_id,
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if target is None:
             raise AppError(
@@ -311,19 +339,19 @@ class ProjectRepository:
                 message="Project collaborator not found",
                 kind=FailureKind.NOT_FOUND,
             )
-        if not actor.is_owner and not actor.permissions.contains(
-            collaborator_permissions(target)
-        ):
-            raise AppError(
-                code="project_collaborator_not_manageable",
-                message="You cannot remove a collaborator with permissions you do not have",
-                kind=FailureKind.PERMISSION_DENIED,
-            )
+        require_member_permission_scope(
+            actor.facts,
+            target_permissions=collaborator_permissions(target),
+        )
         db.delete(target)
         db.flush()
 
     def leave(self, db: Session, *, project_id: uuid.UUID, user_id: int) -> None:
-        access = require_project_access(db, project_id=project_id, user_id=user_id)
+        access = require_project_access_for_update(
+            db,
+            project_id=project_id,
+            user_id=user_id,
+        )
         require_member_can_leave(
             user_id=user_id,
             owner_id=access.project.owner_id,
@@ -333,34 +361,29 @@ class ProjectRepository:
         db.delete(access.collaborator)
         db.flush()
 
-    def transfer(
+    def plan_transfer(
         self,
         db: Session,
         *,
         project_id: uuid.UUID,
         owner_id: int,
         new_owner_id: int,
-    ) -> Project:
-        require_project_permission(
+    ) -> ProjectOwnershipTransferPlan:
+        access = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=owner_id,
             permission="owner",
         )
-        project = db.scalar(
-            select(Project).where(Project.id == project_id).with_for_update()
-        )
-        if project is None:
-            raise AppError(
-                code="project_not_found",
-                message="Project not found",
-                kind=FailureKind.NOT_FOUND,
-            )
+        project = access.project
         new_owner_membership = db.scalar(
-            select(ProjectCollaborator).where(
+            select(ProjectCollaborator)
+            .where(
                 ProjectCollaborator.project_id == project_id,
                 ProjectCollaborator.user_id == new_owner_id,
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if new_owner_membership is None:
             raise AppError(
@@ -368,11 +391,72 @@ class ProjectRepository:
                 message="The new owner must already be a collaborator",
                 kind=FailureKind.CONFLICT,
             )
-
-        reassign_project_quota_owner(
+        target_user = db.get(AuthUser, new_owner_id)
+        if target_user is None:
+            raise RuntimeError("project_transfer_target_user_missing")
+        quota = prepare_project_quota_transfer(
             db,
             project=project,
             new_owner_id=new_owner_id,
+        )
+        return ProjectOwnershipTransferPlan(
+            state=ProjectOwnershipTransferState(
+                project_id=project.id,
+                project_updated_at=project.updated_at,
+                old_owner_id=owner_id,
+                target_membership_id=new_owner_membership.id,
+                new_owner_id=new_owner_id,
+                target_membership_updated_at=new_owner_membership.updated_at,
+                target_permissions=ProjectPermissionSet(
+                    edit_project=new_owner_membership.can_edit_project,
+                    manage_papers=new_owner_membership.can_manage_papers,
+                    manage_collaborators=(
+                        new_owner_membership.can_manage_collaborators
+                    ),
+                ),
+                target_email=target_user.email,
+                quota=quota.state,
+            ),
+            project_title=project.title,
+            quota=quota,
+        )
+
+    def transfer(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        owner_id: int,
+        new_owner_id: int,
+        plan: ProjectOwnershipTransferPlan | None = None,
+    ) -> Project:
+        if plan is None:
+            plan = self.plan_transfer(
+                db,
+                project_id=project_id,
+                owner_id=owner_id,
+                new_owner_id=new_owner_id,
+            )
+        project = db.get(Project, project_id)
+        new_owner_membership = db.get(
+            ProjectCollaborator,
+            plan.state.target_membership_id,
+        )
+        if (
+            project is None
+            or project.owner_id != owner_id
+            or plan.state.project_id != project_id
+            or plan.state.new_owner_id != new_owner_id
+            or new_owner_membership is None
+            or new_owner_membership.project_id != project_id
+            or new_owner_membership.user_id != new_owner_id
+        ):
+            raise RuntimeError("project_ownership_transfer_plan_mismatch")
+        apply_project_quota_transfer(
+            db,
+            project=project,
+            new_owner_id=new_owner_id,
+            plan=plan.quota,
         )
         db.delete(new_owner_membership)
         db.add(
@@ -389,7 +473,7 @@ class ProjectRepository:
         db.refresh(project)
         return project
 
-    def create_invitation(
+    def plan_invitation_creation(
         self,
         db: Session,
         *,
@@ -397,8 +481,8 @@ class ProjectRepository:
         actor_id: int,
         email: str,
         requested: ProjectPermissionSet,
-    ) -> ProjectInvitation:
-        actor = require_project_permission(
+    ) -> ProjectInvitationCreationPlan:
+        actor = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=actor_id,
@@ -411,6 +495,7 @@ class ProjectRepository:
                 message="You cannot grant a permission you do not have",
                 kind=FailureKind.PERMISSION_DENIED,
             )
+        project = actor.project
 
         normalized_email = _normalized_email(email)
         existing_user = db.scalar(
@@ -436,7 +521,6 @@ class ProjectRepository:
                     kind=FailureKind.CONFLICT,
                 )
 
-        now = datetime.now(timezone.utc)
         pending = db.scalar(
             select(ProjectInvitation)
             .where(
@@ -446,9 +530,98 @@ class ProjectRepository:
                 ProjectInvitation.revoked_at.is_(None),
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if pending is not None:
             require_grant_subset(actor.facts, _invitation_permissions(pending))
+        planned_permissions = ProjectPermissionSet(
+            edit_project=requested_permissions.edit_project,
+            manage_papers=requested_permissions.manage_papers,
+            manage_collaborators=requested_permissions.manage_collaborators,
+        )
+        return ProjectInvitationCreationPlan(
+            state=ProjectInvitationCreationState(
+                project_id=project_id,
+                project_updated_at=project.updated_at,
+                normalized_email=normalized_email,
+                requested_permissions=planned_permissions,
+                replaced_invitation=(
+                    PendingProjectInvitationState(
+                        invitation_id=pending.id,
+                        token_revision=pending.token_revision,
+                        permissions=ProjectPermissionSet(
+                            edit_project=pending.can_edit_project,
+                            manage_papers=pending.can_manage_papers,
+                            manage_collaborators=(pending.can_manage_collaborators),
+                        ),
+                        expires_at=pending.expires_at,
+                        updated_at=pending.updated_at,
+                    )
+                    if pending is not None
+                    else None
+                ),
+            ),
+            project_title=project.title,
+            replaced_invitation_id=pending.id if pending is not None else None,
+        )
+
+    def create_invitation(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        actor_id: int,
+        email: str,
+        requested: ProjectPermissionSet,
+        plan: ProjectInvitationCreationPlan | None = None,
+    ) -> ProjectInvitation:
+        if plan is None:
+            plan = self.plan_invitation_creation(
+                db,
+                project_id=project_id,
+                actor_id=actor_id,
+                email=email,
+                requested=requested,
+            )
+        if (
+            plan.state.project_id != project_id
+            or plan.state.normalized_email != _normalized_email(email)
+            or plan.state.requested_permissions
+            != ProjectPermissionSet(
+                edit_project=requested.edit_project,
+                manage_papers=requested.manage_papers,
+                manage_collaborators=requested.manage_collaborators,
+            )
+        ):
+            raise RuntimeError("project_invitation_creation_plan_mismatch")
+
+        now = datetime.now(timezone.utc)
+        if plan.replaced_invitation_id is not None:
+            pending = db.scalar(
+                select(ProjectInvitation)
+                .where(ProjectInvitation.id == plan.replaced_invitation_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            planned_pending = plan.state.replaced_invitation
+            if (
+                pending is None
+                or planned_pending is None
+                or pending.project_id != project_id
+                or pending.email != plan.state.normalized_email
+                or pending.accepted_at is not None
+                or pending.revoked_at is not None
+                or pending.token_revision != planned_pending.token_revision
+                or pending.expires_at != planned_pending.expires_at
+                or pending.updated_at != planned_pending.updated_at
+                or ProjectPermissionSet(
+                    edit_project=pending.can_edit_project,
+                    manage_papers=pending.can_manage_papers,
+                    manage_collaborators=pending.can_manage_collaborators,
+                )
+                != planned_pending.permissions
+            ):
+                raise RuntimeError("project_invitation_replacement_plan_mismatch")
             pending.revoked_at = now
             pending.delivery_lease_id = None
             pending.delivery_lease_expires_at = None
@@ -456,7 +629,7 @@ class ProjectRepository:
 
         invitation = ProjectInvitation(
             project_id=project_id,
-            email=normalized_email,
+            email=plan.state.normalized_email,
             token_revision=1,
             invited_by_id=actor_id,
             can_edit_project=requested.edit_project,
@@ -473,7 +646,11 @@ class ProjectRepository:
         return invitation
 
     def list_project_invitations(
-        self, db: Session, *, project_id: uuid.UUID, actor_id: int
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        actor_id: int,
     ) -> list[ProjectInvitation]:
         require_project_permission(
             db,
@@ -495,8 +672,89 @@ class ProjectRepository:
                     joinedload(ProjectInvitation.invited_by),
                     joinedload(ProjectInvitation.project),
                 )
-                .order_by(ProjectInvitation.created_at.desc())
+                .order_by(
+                    ProjectInvitation.created_at.desc(),
+                    ProjectInvitation.id.desc(),
+                )
             ).all()
+        )
+
+    def list_project_invitations_page(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        actor_id: int,
+        limit: int,
+        position_created_at: datetime | None,
+        position_id: uuid.UUID | None,
+    ) -> list[ProjectInvitation]:
+        require_project_permission(
+            db,
+            project_id=project_id,
+            user_id=actor_id,
+            permission="manage_collaborators",
+        )
+        now = datetime.now(timezone.utc)
+        filters = [
+            ProjectInvitation.project_id == project_id,
+            ProjectInvitation.accepted_at.is_(None),
+            ProjectInvitation.revoked_at.is_(None),
+            ProjectInvitation.expires_at > now,
+        ]
+        if position_created_at is not None and position_id is not None:
+            filters.append(
+                or_(
+                    ProjectInvitation.created_at < position_created_at,
+                    and_(
+                        ProjectInvitation.created_at == position_created_at,
+                        ProjectInvitation.id < position_id,
+                    ),
+                )
+            )
+        return list(
+            db.scalars(
+                select(ProjectInvitation)
+                .where(*filters)
+                .options(
+                    joinedload(ProjectInvitation.invited_by),
+                    joinedload(ProjectInvitation.project),
+                )
+                .order_by(
+                    ProjectInvitation.created_at.desc(),
+                    ProjectInvitation.id.desc(),
+                )
+                .limit(limit + 1)
+            ).all()
+        )
+
+    def get_project_invitation(
+        self,
+        db: Session,
+        *,
+        project_id: uuid.UUID,
+        invitation_id: uuid.UUID,
+        actor_id: int,
+    ) -> ProjectInvitation | None:
+        require_project_permission(
+            db,
+            project_id=project_id,
+            user_id=actor_id,
+            permission="manage_collaborators",
+        )
+        return db.scalar(
+            select(ProjectInvitation)
+            .where(
+                ProjectInvitation.id == invitation_id,
+                ProjectInvitation.project_id == project_id,
+                ProjectInvitation.accepted_at.is_(None),
+                ProjectInvitation.revoked_at.is_(None),
+                ProjectInvitation.expires_at > datetime.now(timezone.utc),
+            )
+            .options(
+                joinedload(ProjectInvitation.invited_by),
+                joinedload(ProjectInvitation.project),
+            )
         )
 
     def _require_invitation_acceptance(
@@ -506,6 +764,8 @@ class ProjectRepository:
         invitation: ProjectInvitation | None,
         user_id: int,
         email: str,
+        locked_project: Project | None = None,
+        lock_authority: bool = False,
     ) -> tuple[ProjectInvitation, ProjectCollaborator | None]:
         """Validate the complete invitation state without mutating it."""
         now = datetime.now(timezone.utc)
@@ -526,7 +786,7 @@ class ProjectRepository:
                 message="Sign in with the account that received this invitation",
                 kind=FailureKind.PERMISSION_DENIED,
             )
-        project = db.get(Project, invitation.project_id)
+        project = locked_project or db.get(Project, invitation.project_id)
         if project is None:
             raise AppError(
                 code="project_not_found",
@@ -539,11 +799,23 @@ class ProjectRepository:
                 message="This user already belongs to the Project",
                 kind=FailureKind.CONFLICT,
             )
-        inviter_access = get_project_access(
-            db,
-            project_id=invitation.project_id,
-            user_id=invitation.invited_by_id,
-        )
+        if lock_authority:
+            try:
+                inviter_access = require_project_access_for_update(
+                    db,
+                    project_id=invitation.project_id,
+                    user_id=invitation.invited_by_id,
+                )
+            except AppError as exc:
+                if exc.code != "project_not_found":
+                    raise
+                inviter_access = None
+        else:
+            inviter_access = get_project_access(
+                db,
+                project_id=invitation.project_id,
+                user_id=invitation.invited_by_id,
+            )
         requested = _invitation_permissions(invitation)
         if (
             inviter_access is None
@@ -556,12 +828,15 @@ class ProjectRepository:
                 kind=FailureKind.CONFLICT,
             )
 
-        existing = db.scalar(
-            select(ProjectCollaborator).where(
-                ProjectCollaborator.project_id == invitation.project_id,
-                ProjectCollaborator.user_id == user_id,
-            )
+        existing_statement = select(ProjectCollaborator).where(
+            ProjectCollaborator.project_id == invitation.project_id,
+            ProjectCollaborator.user_id == user_id,
         )
+        if lock_authority:
+            existing_statement = existing_statement.with_for_update().execution_options(
+                populate_existing=True
+            )
+        existing = db.scalar(existing_statement)
         return invitation, existing
 
     def _accept_invitation(
@@ -571,12 +846,16 @@ class ProjectRepository:
         invitation: ProjectInvitation | None,
         user_id: int,
         email: str,
+        locked_project: Project | None = None,
+        lock_authority: bool = False,
     ) -> ProjectCollaborator:
         invitation, existing = self._require_invitation_acceptance(
             db,
             invitation=invitation,
             user_id=user_id,
             email=email,
+            locked_project=locked_project,
+            lock_authority=lock_authority,
         )
         now = datetime.now(timezone.utc)
         if existing is not None:
@@ -632,6 +911,22 @@ class ProjectRepository:
         user_id: int,
         email: str,
     ) -> AcceptedInvitation:
+        project_id = db.scalar(
+            select(ProjectInvitation.project_id).where(
+                ProjectInvitation.id == invitation_id,
+                ProjectInvitation.token_revision == token_revision,
+            )
+        )
+        locked_project = (
+            db.scalar(
+                select(Project)
+                .where(Project.id == project_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if project_id is not None
+            else None
+        )
         invitation = db.scalar(
             select(ProjectInvitation)
             .where(
@@ -639,12 +934,15 @@ class ProjectRepository:
                 ProjectInvitation.token_revision == token_revision,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         collaborator = self._accept_invitation(
             db,
             invitation=invitation,
             user_id=user_id,
             email=email,
+            locked_project=locked_project,
+            lock_authority=True,
         )
         if invitation is None:
             raise RuntimeError("accepted_project_invitation_missing")
@@ -661,17 +959,20 @@ class ProjectRepository:
         invitation_id: uuid.UUID,
         actor_id: int,
     ) -> bool:
-        actor = require_project_permission(
+        actor = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=actor_id,
             permission="manage_collaborators",
         )
         invitation = db.scalar(
-            select(ProjectInvitation).where(
+            select(ProjectInvitation)
+            .where(
                 ProjectInvitation.id == invitation_id,
                 ProjectInvitation.project_id == project_id,
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if invitation is None:
             raise AppError(
@@ -680,6 +981,12 @@ class ProjectRepository:
                 kind=FailureKind.NOT_FOUND,
             )
         require_grant_subset(actor.facts, _invitation_permissions(invitation))
+        if invitation.accepted_at is not None:
+            raise AppError(
+                code="project_invitation_not_found",
+                message="Project invitation not found",
+                kind=FailureKind.NOT_FOUND,
+            )
         if invitation.revoked_at is not None:
             return False
         invitation.revoked_at = datetime.now(timezone.utc)
@@ -696,7 +1003,7 @@ class ProjectRepository:
         invitation_id: uuid.UUID,
         actor_id: int,
     ) -> ProjectInvitation:
-        actor = require_project_permission(
+        actor = require_project_permission_for_update(
             db,
             project_id=project_id,
             user_id=actor_id,
@@ -709,8 +1016,10 @@ class ProjectRepository:
                 ProjectInvitation.project_id == project_id,
                 ProjectInvitation.accepted_at.is_(None),
                 ProjectInvitation.revoked_at.is_(None),
+                ProjectInvitation.expires_at > datetime.now(timezone.utc),
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if invitation is None:
             raise AppError(

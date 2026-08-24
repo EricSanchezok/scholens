@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 import math
 import re
-from typing import Literal
+from typing import Literal, cast
 import unicodedata
 from uuid import UUID
 
@@ -18,6 +19,8 @@ from scholens_ai import (
 
 from app.helpers.s3 import s3_service
 from app.modules.papers.application.contracts.search import (
+    PaperSearchCandidate,
+    PaperSearchCandidatePage,
     PaperSearchQuery,
     PaperSearchResponse,
     PaperSearchResult,
@@ -46,6 +49,7 @@ from app.modules.projects.infrastructure.models import (
     ProjectPaper,
 )
 from app.shared.application import Actor
+from app.shared.application.text import json_bounded_prefix
 from app.shared.infrastructure.sql_patterns import literal_contains_pattern
 from app.shared.infrastructure.text_excerpt import plain_query_excerpt
 from sqlalchemy import ColumnElement, and_, case, exists, false, func, or_, select
@@ -54,6 +58,11 @@ from sqlalchemy.orm import Session, aliased, selectinload
 logger = logging.getLogger(__name__)
 
 RetrievalMode = Literal["exact", "full_text", "fuzzy", "semantic"]
+_PASSAGE_CHARACTERS = 1_200
+_CANDIDATE_TITLE_CHARACTERS = 240
+_CANDIDATE_TEXT_CHARACTERS = 1_200
+_CANDIDATE_TITLE_JSON_BYTES = 384
+_CANDIDATE_TEXT_JSON_BYTES = 900
 _TRIGRAM_SIMILARITY_MIN = 0.12
 # These conservative acceptance guardrails are scoped to this exact local E5
 # projection. A model revision must deliberately review them; loosening them
@@ -246,6 +255,15 @@ def _accepted_semantic_candidates(
     return accepted
 
 
+@dataclass(frozen=True, slots=True)
+class _SearchRanking:
+    conditions: list[ColumnElement[bool]]
+    text_query: object
+    retrieval_modes: dict[UUID, set[RetrievalMode]]
+    semantic_ids: list[UUID]
+    ranked_ids: list[UUID]
+
+
 def _visibility_condition(
     *,
     actor: Actor,
@@ -354,7 +372,7 @@ def _matching_passages(
             DocumentPassage.document_id.label("document_id"),
             DocumentPassage.start_line.label("start_line"),
             DocumentPassage.end_line.label("end_line"),
-            DocumentPassage.content.label("content"),
+            func.left(DocumentPassage.content, _PASSAGE_CHARACTERS).label("content"),
             func.row_number()
             .over(
                 partition_by=DocumentPassage.document_id,
@@ -475,12 +493,12 @@ class PostgresPaperSearch:
         )
         return total, semantic, semantic / total if total else 0
 
-    def search(
+    def _ranking(
         self,
         *,
         actor: Actor,
         request: PaperSearchQuery,
-    ) -> PaperSearchResponse:
+    ) -> _SearchRanking:
         conditions = self._filters(actor=actor, request=request)
         plan = _query_plan(request.query)
         text_query = func.websearch_to_tsquery("pg_catalog.english", request.query)
@@ -591,6 +609,23 @@ class PostgresPaperSearch:
                     .order_by(Document.created_at.desc(), Document.id)
                 ).all()
             )
+        return _SearchRanking(
+            conditions=conditions,
+            text_query=text_query,
+            retrieval_modes=dict(retrieval_modes),
+            semantic_ids=semantic_ids,
+            ranked_ids=ranked_ids,
+        )
+
+    def search(
+        self,
+        *,
+        actor: Actor,
+        request: PaperSearchQuery,
+    ) -> PaperSearchResponse:
+        ranking = self._ranking(actor=actor, request=request)
+        plan = _query_plan(request.query)
+        ranked_ids = ranking.ranked_ids
         page_ids = ranked_ids[request.offset : request.offset + request.limit]
         actor_library_entry = aliased(
             LibraryPaper,
@@ -611,14 +646,14 @@ class PostgresPaperSearch:
         documents = {document.id: (document, entry) for document, entry in rows}
         page_rows = [documents[document_id] for document_id in page_ids]
         _visible_total, _semantic_total, semantic_coverage = self._semantic_coverage(
-            conditions=conditions
+            conditions=ranking.conditions
         )
         document_ids = [document.id for document, _entry in page_rows]
         passages = (
             _matching_passages(
                 self._db,
                 document_ids=document_ids,
-                text_query=text_query,
+                text_query=ranking.text_query,
                 query=request.query,
             )
             if plan.hybrid
@@ -681,15 +716,129 @@ class PostgresPaperSearch:
                         plan,
                         has_passage=has_matching_passage,
                     ),
-                    retrieval_modes=sorted(retrieval_modes[document.id]),
+                    retrieval_modes=sorted(ranking.retrieval_modes[document.id]),
                     snippets=snippets,
                 )
             )
         return PaperSearchResponse(
             items=items,
             total=len(ranked_ids),
-            search_mode="hybrid" if semantic_ids else "lexical",
+            search_mode="hybrid" if ranking.semantic_ids else "lexical",
             semantic_index_coverage=semantic_coverage,
+        )
+
+    def search_candidates(
+        self,
+        *,
+        actor: Actor,
+        request: PaperSearchQuery,
+    ) -> PaperSearchCandidatePage:
+        """Project one ranked window without hydrating full Document ORM rows."""
+
+        ranking = self._ranking(actor=actor, request=request)
+        plan = _query_plan(request.query)
+        page_ids = ranking.ranked_ids[request.offset : request.offset + request.limit]
+        if not page_ids:
+            return PaperSearchCandidatePage(items=[], total=len(ranking.ranked_ids))
+        actor_library_entry = aliased(
+            LibraryPaper,
+            name="knowledge_actor_library_entry",
+        )
+        rows = list(
+            self._db.execute(
+                select(
+                    Document.id.label("document_id"),
+                    func.left(Document.title, _CANDIDATE_TITLE_CHARACTERS).label(
+                        "title"
+                    ),
+                    func.left(Document.abstract, _CANDIDATE_TEXT_CHARACTERS).label(
+                        "abstract"
+                    ),
+                    func.left(Document.summary, _CANDIDATE_TEXT_CHARACTERS).label(
+                        "summary"
+                    ),
+                    Document.created_at.label("created_at"),
+                    func.coalesce(
+                        actor_library_entry.last_accessed_at,
+                        Document.created_at,
+                    ).label("last_accessed_at"),
+                )
+                .outerjoin(
+                    actor_library_entry,
+                    and_(
+                        actor_library_entry.document_id == Document.id,
+                        actor_library_entry.user_id == actor.id,
+                    ),
+                )
+                .where(Document.id.in_(page_ids))
+            )
+            .mappings()
+            .all()
+        )
+        projected = {cast(UUID, row["document_id"]): row for row in rows}
+        passages = (
+            _matching_passages(
+                self._db,
+                document_ids=page_ids,
+                text_query=ranking.text_query,
+                query=request.query,
+            )
+            if plan.hybrid
+            else {}
+        )
+        items: list[PaperSearchCandidate] = []
+        for document_id in page_ids:
+            row = projected.get(document_id)
+            if row is None:
+                continue
+            title = self._candidate_text(
+                cast(str | None, row["title"]),
+                max_bytes=_CANDIDATE_TITLE_JSON_BYTES,
+            )
+            abstract = self._candidate_text(
+                cast(str | None, row["abstract"]),
+                max_bytes=_CANDIDATE_TEXT_JSON_BYTES,
+            )
+            summary = self._candidate_text(
+                cast(str | None, row["summary"]),
+                max_bytes=_CANDIDATE_TEXT_JSON_BYTES,
+            )
+            snippets = [
+                PaperSearchSnippet(
+                    text=json_bounded_prefix(
+                        snippet.text,
+                        max_bytes=_CANDIDATE_TEXT_JSON_BYTES,
+                    ),
+                    start_line=snippet.start_line,
+                    end_line=snippet.end_line,
+                )
+                for snippet in passages.get(document_id, [])[:3]
+            ]
+            if not snippets:
+                fallback = abstract or summary
+                if fallback is not None:
+                    snippets = [PaperSearchSnippet(text=fallback)]
+            items.append(
+                PaperSearchCandidate(
+                    document_id=document_id,
+                    title=title,
+                    abstract=abstract,
+                    created_at=cast(datetime, row["created_at"]),
+                    last_accessed_at=cast(datetime, row["last_accessed_at"]),
+                    snippets=snippets,
+                )
+            )
+        return PaperSearchCandidatePage(
+            items=items,
+            total=len(ranking.ranked_ids),
+        )
+
+    @staticmethod
+    def _candidate_text(value: str | None, *, max_bytes: int) -> str | None:
+        return (
+            json_bounded_prefix(value, max_bytes=max_bytes)
+            if value is not None
+            else None
         )
 
     def stats(

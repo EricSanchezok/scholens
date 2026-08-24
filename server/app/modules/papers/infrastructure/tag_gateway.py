@@ -10,6 +10,10 @@ from app.modules.papers.application.contracts.tags import (
     LibraryTagRenameRequest,
     LibraryTagResponse,
 )
+from app.modules.papers.application.tags import (
+    LibraryTagPage,
+    LibraryTagPagePosition,
+)
 from app.modules.papers.infrastructure.tag_repository import library_tag_repository
 from sqlalchemy.orm import Session
 
@@ -31,6 +35,39 @@ class SqlAlchemyLibraryTagGateway:
             self._response(tag)
             for tag in library_tag_repository.list_owned(self._db, user_id=user_id)
         ]
+
+    def list_page(
+        self,
+        *,
+        user_id: int,
+        limit: int,
+        position: LibraryTagPagePosition | None,
+    ) -> LibraryTagPage:
+        rows = library_tag_repository.list_owned_page(
+            self._db,
+            user_id=user_id,
+            limit=limit,
+            position_name=position.name if position is not None else None,
+            position_id=position.id if position is not None else None,
+        )
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return LibraryTagPage(
+            items=[self._response(row.tag) for row in rows],
+            positions=[
+                LibraryTagPagePosition(name=row.sort_name, id=row.tag.id)
+                for row in rows
+            ],
+            has_more=has_more,
+        )
+
+    def get(self, *, user_id: int, tag_id: UUID) -> LibraryTagResponse | None:
+        tag = library_tag_repository.get_owned(
+            self._db,
+            user_id=user_id,
+            tag_id=tag_id,
+        )
+        return self._response(tag) if tag is not None else None
 
     def create(
         self,

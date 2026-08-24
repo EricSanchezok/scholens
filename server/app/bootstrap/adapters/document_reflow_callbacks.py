@@ -5,30 +5,32 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.bootstrap.adapters.storage_cleanup import schedule_storage_deletion
 from app.modules.jobs.application.callbacks import (
     JobHandlerResult,
     RecordJobTelemetry,
     SettleJobUsage,
 )
 from app.modules.jobs.application.contracts import DocumentReflowWebhookData
-from app.modules.jobs.infrastructure.repository import job_repository
 from app.modules.jobs.infrastructure.models import DurableJob
+from app.modules.jobs.infrastructure.repository import job_repository
 from app.modules.operation_journal.domain import OperationChange, ResourceRef
 from app.modules.papers.infrastructure.models import Document
+from app.modules.reflows.application.reflows import (
+    DOCUMENT_REFLOW_COMPLETED,
+    DOCUMENT_REFLOW_FAILED,
+)
 from app.modules.reflows.infrastructure.models import (
     DocumentReflow,
     DocumentReflowAsset,
     DocumentReflowBlock,
 )
-from app.bootstrap.adapters.storage_cleanup import schedule_storage_deletion
-from app.modules.reflows.application.reflows import (
-    DOCUMENT_REFLOW_COMPLETED,
-    DOCUMENT_REFLOW_FAILED,
-)
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import JobOperation, JobStatus
-from sqlalchemy.orm import Session
 
 
 def _require_scope(
@@ -48,8 +50,14 @@ def _require_scope(
             message="Document reflow callback does not match its job",
             kind=FailureKind.CONFLICT,
         )
+    # Canonical-text repair and reflow completion share the Document row as
+    # their generation lock. Refresh the DurableJob after acquiring it so a
+    # repair that invalidated in-flight derived output wins deterministically.
+    document = db.scalar(
+        select(Document).where(Document.id == job.document_id).with_for_update()
+    )
+    db.refresh(job, with_for_update=True)
     artifact = db.get(DocumentReflow, job.document_id)
-    document = db.get(Document, job.document_id)
     if artifact is None or document is None or artifact.job_id != job_id:
         raise AppError(
             code="job_scope_missing",
@@ -170,7 +178,7 @@ def complete_document_reflow(
     )
     schedule_storage_deletion(
         db,
-        object_keys=old_asset_keys - new_asset_keys,
+        object_keys=sorted(old_asset_keys - new_asset_keys),
         idempotency_key=f"document-reflow:{document.id}:{artifact.attempt_count}",
         origin_operation_id=job.origin_operation_id,
         correlation_id=job.correlation_id,

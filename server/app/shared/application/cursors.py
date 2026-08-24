@@ -7,9 +7,17 @@ import binascii
 import hashlib
 import hmac
 import json
+import re
 from typing import NoReturn, cast
 
 from app.shared.domain import AppError, FailureKind
+
+_UNPADDED_URLSAFE_BASE64 = re.compile(r"^[A-Za-z0-9_-]+$")
+_MAX_CURSOR_CHARACTERS = 4096
+
+
+def _reject_json_constant(value: str) -> NoReturn:
+    raise ValueError(f"non-finite JSON constant {value}")
 
 
 class SignedCursorCodec:
@@ -57,6 +65,7 @@ class SignedCursorCodec:
                 "request_hash": hashlib.sha256(fingerprint.encode()).hexdigest(),
                 **position,
             },
+            allow_nan=False,
             separators=(",", ":"),
             sort_keys=True,
         ).encode()
@@ -92,19 +101,32 @@ class SignedCursorCodec:
     def _decode(self, *, cursor: str, fingerprint: str) -> dict[str, object]:
         data: dict[str, object] = {}
         try:
+            cursor_is_canonical = (
+                len(cursor) <= _MAX_CURSOR_CHARACTERS
+                and _UNPADDED_URLSAFE_BASE64.fullmatch(cursor) is not None
+            )
+            if not cursor_is_canonical:
+                raise ValueError("cursor is not canonical URL-safe base64")
             padded = cursor + "=" * (-len(cursor) % 4)
-            decoded = base64.urlsafe_b64decode(padded)
+            decoded = base64.b64decode(padded, altchars=b"-_", validate=True)
+            canonical = base64.urlsafe_b64encode(decoded).decode().rstrip("=")
+            if not hmac.compare_digest(cursor, canonical):
+                raise ValueError("cursor has a non-canonical base64 encoding")
             if len(decoded) <= hashlib.sha256().digest_size:
                 raise ValueError("cursor payload is missing")
             payload, signature = decoded[:-32], decoded[-32:]
             expected = hmac.new(self._secret, payload, hashlib.sha256).digest()
-            decoded_data: object = json.loads(payload)
+            if not hmac.compare_digest(signature, expected):
+                raise ValueError("cursor signature is invalid")
+            decoded_data: object = json.loads(
+                payload,
+                parse_constant=_reject_json_constant,
+            )
             if not isinstance(decoded_data, dict):
                 raise ValueError("cursor payload must be an object")
             data = cast(dict[str, object], decoded_data)
             valid = (
-                hmac.compare_digest(signature, expected)
-                and data["revision"] == self._revision
+                data["revision"] == self._revision
                 and data["request_hash"]
                 == hashlib.sha256(fingerprint.encode()).hexdigest()
             )

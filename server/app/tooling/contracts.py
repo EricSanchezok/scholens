@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Generic, Literal, TypeAlias, TypeVar
+from typing import Generic, Literal, Protocol, TypeAlias, TypeVar
 from uuid import UUID
 
 from app.modules.papers.application.contracts.search import PaperCollection
@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 CapabilitiesT = TypeVar("CapabilitiesT")
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
+DEFAULT_TOOL_OUTPUT_BYTES = 200 * 1024
 
 
 class ToolExecutionKind(StrEnum):
@@ -135,10 +136,24 @@ class ToolOutcome:
 
 
 ToolHandler = Callable[[CapabilitiesT, ToolExecutionContext, BaseModel], ToolOutcome]
+
+
+class ToolOutcomeFinalizer(Protocol):
+    """Project and validate an outcome before its surrounding UoW commits.
+
+    A workflow that persists an outcome receipt must persist and return the
+    exact value returned by this callback. The dispatcher recognizes that
+    object and does not run a non-idempotent projector a second time.
+    """
+
+    def __call__(self, outcome: ToolOutcome) -> ToolOutcome: ...
+
+
 WorkflowToolHandler = Callable[
-    [ToolExecutionContext, BaseModel, str],
+    [ToolExecutionContext, BaseModel, str, ToolOutcomeFinalizer],
     Awaitable[ToolOutcome],
 ]
+ToolOutcomeProjector = Callable[[ToolOutcome], ToolOutcome]
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,10 +181,13 @@ class ToolDefinition(Generic[CapabilitiesT]):
     behavior: ToolBehavior | None = None
     confirmation_policy: ToolConfirmationPolicy = ToolConfirmationPolicy.NONE
     persist_result: bool = True
+    outcome_projector: ToolOutcomeProjector | None = None
+    max_output_bytes: int = DEFAULT_TOOL_OUTPUT_BYTES
     handler: ToolHandler[CapabilitiesT] | None = None
     workflow_handler: WorkflowToolHandler | None = None
     activity_subject_field: str | None = None
     allow_repeated_calls: bool = False
+    replacement_tool: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -186,6 +204,16 @@ class ToolDefinition(Generic[CapabilitiesT]):
                 )
         if self.required_permission is None:
             raise ValueError("business tools require one workspace permission")
+        if self.max_output_bytes <= 0:
+            raise ValueError("tool output byte budget must be positive")
+        if self.replacement_tool is not None and (
+            self.replacement_tool == self.name
+            or self.replacement_tool.lower() != self.replacement_tool
+            or not self.replacement_tool.isidentifier()
+        ):
+            raise ValueError(
+                "replacement tool must be a different lowercase identifier"
+            )
         if self.behavior is not None:
             if self.behavior.read_only != (
                 self.execution

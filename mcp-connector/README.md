@@ -42,8 +42,8 @@ directories, non-PDF signatures, empty files, and PDFs over 30 MB are rejected.
 The remote service receives only the plain filename, size, checksum, and bytes;
 the local absolute path is never sent or included in results.
 
-With `read`, `write`, `manage`, and `delete` permission, the bridge exposes 57
-tools. It forwards the 56 canonical tools shared by the remote and in-product
+With `read`, `write`, `manage`, and `delete` permission, the bridge exposes 63
+tools. It forwards the 62 canonical tools shared by the remote and in-product
 Agent, hides the remote-only `prepare_paper_upload` transport primitive, and
 adds `upload_local_paper`. Narrower Access Keys see only their authorized
 subset. Internet literature discovery and research-output generation remain

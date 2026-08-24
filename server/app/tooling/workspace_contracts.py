@@ -13,22 +13,29 @@ from uuid import UUID
 from app.modules.action_confirmations.contracts import ConfirmationChallenge
 from app.modules.jobs.application.contracts import JobResponse
 from app.modules.papers.application.contracts.citation import (
-    CitationData,
-    CitationResult,
+    CitationMethod,
+    StepKind,
 )
 from app.modules.papers.application.contracts.documents import (
     DocumentMetadataOverrides,
     LibraryPaperIngestionResponse,
+    LibraryPaperListResponse,
     LibraryOutputSort,
     LibraryOutputResponse,
+    LibraryPaperResponse,
     LibraryPaperSort,
 )
 from app.modules.papers.application.contracts.search import (
     PaperSearchFilters,
     PaperSearchSort,
 )
+from app.modules.papers.application.contracts.tags import LibraryTagResponse
 from app.modules.papers.application.contracts.uploads import PaperSource
 from app.modules.projects.application.contracts import (
+    ProjectCollaboratorListResponse,
+    ProjectInvitationResponse,
+    ProjectListResponse,
+    ProjectPaperListResponse,
     ProjectPaperSort,
     ProjectPermissionSet,
     ProjectResponse,
@@ -39,6 +46,7 @@ from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
     AnnotationThreadSummaryResponse,
     ResearchItemResponse,
+    UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA,
 )
 from app.modules.research.application.positions import ResearchPosition
 from app.shared.domain import JsonValue
@@ -82,6 +90,7 @@ WAIT_SECONDS_DESCRIPTION = (
 
 ProjectId = Annotated[UUID, Field(description=PROJECT_ID_DESCRIPTION)]
 DocumentId = Annotated[UUID, Field(description=DOCUMENT_ID_DESCRIPTION)]
+ScholensUserId = Annotated[int, Field(gt=0, le=(1 << 63) - 1)]
 
 
 class ToolInput(BaseModel):
@@ -123,8 +132,115 @@ class DocumentInput(ToolInput):
     document_id: DocumentId
 
 
+class JsonDocumentPageInput(ToolInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    max_utf8_bytes: int = Field(
+        default=24_000,
+        ge=1_024,
+        le=32_000,
+        description=(
+            "Maximum UTF-8 bytes from the canonical JSON document to return. "
+            "Continue with next_cursor until complete is true."
+        ),
+    )
+
+
+class PaperMetadataPageInput(DocumentInput, JsonDocumentPageInput):
+    pass
+
+
+class LibraryPaperPageInput(DocumentInput, JsonDocumentPageInput):
+    pass
+
+
+class JsonDocumentPageOutput(BaseModel):
+    representation: Literal["utf8_json_page"] = "utf8_json_page"
+    resource_uri: str = Field(min_length=1, max_length=512)
+    media_type: Literal["application/json"] = "application/json"
+    content: str = Field(
+        max_length=32_000,
+        description=(
+            "An exact UTF-8 fragment. Concatenate content from consecutive pages "
+            "in byte-offset order, then parse the resulting JSON document."
+        ),
+    )
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    start_utf8_byte: int = Field(ge=0)
+    end_utf8_byte: int = Field(ge=0)
+    total_utf8_bytes: int = Field(ge=0)
+    complete: bool
+    next_cursor: str | None = None
+    access_url: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=(
+            "Short-lived access URL for a related binary artifact, when one exists. "
+            "It is intentionally outside the canonical paged JSON document."
+        ),
+    )
+    guidance: str = Field(max_length=500)
+
+
 class ProjectInput(ToolInput):
     project_id: ProjectId
+
+
+class ListProjectMembersInput(ProjectInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=50,
+        description="Maximum visible Project members to return in this page.",
+    )
+
+
+class ListProjectInvitationsInput(ProjectInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=20,
+        description="Maximum active Project invitations to return in this page.",
+    )
+
+
+class ProjectInvitationToolResponse(ProjectInvitationResponse):
+    project_name: str = Field(max_length=512)
+    invited_by: str = Field(max_length=512)
+
+
+class ProjectInvitationListOutput(BaseModel):
+    items: list[ProjectInvitationToolResponse] = Field(max_length=20)
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    content_truncated: bool = False
+    guidance: str = Field(max_length=500)
+
+
+class ListPaperProjectsInput(DocumentInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    limit: int = Field(
+        default=25,
+        ge=1,
+        le=25,
+        description="Maximum accessible Projects to return in this page.",
+    )
 
 
 class LibraryKnowledgeScope(ToolInput):
@@ -228,7 +344,10 @@ class SearchKnowledgeInput(ToolInput):
         default=20,
         ge=1,
         le=100,
-        description="Maximum combined results to return in this page.",
+        description=(
+            "Requested maximum combined results. The public UTF-8 envelope may return "
+            "a smaller page with next_cursor; continue until next_cursor is null."
+        ),
     )
 
 
@@ -242,7 +361,9 @@ class KnowledgeSearchResult(BaseModel):
     ]
     resource_uri: str
     title: str | None = None
-    excerpt: str
+    excerpt: str = Field(
+        description="UTF-8/JSON-bounded evidence preview; open the resource for full text."
+    )
     score: float = Field(ge=0)
     document_id: UUID | None = None
     project_id: UUID | None = None
@@ -262,18 +383,39 @@ class KnowledgeSearchOutput(BaseModel):
 
 
 class PaperContentInput(DocumentInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=(
+            "Opaque continuation returned by the previous page. When present, "
+            "start_line must remain at its default."
+        ),
+    )
     start_line: int = Field(
         default=1,
         ge=1,
-        description="One-based first extracted-text line to return.",
+        le=(1 << 63) - 1,
+        description=(
+            "One-based first extracted-text line for a new read; continuation "
+            "requests use cursor instead."
+        ),
     )
     max_lines: int = Field(
         default=200,
         ge=1,
         le=500,
         description=(
-            "Maximum lines to return. Read incrementally using next_start_line instead "
-            "of requesting an entire paper at once."
+            "Maximum lines to return. Read incrementally using next_cursor instead of "
+            "requesting an entire paper at once; the UTF-8 budget may stop earlier."
+        ),
+    )
+    max_utf8_bytes: int = Field(
+        default=32_768,
+        ge=1_024,
+        le=32_768,
+        description=(
+            "Maximum UTF-8 bytes of exact extracted text before JSON-envelope "
+            "overhead; continuation remains lossless."
         ),
     )
 
@@ -281,12 +423,27 @@ class PaperContentInput(DocumentInput):
 class PaperContentOutput(BaseModel):
     document_id: UUID
     title: str | None
+    title_truncated: bool = Field(
+        default=False,
+        description=(
+            "Whether title is a bounded display preview; get_paper_page is lossless."
+        ),
+    )
     start_line: int
     end_line: int | None
     total_lines: int
     lines: list[str]
     next_start_line: int | None
     content_sha256: str | None
+    content: str
+    content_utf8_bytes: int = Field(ge=0)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=0)
+    starts_mid_line: bool
+    ends_mid_line: bool
+    next_cursor: str | None
+    truncated: bool
+    guidance: str
 
 
 class SearchPaperContentInput(DocumentInput):
@@ -298,12 +455,36 @@ class SearchPaperContentInput(DocumentInput):
             "Use search_scholens_knowledge when you do not already know the paper UUID."
         ),
     )
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=(
+            "Opaque continuation returned by a previous search page. It is bound "
+            "to the actor, paper, query, and exact content digest."
+        ),
+    )
+    limit: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description="Maximum bounded matching lines to return in this page.",
+    )
 
 
 class PaperContentSearchOutput(BaseModel):
     document_id: UUID
-    matches: list[str]
+    matches: list[str] = Field(max_length=20)
     match_count: int = Field(ge=0)
+    total_match_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Cumulative match count once the final page is reached; null while "
+            "additional pages remain."
+        ),
+    )
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    truncated: bool = False
     guidance: str
 
 
@@ -323,13 +504,59 @@ class PaperCitationInput(DocumentInput):
     )
 
 
+CITATION_MAX_AUTHORS = 20
+CITATION_MAX_STEPS = 8
+CITATION_MAX_MAP_ITEMS = 8
+CITATION_TEXT_MAX_CHARACTERS = 2_048
+CITATION_FIELD_MAX_CHARACTERS = 1_024
+CITATION_AUTHOR_MAX_CHARACTERS = 256
+CITATION_STEP_DETAIL_MAX_CHARACTERS = 512
+
+
+class CitationDataOutput(BaseModel):
+    document_id: str = Field(max_length=64)
+    title: str | None = Field(default=None, max_length=CITATION_TEXT_MAX_CHARACTERS)
+    authors: list[Annotated[str, Field(max_length=CITATION_AUTHOR_MAX_CHARACTERS)]] = (
+        Field(default_factory=list, max_length=CITATION_MAX_AUTHORS)
+    )
+    publish_date: str | None = Field(
+        default=None,
+        max_length=CITATION_FIELD_MAX_CHARACTERS,
+    )
+    journal: str | None = Field(
+        default=None,
+        max_length=CITATION_FIELD_MAX_CHARACTERS,
+    )
+    publisher: str | None = Field(
+        default=None,
+        max_length=CITATION_FIELD_MAX_CHARACTERS,
+    )
+    doi: str | None = Field(
+        default=None,
+        max_length=CITATION_FIELD_MAX_CHARACTERS,
+    )
+
+
+class CitationStepOutput(BaseModel):
+    kind: StepKind
+    detail: str = Field(max_length=CITATION_STEP_DETAIL_MAX_CHARACTERS)
+    data: dict[str, JsonValue] | None = Field(
+        default=None,
+        max_length=CITATION_MAX_MAP_ITEMS,
+    )
+    data_truncated: bool = False
+
+
 class PaperCitationReadOutput(BaseModel):
     document_id: UUID
-    preferred_style: str
-    data: CitationData
-    missing_fields: list[str]
+    preferred_style: str = Field(max_length=100)
+    data: CitationDataOutput
+    missing_fields: list[Annotated[str, Field(max_length=128)]] = Field(
+        max_length=CITATION_MAX_MAP_ITEMS
+    )
     complete: bool
-    guidance: str
+    content_truncated: bool = False
+    guidance: str = Field(max_length=1_000)
 
 
 class ResolvePaperCitationInput(MutationInput):
@@ -414,6 +641,46 @@ class ProjectToolResponse(ProjectResponse):
     resource_uri: str
     web_url: str
     binding_markdown: str
+    content_truncated: bool = Field(
+        default=False,
+        description=(
+            "Whether unsupported historical Project or owner display text was bounded."
+        ),
+    )
+    guidance: str | None = Field(
+        default=None,
+        description="How to normalize an unsupported historical Project value.",
+    )
+
+
+class ProjectListToolOutput(ProjectListResponse):
+    content_truncated: bool = Field(
+        description="True when one or more Project text fields are bounded previews."
+    )
+    guidance: str = Field(
+        max_length=500,
+        description="How to retrieve complete Project content and continue pagination.",
+    )
+
+
+class ProjectMemberListToolOutput(ProjectCollaboratorListResponse):
+    content_truncated: bool = Field(
+        description="True when one or more collaborator identity fields are previews."
+    )
+    guidance: str = Field(
+        max_length=500,
+        description="How to continue and address members by immutable user ID.",
+    )
+
+
+class ProjectPaperListToolOutput(ProjectPaperListResponse):
+    content_truncated: bool = Field(
+        description="True when one or more paper metadata fields are bounded previews."
+    )
+    guidance: str = Field(
+        max_length=500,
+        description="How to retrieve complete paper content and continue pagination.",
+    )
 
 
 class ListProjectPapersInput(ProjectInput):
@@ -451,16 +718,15 @@ class ProjectPaperInput(ConfirmedMutationInput):
 
 
 class MemberInput(ProjectInput):
-    user_id: int = Field(
-        gt=0,
+    user_id: ScholensUserId = Field(
         description="The immutable Scholens user ID returned by list_project_members.",
     )
 
 
 class UpdateProjectMemberInput(ConfirmedMutationInput):
     project_id: ProjectId
-    user_id: int = Field(
-        gt=0, description="Collaborator user ID returned by list_project_members."
+    user_id: ScholensUserId = Field(
+        description="Collaborator user ID returned by list_project_members."
     )
     edit_project: bool = Field(description="Allow changing Project metadata.")
     manage_papers: bool = Field(description="Allow adding and removing Project papers.")
@@ -471,8 +737,8 @@ class UpdateProjectMemberInput(ConfirmedMutationInput):
 
 class RemoveProjectMemberInput(ConfirmedMutationInput):
     project_id: ProjectId
-    user_id: int = Field(
-        gt=0, description="Collaborator user ID returned by list_project_members."
+    user_id: ScholensUserId = Field(
+        description="Collaborator user ID returned by list_project_members."
     )
 
 
@@ -482,8 +748,7 @@ class LeaveProjectInput(ConfirmedMutationInput):
 
 class TransferProjectOwnershipInput(ConfirmedMutationInput):
     project_id: ProjectId
-    new_owner_id: int = Field(
-        gt=0,
+    new_owner_id: ScholensUserId = Field(
         description=(
             "User ID of an existing Project collaborator who should become owner. "
             "Obtain it from list_project_members."
@@ -543,6 +808,26 @@ class ListLibraryPapersInput(ToolInput):
     limit: int = Field(default=20, ge=1, le=100, description="Page size.")
 
 
+class LibraryPaperListToolOutput(LibraryPaperListResponse):
+    content_truncated: bool = Field(
+        description="True when one or more Library item fields are bounded previews."
+    )
+    guidance: str = Field(
+        max_length=500,
+        description="How to retrieve lossless Library paper JSON and continue pages.",
+    )
+
+
+class LibraryPaperToolOutput(LibraryPaperResponse):
+    content_truncated: bool = Field(
+        description="True when one or more Library or document fields are previews."
+    )
+    guidance: str = Field(
+        max_length=500,
+        description="How to retrieve the lossless Library paper representation.",
+    )
+
+
 class UpdateLibraryPaperInput(MutationInput):
     document_id: DocumentId
     status: PaperStatus | None = Field(
@@ -563,7 +848,8 @@ class RemoveLibraryPapersInput(ConfirmedMutationInput):
         min_length=1,
         max_length=100,
         description=(
-            "Unique paper UUIDs to remove from the personal Library. Project copies and "
+            "Paper UUIDs to remove from the personal Library. Repeated UUIDs are "
+            "accepted for compatibility and treated as one paper. Project copies and "
             "the shared document records are not deleted."
         ),
     )
@@ -584,6 +870,32 @@ class CollectSharedPaperInput(MutationInput):
         max_length=512,
         description="Public Scholens share token supplied by the paper owner.",
     )
+
+
+class ListLibraryTagsInput(ToolInput):
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="Maximum personal Library tags to return in this page.",
+    )
+
+
+class LibraryTagToolResponse(LibraryTagResponse):
+    name: str = Field(max_length=256)
+    color: str | None = Field(max_length=256)
+
+
+class LibraryTagListOutput(BaseModel):
+    items: list[LibraryTagToolResponse] = Field(max_length=50)
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    content_truncated: bool = False
+    guidance: str = Field(max_length=500)
 
 
 class CreateLibraryTagInput(MutationInput):
@@ -694,6 +1006,17 @@ class ListJobsInput(ToolInput):
         default=False,
         description="When true, return only pending or running jobs.",
     )
+    cursor: str | None = Field(
+        default=None,
+        max_length=2_048,
+        description=CURSOR_DESCRIPTION,
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="Maximum number of durable job status snapshots to return.",
+    )
 
 
 class JobInput(ToolInput):
@@ -758,6 +1081,14 @@ class WaitForJobsResponse(BaseModel):
 class BatchPaperIngestionItem(BaseModel):
     index: int = Field(ge=0)
     source: PaperSource
+    source_truncated: bool = Field(
+        default=False,
+        description=(
+            "True when source is a bounded UTF-8-safe receipt preview. Match the "
+            "item by index and continue with its job or document UUID; never retry "
+            "ingestion from a truncated preview."
+        ),
+    )
     status: Literal["accepted", "rejected"]
     ingestion: LibraryPaperIngestionResponse | None = None
     job: WaitableJobResponse | None = None
@@ -829,6 +1160,18 @@ class AnnotationThreadInput(ToolInput):
     )
 
 
+class AnnotationThreadPageInput(AnnotationThreadInput, JsonDocumentPageInput):
+    cursor: str | None = Field(
+        default=None, max_length=2_048, description=CURSOR_DESCRIPTION
+    )
+    max_utf8_bytes: int = Field(
+        default=24_000,
+        ge=1_024,
+        le=32_000,
+        description="Maximum UTF-8 bytes of thread JSON to return in this page.",
+    )
+
+
 class CreateAnnotationThreadInput(MutationInput):
     document_id: DocumentId
     quote_text: str = Field(
@@ -855,6 +1198,10 @@ class CreateAnnotationThreadInput(MutationInput):
 
 
 class UpdateAnnotationThreadInput(MutationInput):
+    model_config = ConfigDict(
+        json_schema_extra=UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA
+    )
+
     thread_id: UUID = Field(
         description="Annotation-thread UUID returned by a thread tool."
     )
@@ -942,12 +1289,15 @@ class ListResearchOutputsInput(ToolInput):
         default=None,
         min_length=1,
         max_length=1_000,
-        description="Optional text to match inside already-generated output content.",
+        description="Optional text to match inside stored research-output content.",
     )
     kinds: list[ResearchItemKind] = Field(
         default_factory=list,
-        max_length=3,
-        description="Optional output kinds; empty includes every research-output kind.",
+        max_length=4,
+        description=(
+            "Optional output kinds; empty includes annotation threads, citations, "
+            "audio overviews, and data tables."
+        ),
     )
     sort: LibraryOutputSort = Field(
         default=LibraryOutputSort.UPDATED_DESC,
@@ -958,18 +1308,34 @@ class ListResearchOutputsInput(ToolInput):
     )
     limit: int = Field(default=20, ge=1, le=100, description="Page size.")
 
-    @model_validator(mode="after")
-    def reject_annotation_kind(self) -> ListResearchOutputsInput:
-        if ResearchItemKind.ANNOTATION_THREAD in self.kinds:
-            raise ValueError(
-                "annotation_thread is managed by the annotation tools, not research outputs"
-            )
-        return self
+
+class ListResearchOutputSummariesInput(ListResearchOutputsInput):
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=25,
+        description="Maximum bounded research-output summaries in this page.",
+    )
 
 
 class ResearchOutputInput(ToolInput):
     item_id: UUID = Field(
         description="Research-output UUID returned by a list or search tool."
+    )
+
+
+class ResearchOutputPageInput(ResearchOutputInput, JsonDocumentPageInput):
+    cursor: str | None = Field(
+        default=None, max_length=2_048, description=CURSOR_DESCRIPTION
+    )
+    max_utf8_bytes: int = Field(
+        default=24_000,
+        ge=1_024,
+        le=32_000,
+        description=(
+            "Maximum UTF-8 bytes of canonical research-output JSON to return "
+            "in this page."
+        ),
     )
 
 
@@ -996,11 +1362,29 @@ class ConfirmationAwareAction(RootModel[ConfirmationChallenge | CompletedAction]
 class CommentActionOutput(BaseModel):
     comment: AnnotationCommentResponse
     resource_uri: str
+    content_truncated: bool = Field(
+        default=False,
+        description="Whether comment.content is a bounded preview of the stored value.",
+    )
+    guidance: str | None = Field(
+        default=None,
+        description="How to continue to the complete stored discussion when truncated.",
+    )
 
 
 class ThreadActionOutput(BaseModel):
     thread: ResearchItemResponse
     resource_uri: str
+    content_truncated: bool = Field(
+        default=False,
+        description=(
+            "Whether quote, position, or comments were reduced in this mutation receipt."
+        ),
+    )
+    guidance: str | None = Field(
+        default=None,
+        description="How to continue to the complete stored thread when truncated.",
+    )
 
 
 class ThreadListOutput(BaseModel):
@@ -1008,8 +1392,28 @@ class ThreadListOutput(BaseModel):
     next_cursor: str | None = None
 
 
-class ResolvedCitationOutput(CitationResult):
-    resource_uri: str
+class ResolvedCitationOutput(BaseModel):
+    document_id: str = Field(max_length=64)
+    preferred_style: str = Field(max_length=100)
+    style_display: str = Field(max_length=100)
+    data: CitationDataOutput
+    method: CitationMethod
+    missing_fields: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list,
+        max_length=CITATION_MAX_MAP_ITEMS,
+    )
+    filled_fields: dict[str, JsonValue] = Field(
+        default_factory=dict,
+        max_length=CITATION_MAX_MAP_ITEMS,
+    )
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    steps: list[CitationStepOutput] = Field(
+        default_factory=list,
+        max_length=CITATION_MAX_STEPS,
+    )
+    resource_uri: str = Field(max_length=512)
+    content_truncated: bool = False
+    guidance: str = Field(max_length=1_000)
 
 
 def project_permission_set(

@@ -98,3 +98,50 @@ def require_member_can_leave(*, user_id: int, owner_id: int) -> None:
             message="Transfer or delete the project before leaving",
             kind=FailureKind.CONFLICT,
         )
+
+
+def require_member_manageable(
+    access: ProjectAccessFacts,
+    *,
+    target_user_id: int,
+    target_permissions: ProjectPermissions,
+) -> None:
+    """Apply the shared collaborator-management boundary before mutation."""
+
+    require_member_management_target(access, target_user_id=target_user_id)
+    require_member_permission_scope(access, target_permissions=target_permissions)
+
+
+def require_member_management_target(
+    access: ProjectAccessFacts,
+    *,
+    target_user_id: int,
+) -> None:
+    """Require collaborator-management authority and a mutable target identity."""
+
+    require_permission(access, ProjectPermission.MANAGE_COLLABORATORS)
+    if not is_distinct_non_owner_member(
+        actor_id=access.user_id,
+        target_user_id=target_user_id,
+        owner_id=access.owner_id,
+    ):
+        raise AppError(
+            code="project_collaborator_not_manageable",
+            message="This Project collaborator cannot be modified",
+            kind=FailureKind.CONFLICT,
+        )
+
+
+def require_member_permission_scope(
+    access: ProjectAccessFacts,
+    *,
+    target_permissions: ProjectPermissions,
+) -> None:
+    """Prevent a non-owner from managing permissions they do not possess."""
+
+    if not access.is_owner and not access.permissions.contains(target_permissions):
+        raise AppError(
+            code="project_collaborator_not_manageable",
+            message="You cannot manage a collaborator with permissions you do not have",
+            kind=FailureKind.PERMISSION_DENIED,
+        )

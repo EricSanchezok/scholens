@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from app.database.models import LibraryPaper, LibraryPaperTag, PaperTag
 from app.shared.domain import AppError, FailureKind
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,12 @@ def _normalized_name(name: str) -> str:
     return normalized
 
 
+@dataclass(frozen=True, slots=True)
+class LibraryTagPageRow:
+    tag: PaperTag
+    sort_name: str
+
+
 class LibraryTagRepository:
     @staticmethod
     def list_owned(db: Session, *, user_id: int) -> list[PaperTag]:
@@ -31,6 +38,53 @@ class LibraryTagRepository:
                 .where(PaperTag.user_id == user_id)
                 .order_by(func.lower(PaperTag.name), PaperTag.id)
             ).all()
+        )
+
+    @staticmethod
+    def list_owned_page(
+        db: Session,
+        *,
+        user_id: int,
+        limit: int,
+        position_name: str | None,
+        position_id: uuid.UUID | None,
+    ) -> list[LibraryTagPageRow]:
+        sort_name = func.lower(PaperTag.name)
+        filters = [PaperTag.user_id == user_id]
+        if position_name is not None and position_id is not None:
+            filters.append(
+                or_(
+                    sort_name > position_name,
+                    and_(sort_name == position_name, PaperTag.id > position_id),
+                )
+            )
+        rows = (
+            db.execute(
+                select(PaperTag, sort_name)
+                .where(*filters)
+                .order_by(sort_name.asc(), PaperTag.id.asc())
+                .limit(limit + 1)
+            )
+            .tuples()
+            .all()
+        )
+        return [
+            LibraryTagPageRow(tag=tag, sort_name=normalized_name)
+            for tag, normalized_name in rows
+        ]
+
+    @staticmethod
+    def get_owned(
+        db: Session,
+        *,
+        user_id: int,
+        tag_id: uuid.UUID,
+    ) -> PaperTag | None:
+        return db.scalar(
+            select(PaperTag).where(
+                PaperTag.id == tag_id,
+                PaperTag.user_id == user_id,
+            )
         )
 
     @staticmethod

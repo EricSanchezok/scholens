@@ -348,10 +348,14 @@ class PaperIngestionWorkflow:
             )
         )
         if changed:
-            ingestion = self._executor.query(
-                lambda capabilities: capabilities.paper_ingestion
-            )
-            await ingestion.release(actor=actor, job_id=job_id)
+            await self.release_cancelled(actor=actor, job_id=job_id)
+
+    async def release_cancelled(self, *, actor: Actor, job_id: UUID) -> None:
+        """Release only the external concurrency lease after DB cancellation commits."""
+        ingestion = self._executor.query(
+            lambda capabilities: capabilities.paper_ingestion
+        )
+        await ingestion.release(actor=actor, job_id=job_id)
 
     async def _start(
         self,

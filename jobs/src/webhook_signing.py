@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import os
 import time
 import uuid
@@ -12,9 +11,25 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
+from scholens_job_contracts import (
+    callback_json_bytes,
+    require_callback_body_size,
+)
 from scholens_runtime_contracts import resolve_internal_callback_base_url
 
 DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
+
+
+class CallbackPayloadTooLarge(RuntimeError):
+    """A callback exceeded the byte contract shared with Server."""
+
+    error_code = "jobs_callback_too_large"
+
+
+class CallbackPayloadInvalid(RuntimeError):
+    """A callback could not be encoded as strict JSON."""
+
+    error_code = "jobs_callback_invalid"
 
 
 def callback_base_url() -> str:
@@ -57,7 +72,14 @@ def post_signed_json(
     timeout: float,
 ) -> requests.Response:
     url = _production_callback_url(url)
-    body = encode_json_body(payload)
+    try:
+        body = encode_json_body(payload)
+    except ValueError as exc:
+        raise CallbackPayloadInvalid("jobs_callback_invalid") from exc
+    try:
+        require_callback_body_size(body)
+    except ValueError as exc:
+        raise CallbackPayloadTooLarge(str(exc)) from exc
     timestamp = str(int(time.time()))
     nonce = str(uuid.uuid4())
     parsed = urlsplit(url)
@@ -79,8 +101,4 @@ def post_signed_json(
 
 
 def encode_json_body(payload: dict[str, Any] | None) -> bytes:
-    return (
-        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
-        if payload is not None
-        else b""
-    )
+    return callback_json_bytes(payload) if payload is not None else b""

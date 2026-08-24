@@ -20,7 +20,11 @@ from app.shared.application import (
     SchedulerOrigin,
 )
 from app.transport.http.internal_v1.authentication import verify_jobs_webhook
-from fastapi import APIRouter, Depends, Query
+from app.transport.http.internal_v1.authentication import (
+    parse_callback_model,
+    parse_callback_object,
+)
+from fastapi import APIRouter, Depends, Query, Request
 
 terminal_router = APIRouter()
 
@@ -28,13 +32,13 @@ terminal_router = APIRouter()
 @terminal_router.post("/jobs/{job_id}/complete")
 async def complete_job(
     job_id: uuid.UUID,
-    payload: dict[str, object],
+    request: Request,
     verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     processor: JobCompletionProcessor = Depends(get_job_completion_processor),
 ) -> object:
     return await processor.complete(
         job_id=job_id,
-        payload=payload,
+        payload=parse_callback_object(request),
         verified=verified,
     )
 
@@ -45,13 +49,13 @@ async def complete_job(
 )
 def fail_job(
     job_id: uuid.UUID,
-    callback: JobFailureCallback,
+    request: Request,
     verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     processor: JobCompletionProcessor = Depends(get_job_completion_processor),
 ) -> JobClaimResponse:
     return processor.fail(
         job_id=job_id,
-        callback=callback,
+        callback=parse_callback_model(request, JobFailureCallback),
         verified=verified,
     )
 
