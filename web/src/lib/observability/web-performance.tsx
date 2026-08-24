@@ -5,6 +5,9 @@ import * as React from "react";
 
 import { clientEnvironment } from "@/lib/env/client";
 import type {
+  ConversationPerformanceEvent,
+  ConversationPerformanceMetricName,
+  WebTelemetryEvent,
   WebPerformanceEvent,
   WebPerformanceMetricName,
   WebPerformanceRouteGroup,
@@ -45,7 +48,10 @@ export function performanceRouteGroup(
   return "unknown";
 }
 
-function browserContext() {
+function browserContext(): Pick<
+  WebTelemetryEvent,
+  "device_class" | "effective_type" | "save_data"
+> {
   const connection = (
     navigator as Navigator & { connection?: NetworkInformation }
   ).connection;
@@ -60,19 +66,20 @@ function browserContext() {
   };
 }
 
-function reportWebPerformance(
-  event: Omit<
-    WebPerformanceEvent,
-    "device_class" | "effective_type" | "event_id" | "release" | "save_data"
-  >,
-) {
+type BrowserContextFields =
+  "device_class" | "effective_type" | "event_id" | "release" | "save_data";
+type BrowserTelemetryPayload<T> = T extends WebTelemetryEvent
+  ? Omit<T, BrowserContextFields>
+  : never;
+
+function reportWebTelemetry(event: BrowserTelemetryPayload<WebTelemetryEvent>) {
   if (typeof window === "undefined") return;
-  const body: WebPerformanceEvent = {
+  const body: WebTelemetryEvent = {
     ...event,
     ...browserContext(),
     event_id: crypto.randomUUID(),
     release: clientEnvironment.NEXT_PUBLIC_RELEASE_SHA,
-  };
+  } as WebTelemetryEvent;
   void fetch("/__telemetry/web-performance", {
     body: JSON.stringify(body),
     credentials: "omit",
@@ -80,6 +87,26 @@ function reportWebPerformance(
     keepalive: true,
     method: "POST",
   }).catch(() => undefined);
+}
+
+function reportWebPerformance(
+  event: BrowserTelemetryPayload<WebPerformanceEvent>,
+) {
+  reportWebTelemetry(event);
+}
+
+export function reportConversationPerformance(
+  metric: ConversationPerformanceMetricName,
+  value: number,
+  streamKind?: ConversationPerformanceEvent["stream_kind"],
+) {
+  if (typeof window === "undefined") return;
+  reportWebTelemetry({
+    metric,
+    stream_kind: streamKind,
+    to_route: performanceRouteGroup(window.location.pathname),
+    value: Math.max(0, value),
+  });
 }
 
 export function reportCoreWebVital(

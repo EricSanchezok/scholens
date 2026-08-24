@@ -6,6 +6,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
@@ -13,7 +14,13 @@ from celery import Task
 from pydantic import BaseModel, ConfigDict
 from redis import Redis
 from redis.exceptions import RedisError
-from scholens_observability import add_counter, bind_context, build_snapshot, log_event
+from scholens_observability import (
+    add_counter,
+    bind_context,
+    build_snapshot,
+    log_event,
+    record_histogram,
+)
 
 from app.database.database import SessionLocal
 from app.bootstrap.adapters.conversation_job_recovery import (
@@ -96,6 +103,21 @@ def _release_concurrency(*, user_id: int, response_id: UUID) -> None:
         client.close()
 
 
+def _record_claim_age(
+    job: DurableJob,
+    *,
+    generation_kind: Literal["initial", "retry", "branch"],
+) -> None:
+    if not isinstance(job.created_at, datetime):
+        return
+    record_histogram(
+        "scholens.conversation.worker.claim_age",
+        max(0, (datetime.now(UTC) - job.created_at).total_seconds()),
+        unit="s",
+        attributes={"generation_kind": generation_kind},
+    )
+
+
 def _claim(request: ConversationGenerationTaskRequest) -> ClaimedGeneration | None:
     release_user_id: int | None = None
     claimed: ClaimedGeneration | None = None
@@ -123,31 +145,9 @@ def _claim(request: ConversationGenerationTaskRequest) -> ClaimedGeneration | No
                     in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
                 ):
                     release_user_id = existing.requested_by_id
-            elif job.requested_by_id is None:
-                response = db.get(ConversationResponse, request.response_id)
-                if response is not None and response.status == "running":
-                    response.status = "failed"
-                    response.failure = {
-                        "code": "conversation_actor_unavailable",
-                        "kind": FailureKind.UNAVAILABLE.value,
-                        "retryable": False,
-                        "correlation_id": str(job.correlation_id),
-                    }
-                    response.turn.selected_response_id = response.id
-                job_repository.fail(
-                    db,
-                    job_id=request.response_id,
-                    error_code="conversation_actor_unavailable",
-                )
             else:
-                user = user_repository.get(db, id=job.requested_by_id)
-                if user is not None:
-                    claimed = ClaimedGeneration(
-                        actor=actor_from_auth_user(user),
-                        correlation_id=job.correlation_id,
-                        origin_operation_id=job.origin_operation_id,
-                    )
-                else:
+                _record_claim_age(job, generation_kind=request.generation_kind)
+                if job.requested_by_id is None:
                     response = db.get(ConversationResponse, request.response_id)
                     if response is not None and response.status == "running":
                         response.status = "failed"
@@ -158,12 +158,36 @@ def _claim(request: ConversationGenerationTaskRequest) -> ClaimedGeneration | No
                             "correlation_id": str(job.correlation_id),
                         }
                         response.turn.selected_response_id = response.id
-                    release_user_id = job.requested_by_id
                     job_repository.fail(
                         db,
                         job_id=request.response_id,
                         error_code="conversation_actor_unavailable",
                     )
+                else:
+                    user = user_repository.get(db, id=job.requested_by_id)
+                    if user is not None:
+                        claimed = ClaimedGeneration(
+                            actor=actor_from_auth_user(user),
+                            correlation_id=job.correlation_id,
+                            origin_operation_id=job.origin_operation_id,
+                        )
+                    else:
+                        response = db.get(ConversationResponse, request.response_id)
+                        if response is not None and response.status == "running":
+                            response.status = "failed"
+                            response.failure = {
+                                "code": "conversation_actor_unavailable",
+                                "kind": FailureKind.UNAVAILABLE.value,
+                                "retryable": False,
+                                "correlation_id": str(job.correlation_id),
+                            }
+                            response.turn.selected_response_id = response.id
+                        release_user_id = job.requested_by_id
+                        job_repository.fail(
+                            db,
+                            job_id=request.response_id,
+                            error_code="conversation_actor_unavailable",
+                        )
     if release_user_id is not None:
         _release_concurrency(
             user_id=release_user_id,

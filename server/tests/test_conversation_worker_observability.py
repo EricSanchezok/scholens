@@ -1,14 +1,33 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
 from app.bootstrap.adapters import conversation_worker
+from app.modules.jobs.infrastructure.models import DurableJob
 from app.shared.application import Actor, OperationContextFactory
 from scholens_observability import ObservabilityContext, current_context
+
+
+def test_claim_age_metric_uses_only_generation_kind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = MagicMock(spec=DurableJob)
+    job.created_at = datetime.now(UTC) - timedelta(seconds=2)
+    metric = MagicMock()
+    monkeypatch.setattr(conversation_worker, "record_histogram", metric)
+
+    conversation_worker._record_claim_age(job, generation_kind="retry")
+
+    metric.assert_called_once()
+    assert metric.call_args.args[0] == "scholens.conversation.worker.claim_age"
+    assert metric.call_args.kwargs["unit"] == "s"
+    assert metric.call_args.kwargs["attributes"] == {"generation_kind": "retry"}
 
 
 @pytest.mark.asyncio

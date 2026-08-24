@@ -120,9 +120,11 @@ export function MessageContent({
   streaming?: boolean;
 }) {
   const t = useTranslations("Home.conversation");
+  const deferredContent = React.useDeferredValue(content);
+  const visibleContent = streaming ? deferredContent : content;
   const renderedContent = React.useMemo(
-    () => annotateMarkdownContent(content, annotations),
-    [annotations, content],
+    () => annotateMarkdownContent(visibleContent, annotations),
+    [annotations, visibleContent],
   );
   const components = React.useMemo<Components>(
     () => ({

@@ -147,6 +147,9 @@ jobs:
             {
               echo "exists=true"
               echo "release_sha=$(parameter ReleaseSha)"
+              echo "web_image=$(parameter WebImage)"
+              echo "api_image=$(parameter ApiImage)"
+              echo "jobs_image=$(parameter JobsImage)"
               echo "application_enabled=$(parameter ApplicationEnabled)"
               echo "scheduler_state=$(parameter SchedulerState)"
             } >> "$GITHUB_OUTPUT"
@@ -242,10 +245,20 @@ jobs:
             --attestation migration-attestation.json \
             --current migration-current.json \
             --source-root release-source
-      - name: Deploy digest-qualified ECS release
+      - name: Deploy digest-qualified ECS release in compatibility order
+        id: candidate
+        continue-on-error: true
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
+          OPERATION: ${{ inputs.operation }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          PREVIOUS_EXISTS: ${{ steps.previous.outputs.exists }}
+          PREVIOUS_RELEASE_SHA: ${{ steps.previous.outputs.release_sha }}
+          PREVIOUS_WEB_IMAGE: ${{ steps.previous.outputs.web_image }}
+          PREVIOUS_API_IMAGE: ${{ steps.previous.outputs.api_image }}
+          PREVIOUS_JOBS_IMAGE: ${{ steps.previous.outputs.jobs_image }}
+          PREVIOUS_APPLICATION_ENABLED: ${{ steps.previous.outputs.application_enabled }}
+          PREVIOUS_SCHEDULER_STATE: ${{ steps.previous.outputs.scheduler_state }}
           DOMAIN_NAME: ${{ vars.PRODUCTION_DOMAIN }}
           CERTIFICATE_ARN: ${{ vars.PRODUCTION_CERTIFICATE_ARN }}
           RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
@@ -256,6 +269,8 @@ jobs:
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
           AVATAR_KMS_KEY_ARN: ${{ steps.avatar-access.outputs.avatar_kms_key_arn }}
         run: |
+          set -euo pipefail
+          echo "phase=preflight" >> "$GITHUB_OUTPUT"
           account_id=$(aws sts get-caller-identity --query Account --output text)
           template_bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
           # JMESPath uses literal backticks.
@@ -265,39 +280,11 @@ jobs:
             --output text)
           test "$template_kms_key_arn" != None
           test "$AVATAR_KMS_KEY_ARN" != None
-          web_image=$(jq -r .images.web release-manifest.json)
-          api_image=$(jq -r .images.api release-manifest.json)
-          jobs_image=$(jq -r .images.jobs release-manifest.json)
-          template=release-source/deploy/ecs/scholens-production.yml
-          mapfile -t supported_parameters < <(python scripts/release_manifest.py \
-            template-parameters --template "$template")
-          parameter_overrides=()
-          for parameter in "${supported_parameters[@]}"; do
-            case "$parameter" in
-              DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
-              CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
-              RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
-              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$AVATAR_KMS_KEY_ARN") ;;
-              WebImage) parameter_overrides+=("WebImage=$web_image") ;;
-              ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
-              JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
-              ReleaseSha) parameter_overrides+=("ReleaseSha=$RELEASE_SHA") ;;
-              EdgeSecretVersionId) parameter_overrides+=("EdgeSecretVersionId=$EDGE_SECRET_VERSION_ID") ;;
-              EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
-              ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$APPLICATION_ENABLED") ;;
-              SchedulerState) parameter_overrides+=("SchedulerState=$SCHEDULER_STATE") ;;
-            esac
-          done
-          if ! aws cloudformation deploy \
-            --stack-name sanchezcloud-scholens-production \
-            --template-file "$template" \
-            --s3-bucket "$template_bucket" \
-            --s3-prefix "cloudformation/${RELEASE_SHA}" \
-            --kms-key-id "$template_kms_key_arn" \
-            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides "${parameter_overrides[@]}"; then
+          candidate_web_image=$(jq -er .images.web release-manifest.json)
+          candidate_api_image=$(jq -er .images.api release-manifest.json)
+          candidate_jobs_image=$(jq -er .images.jobs release-manifest.json)
+
+          show_stack_failure() {
             # JMESPath uses literal backticks.
             # shellcheck disable=SC2016
             aws cloudformation describe-stack-events \
@@ -305,14 +292,130 @@ jobs:
               --max-items 30 \
               --query 'StackEvents[?ResourceStatusReason!=`null`].{Time:Timestamp,Status:ResourceStatus,LogicalId:LogicalResourceId,Type:ResourceType,Reason:ResourceStatusReason}' \
               --output table || true
-            exit 1
+          }
+          deploy_stack() {
+            local phase=$1
+            local template=$2
+            local selected_release_sha=$3
+            local web_image=$4
+            local api_image=$5
+            local jobs_image=$6
+            local selected_application_enabled=$7
+            local selected_scheduler_state=$8
+            mapfile -t supported_parameters < <(python scripts/release_manifest.py \
+              template-parameters --template "$template")
+            parameter_overrides=()
+            for parameter in "${supported_parameters[@]}"; do
+              case "$parameter" in
+                DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
+                CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
+                RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
+                AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$AVATAR_KMS_KEY_ARN") ;;
+                WebImage) parameter_overrides+=("WebImage=$web_image") ;;
+                ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
+                JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
+                ReleaseSha) parameter_overrides+=("ReleaseSha=$selected_release_sha") ;;
+                EdgeSecretVersionId) parameter_overrides+=("EdgeSecretVersionId=$EDGE_SECRET_VERSION_ID") ;;
+                EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
+                ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$selected_application_enabled") ;;
+                SchedulerState) parameter_overrides+=("SchedulerState=$selected_scheduler_state") ;;
+              esac
+            done
+            if ! aws cloudformation deploy \
+              --stack-name sanchezcloud-scholens-production \
+              --template-file "$template" \
+              --s3-bucket "$template_bucket" \
+              --s3-prefix "cloudformation/${RELEASE_SHA}/${phase}" \
+              --kms-key-id "$template_kms_key_arn" \
+              --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+              --capabilities CAPABILITY_NAMED_IAM \
+              --no-fail-on-empty-changeset \
+              --parameter-overrides "${parameter_overrides[@]}"; then
+              show_stack_failure
+              return 1
+            fi
+          }
+          wait_for_services() {
+            # JMESPath uses literal backticks.
+            # shellcheck disable=SC2016
+            mapfile -t services < <(aws cloudformation describe-stack-resources \
+              --stack-name sanchezcloud-scholens-production \
+              --query 'StackResources[?ResourceType==`AWS::ECS::Service`].PhysicalResourceId' \
+              --output text | tr '\t' '\n')
+            (( ${#services[@]} > 0 ))
+            aws ecs wait services-stable \
+              --cluster sanchezcloud-production \
+              --services "${services[@]}"
+          }
+          verify_public_runtime() {
+            [[ "$DOMAIN_NAME" =~ ^[A-Za-z0-9.-]+$ ]]
+            retry() {
+              local url=$1
+              for attempt in {1..18}; do
+                if curl \
+                  --connect-timeout 5 \
+                  --max-time 20 \
+                  --fail \
+                  --silent \
+                  --show-error \
+                  --output /dev/null \
+                  "$url"; then
+                  return 0
+                fi
+                (( attempt == 18 )) || sleep 10
+              done
+              echo "Compatibility smoke check failed: $url" >&2
+              return 1
+            }
+            retry "https://${DOMAIN_NAME}/healthz"
+            retry "https://${DOMAIN_NAME}/api/v1/healthz"
+          }
+
+          if [[ "$PREVIOUS_EXISTS" == true && \
+                "$PREVIOUS_APPLICATION_ENABLED" == true && \
+                "$APPLICATION_ENABLED" == true ]]; then
+            echo "phase=compatibility" >> "$GITHUB_OUTPUT"
+            if [[ "$OPERATION" == deploy ]]; then
+              compatibility_sha=$RELEASE_SHA
+              compatibility_web_image=$PREVIOUS_WEB_IMAGE
+              compatibility_api_image=$candidate_api_image
+              compatibility_jobs_image=$candidate_jobs_image
+            else
+              compatibility_sha=$PREVIOUS_RELEASE_SHA
+              compatibility_web_image=$candidate_web_image
+              compatibility_api_image=$PREVIOUS_API_IMAGE
+              compatibility_jobs_image=$PREVIOUS_JOBS_IMAGE
+            fi
+            deploy_stack \
+              compatibility \
+              deploy/ecs/scholens-production.yml \
+              "$compatibility_sha" \
+              "$compatibility_web_image" \
+              "$compatibility_api_image" \
+              "$compatibility_jobs_image" \
+              true \
+              "$PREVIOUS_SCHEDULER_STATE"
+            wait_for_services
+            verify_public_runtime
           fi
+
+          echo "phase=final" >> "$GITHUB_OUTPUT"
+          deploy_stack \
+            final \
+            release-source/deploy/ecs/scholens-production.yml \
+            "$RELEASE_SHA" \
+            "$candidate_web_image" \
+            "$candidate_api_image" \
+            "$candidate_jobs_image" \
+            "$APPLICATION_ENABLED" \
+            "$SCHEDULER_STATE"
           aws cloudformation update-termination-protection \
             --stack-name sanchezcloud-scholens-production \
             --enable-termination-protection
       - name: Wait for services to stabilize
         id: stabilize
         continue-on-error: true
+        if: steps.candidate.outcome == 'success'
         run: |
           # JMESPath uses literal backticks.
           # shellcheck disable=SC2016
@@ -327,7 +430,10 @@ jobs:
       - name: Verify public deployment
         id: smoke
         continue-on-error: true
-        if: steps.stabilize.outcome == 'success' && inputs.application_enabled == 'true'
+        if: >-
+          steps.candidate.outcome == 'success' &&
+          steps.stabilize.outcome == 'success' &&
+          inputs.application_enabled == 'true'
         env:
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
         run: |
@@ -353,12 +459,22 @@ jobs:
           retry "https://${PRODUCTION_DOMAIN}/healthz"
           retry "https://${PRODUCTION_DOMAIN}/api/v1/healthz"
       - name: Restore safe release after candidate verification failure
-        if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'
+        if: >-
+          steps.candidate.outcome == 'failure' ||
+          steps.stabilize.outcome == 'failure' ||
+          steps.smoke.outcome == 'failure'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
+          OPERATION: ${{ inputs.operation }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          FAILED_PHASE: ${{ steps.candidate.outputs.phase }}
+          APPLICATION_ENABLED: ${{ inputs.application_enabled }}
+          SCHEDULER_STATE: ${{ inputs.scheduler_state }}
           PREVIOUS_EXISTS: ${{ steps.previous.outputs.exists }}
           PREVIOUS_RELEASE_SHA: ${{ steps.previous.outputs.release_sha }}
+          PREVIOUS_WEB_IMAGE: ${{ steps.previous.outputs.web_image }}
+          PREVIOUS_API_IMAGE: ${{ steps.previous.outputs.api_image }}
+          PREVIOUS_JOBS_IMAGE: ${{ steps.previous.outputs.jobs_image }}
           PREVIOUS_APPLICATION_ENABLED: ${{ steps.previous.outputs.application_enabled }}
           PREVIOUS_SCHEDULER_STATE: ${{ steps.previous.outputs.scheduler_state }}
           DOMAIN_NAME: ${{ vars.PRODUCTION_DOMAIN }}
@@ -422,9 +538,38 @@ jobs:
             cp release-manifest.json recovery-manifest.json
             recovery_template=release-source/deploy/ecs/scholens-production.yml
           fi
-          web_image=$(jq -r .images.web recovery-manifest.json)
-          api_image=$(jq -r .images.api recovery-manifest.json)
-          jobs_image=$(jq -r .images.jobs recovery-manifest.json)
+          if [[ "$recovered_previous" == true ]]; then
+            # Restore the exact observed image set. A prior failed forward
+            # release may intentionally have a candidate backend with the
+            # previous Web image, which one manifest cannot represent.
+            web_image=$PREVIOUS_WEB_IMAGE
+            api_image=$PREVIOUS_API_IMAGE
+            jobs_image=$PREVIOUS_JOBS_IMAGE
+          else
+            web_image=$(jq -er .images.web recovery-manifest.json)
+            api_image=$(jq -er .images.api recovery-manifest.json)
+            jobs_image=$(jq -er .images.jobs recovery-manifest.json)
+          fi
+          recovery_mode=previous-release
+          if [[ "$recovered_previous" == true && \
+                "$OPERATION" == deploy && \
+                "$FAILED_PHASE" == final && \
+                "$PREVIOUS_APPLICATION_ENABLED" == true && \
+                "$APPLICATION_ENABLED" == true ]]; then
+            # Keep the compatibility-tested candidate API and workers. A browser
+            # may already be running candidate JavaScript when final verification
+            # fails, so rolling every service back would break that live client.
+            recovery_sha=$RELEASE_SHA
+            recovery_enabled=$APPLICATION_ENABLED
+            recovery_scheduler=$PREVIOUS_SCHEDULER_STATE
+            # This trusted template already succeeded in the compatibility
+            # phase, whereas the selected release template may be the reason
+            # the final phase failed.
+            recovery_template=deploy/ecs/scholens-production.yml
+            api_image=$(jq -er .images.api release-manifest.json)
+            jobs_image=$(jq -er .images.jobs release-manifest.json)
+            recovery_mode=compatible-backend
+          fi
           mapfile -t supported_parameters < <(python scripts/release_manifest.py \
             template-parameters --template "$recovery_template")
           parameter_overrides=()
@@ -471,13 +616,17 @@ jobs:
             echo "### Automatic candidate verification recovery"
             echo "- Failed candidate: \`${RELEASE_SHA}\`"
             echo "- Restored release: \`${recovery_sha}\`"
+            echo "- Recovery mode: \`${recovery_mode}\`"
             echo "- Application: \`${recovery_enabled}\`"
             echo "- Scheduler: \`${recovery_scheduler}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail the rejected release after recovery
-        if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'
+        if: >-
+          steps.candidate.outcome == 'failure' ||
+          steps.stabilize.outcome == 'failure' ||
+          steps.smoke.outcome == 'failure'
         run: |
-          echo "Candidate stabilization or smoke verification failed; recovery completed." >&2
+          echo "Candidate deployment, stabilization, or smoke verification failed; recovery completed." >&2
           exit 1
       - name: Record release operation
         run: |

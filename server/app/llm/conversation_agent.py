@@ -30,6 +30,7 @@ from app.llm.grounded_answer import (
 from app.llm.pydantic_models import build_chat_model, profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
 from app.modules.conversations.application.chat import (
+    ChatHistoryMessage,
     ChatPaperSnapshot,
     ConversationChatScope,
     ConversationContextSnapshot,
@@ -122,11 +123,20 @@ _MAX_AGENT_REQUESTS = 32
 _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
-_FINAL_CANDIDATE_HOLD_CHARS = 32
 _FINAL_OUTPUT_TOOL_NAME = "final_answer"
 _VISIBLE_CITATION_LABEL = re.compile(
     r"\[A\d+(?:\s*,\s*A?\d+)*\]",
     re.IGNORECASE,
+)
+_VISIBLE_CITATION_PREFIX = re.compile(
+    r"\[(?:A(?:\d+(?:\s*,\s*A?\d+)*(?:\s*,\s*A?\d*)?)?)?",
+    re.IGNORECASE,
+)
+_PRIVATE_OUTPUT_TERMS = (
+    "source_keys",
+    "private marker",
+    "initial answer packet",
+    "scholens_cite",
 )
 
 _SCOPE_GRAVITY_TEXT: dict[ConversationScopeType, str] = {
@@ -201,6 +211,23 @@ def _contains_private_output_protocol(value: str) -> bool:
         marker in normalized
         for marker in ("private marker", "initial answer packet", "scholens_cite")
     )
+
+
+def _unsafe_candidate_suffix_length(value: str) -> int:
+    """Retain only a suffix that could still become forbidden output."""
+    normalized = value.casefold()
+    held = 0
+    for term in _PRIVATE_OUTPUT_TERMS:
+        maximum = min(len(normalized), len(term) - 1)
+        for length in range(maximum, 0, -1):
+            if normalized.endswith(term[:length]):
+                held = max(held, length)
+                break
+
+    bracket_at = value.rfind("[")
+    if bracket_at >= 0 and _VISIBLE_CITATION_PREFIX.fullmatch(value[bracket_at:]):
+        held = max(held, len(value) - bracket_at)
+    return held
 
 
 def _tool_argument_retry_message(error: AppError) -> str:
@@ -382,15 +409,9 @@ class ScholensConversationAgent:
         correlation_id: uuid.UUID,
         user_operation_id: uuid.UUID,
         mentioned_annotations: list[dict[str, Any]] | None,
+        history: list[ChatHistoryMessage],
     ) -> AsyncGenerator[ConversationAgentStreamEvent, None]:
         started = time.monotonic()
-        history = executor.query(
-            lambda capabilities: capabilities.conversation_chat_data.history(
-                actor=actor,
-                conversation_id=conversation_id,
-                before_turn_id=request.turn_id,
-            )
-        )
         tool_access = ToolAccess(
             profile_name=CONVERSATION_TOOL_PROFILE,
             permissions=conversation_scope.tool_permissions,
@@ -967,7 +988,9 @@ class ScholensConversationAgent:
         if candidate.suppressed:
             return events
 
-        publishable_length = max(0, len(visible_content) - _FINAL_CANDIDATE_HOLD_CHARS)
+        publishable_length = len(visible_content) - _unsafe_candidate_suffix_length(
+            visible_content
+        )
         publishable = visible_content[:publishable_length]
         if not publishable.startswith(candidate.published_content):
             events.append(

@@ -4,21 +4,27 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "next-intl";
 import * as React from "react";
 
+import { ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
+import {
+  createConversationPerformanceTracker,
+  type ConversationPerformanceTracker,
+} from "@/lib/observability/conversation-performance";
 import {
   updateLatestTurnSuggestions,
   upsertConversationTurn,
 } from "./api/conversation-cache";
 import {
   cancelConversationGeneration,
-  createConversation,
   selectConversationBranch,
   selectConversationResponse,
   streamConversationBranch,
   streamConversationRetry,
+  streamConversationStart,
   streamConversationTurn,
   subscribeConversationEvents,
   updateConversationContext,
+  type ConversationStreamKind,
   type ConversationStreamEvent,
   type ConversationTurnCreateRequest,
 } from "./api/conversations";
@@ -28,15 +34,10 @@ import {
   conversationFailureFromError,
   createLiveTurn,
   persistedResponseStatus,
-  reduceLiveTurn,
-  reduceLiveTurnEvents,
   type LiveTurn,
 } from "./conversation-state";
 import type { ConversationTurn } from "./components/conversation-view";
-import {
-  ConversationDeltaBuffer,
-  type ConversationDeltaEvent,
-} from "./conversation-delta-buffer";
+import { ConversationLiveStore } from "./conversation-live-store";
 import {
   useResearchComposerForm,
   type ReasoningLevel,
@@ -46,26 +47,26 @@ import {
 type ConversationTurnsResponse =
   components["schemas"]["ConversationTurnsResponse"];
 type ConversationScopeType = components["schemas"]["ConversationScopeType"];
+type PendingGeneration = {
+  conversationId: string;
+  identity: string;
+  responseId: string;
+  turnId: string;
+};
 type StreamSession = {
   conversationId: string;
   turnId: string;
   responseId: string;
   controller: AbortController;
-  started: boolean;
+  accepted: boolean;
   startNotified: boolean;
   ready: boolean;
   superseded: boolean;
   resolveAccepted?: () => void;
   rejectAccepted?: (error: unknown) => void;
   pendingLiveTurn?: LiveTurn;
-  deltaBuffer?: ConversationDeltaBuffer;
-  durable: boolean;
+  performance?: ConversationPerformanceTracker;
 };
-
-function discardStreamDeltas(session: StreamSession) {
-  session.deltaBuffer?.discard();
-  session.deltaBuffer = undefined;
-}
 
 function sameContext(left: ResearchContext, right: ResearchContext) {
   if (left.kind !== right.kind) return false;
@@ -83,7 +84,7 @@ export function useConversationSession({
   context: requestedContext,
   getTurnContexts,
   onConversationCreated,
-  onCreateError,
+  onSubmissionError,
   onTurnStarted,
   reasoningLevel,
   scopeId,
@@ -95,7 +96,7 @@ export function useConversationSession({
   context?: ResearchContext;
   getTurnContexts?: () => ConversationTurnCreateRequest["contexts"];
   onConversationCreated: (conversationId: string) => void;
-  onCreateError?: () => void;
+  onSubmissionError?: () => void;
   onTurnStarted?: () => void;
   reasoningLevel: ReasoningLevel;
   scopeId?: string;
@@ -107,33 +108,82 @@ export function useConversationSession({
   const locale = useLocale() === "zh-CN" ? "zh-CN" : "en";
   const [createdConversationId, setCreatedConversationId] =
     React.useState<string>();
-  const [liveTurn, setLiveTurn] = React.useState<LiveTurn | null>(null);
-  const [liveTurnConversationId, setLiveTurnConversationId] =
-    React.useState<string>();
+  const [createdConversationAccepted, setCreatedConversationAccepted] =
+    React.useState(false);
+  const liveStoreRef = React.useRef<ConversationLiveStore | null>(null);
+  liveStoreRef.current ??= new ConversationLiveStore();
+  const liveStore = liveStoreRef.current;
+  const liveTurnConversationId = React.useRef<string | undefined>(undefined);
   const [submissionPendingConversationId, setSubmissionPendingConversationId] =
     React.useState<string | null>();
+  const [recoveryPolling, setRecoveryPolling] = React.useState(false);
+  const [stopAvailable, setStopAvailable] = React.useState(false);
+  const [completionAnnouncementId, setCompletionAnnouncementId] =
+    React.useState<string>();
   const streamSession = React.useRef<StreamSession | null>(null);
+  const pendingGeneration = React.useRef<PendingGeneration | null>(null);
+  const cancellingSession = React.useRef<StreamSession | null>(null);
+  const settlingSessions = React.useRef(new Map<string, StreamSession>());
+  const completedPerformance = React.useRef(
+    new Map<string, ConversationPerformanceTracker>(),
+  );
   const detachedResponseOwners = React.useRef(new Map<string, string>());
   const submissionInFlight = React.useRef(false);
+  const submissionEpoch = React.useRef(0);
+  const restoreComposerFocus = React.useRef(false);
   const composerForm = useResearchComposerForm();
   const scopeIdentity = `${scopeType}:${scopeId ?? ""}`;
   const previousScopeIdentityRef = React.useRef(scopeIdentity);
   const activeConversationId = conversationId ?? createdConversationId;
+  const previousActiveConversationIdRef = React.useRef(activeConversationId);
+  const conversationPersisted = Boolean(
+    conversationId || createdConversationAccepted,
+  );
 
   const conversationQuery = useQuery({
     ...conversationQueries.detail(activeConversationId ?? ""),
-    enabled: Boolean(activeConversationId),
+    enabled: Boolean(activeConversationId) && conversationPersisted,
   });
   const turnsQuery = useQuery({
     ...conversationQueries.turns(activeConversationId ?? ""),
-    enabled: Boolean(activeConversationId),
+    enabled: Boolean(activeConversationId) && conversationPersisted,
     refetchInterval: (query) =>
       query.state.data?.items.some((turn) =>
         turn.responses.some((response) => response.status === "running"),
-      )
-        ? 2_000
+      ) && recoveryPolling
+        ? 5_000
         : false,
   });
+
+  const setLiveTurn = React.useCallback(
+    (
+      next: LiveTurn | null | ((current: LiveTurn | null) => LiveTurn | null),
+    ) => {
+      if (typeof next === "function") liveStore.update(next);
+      else liveStore.reset(next);
+    },
+    [liveStore],
+  );
+
+  const settleSessionInBackground = React.useCallback(
+    function settleSessionInBackground(session: StreamSession) {
+      if (streamSession.current !== session || !session.ready) return;
+      streamSession.current = null;
+      settlingSessions.current.set(session.responseId, session);
+      submissionInFlight.current = false;
+      setSubmissionPendingConversationId(undefined);
+      setStopAvailable(false);
+      setRecoveryPolling(false);
+      setLiveTurn((current) =>
+        current?.responseId === session.responseId ? null : current,
+      );
+    },
+    [setLiveTurn],
+  );
+
+  function setLiveTurnConversationId(next: string | undefined) {
+    liveTurnConversationId.current = next;
+  }
   const context =
     requestedContext ?? conversationQuery.data?.paper_context ?? defaultContext;
   const runningTurn = turnsQuery.data?.items.findLast((turn) =>
@@ -143,53 +193,100 @@ export function useConversationSession({
     (response) => response.status === "running",
   );
 
-  React.useEffect(() => {
-    if (conversationId) setCreatedConversationId(undefined);
+  React.useLayoutEffect(() => {
+    if (!conversationId) return;
+    setCreatedConversationId(undefined);
+    setCreatedConversationAccepted(false);
+    pendingGeneration.current = null;
+    restoreComposerFocus.current = false;
   }, [conversationId]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
+    if (previousActiveConversationIdRef.current === activeConversationId)
+      return;
+    previousActiveConversationIdRef.current = activeConversationId;
+    setCompletionAnnouncementId(undefined);
+  }, [activeConversationId]);
+
+  React.useLayoutEffect(() => {
     if (previousScopeIdentityRef.current === scopeIdentity) return;
     previousScopeIdentityRef.current = scopeIdentity;
+    submissionEpoch.current += 1;
     setCreatedConversationId(undefined);
+    setCreatedConversationAccepted(false);
+    setCompletionAnnouncementId(undefined);
+    pendingGeneration.current = null;
+    restoreComposerFocus.current = false;
     const session = streamSession.current;
     if (session) {
-      session.superseded = true;
-      discardStreamDeltas(session);
-      streamSession.current = null;
-      session.controller.abort();
-      submissionInFlight.current = false;
-      setSubmissionPendingConversationId(undefined);
+      if (session.ready) {
+        settleSessionInBackground(session);
+      } else {
+        session.performance?.markTerminal();
+        session.superseded = true;
+        streamSession.current = null;
+        session.controller.abort();
+        submissionInFlight.current = false;
+        setSubmissionPendingConversationId(undefined);
+        setStopAvailable(false);
+      }
     }
-  }, [scopeIdentity]);
+    setRecoveryPolling(false);
+    setLiveTurn(null);
+    setLiveTurnConversationId(undefined);
+  }, [scopeIdentity, setLiveTurn, settleSessionInBackground]);
 
   React.useEffect(
     () => () => {
-      const session = streamSession.current;
-      if (session) {
+      submissionEpoch.current += 1;
+      const sessions = new Set(settlingSessions.current.values());
+      if (streamSession.current) sessions.add(streamSession.current);
+      if (cancellingSession.current) sessions.add(cancellingSession.current);
+      streamSession.current = null;
+      settlingSessions.current.clear();
+      cancellingSession.current = null;
+      pendingGeneration.current = null;
+      submissionInFlight.current = false;
+      restoreComposerFocus.current = false;
+      liveTurnConversationId.current = undefined;
+      sessions.forEach((session) => {
+        session.performance?.markTerminal();
         session.superseded = true;
-        discardStreamDeltas(session);
         session.controller.abort();
-      }
+      });
+      completedPerformance.current.clear();
+      detachedResponseOwners.current.clear();
+      liveStore.discardPending();
     },
-    [],
+    [liveStore],
   );
 
   function supersedeReadyStream() {
     const session = streamSession.current;
     if (!session?.ready) return;
-    session.superseded = true;
-    discardStreamDeltas(session);
-    streamSession.current = null;
-    session.controller.abort();
-    setLiveTurn((current) =>
-      current?.responseId === session.responseId ? null : current,
+    settleSessionInBackground(session);
+  }
+
+  function ownsSession(session: StreamSession) {
+    return (
+      streamSession.current === session ||
+      settlingSessions.current.get(session.responseId) === session
     );
+  }
+
+  function forgetSession(session: StreamSession) {
+    if (streamSession.current === session) streamSession.current = null;
+    if (settlingSessions.current.get(session.responseId) === session) {
+      settlingSessions.current.delete(session.responseId);
+    }
+    detachedResponseOwners.current.delete(session.responseId);
   }
 
   function releaseSubmission(session: StreamSession) {
     if (streamSession.current !== session) return;
     submissionInFlight.current = false;
     setSubmissionPendingConversationId(undefined);
+    setStopAvailable(false);
   }
 
   const detachForeignStream = React.useCallback(
@@ -200,15 +297,31 @@ export function useConversationSession({
           session.responseId,
           session.conversationId,
         );
-        session.superseded = true;
-        discardStreamDeltas(session);
-        streamSession.current = null;
-        session.controller.abort();
-        submissionInFlight.current = false;
+        if (detachedResponseOwners.current.size > 16) {
+          const oldestResponseId = detachedResponseOwners.current
+            .keys()
+            .next().value;
+          if (oldestResponseId) {
+            detachedResponseOwners.current.delete(oldestResponseId);
+          }
+        }
+        if (session.ready) {
+          settleSessionInBackground(session);
+        } else {
+          session.performance?.markTerminal();
+          session.superseded = true;
+          streamSession.current = null;
+          session.controller.abort();
+          submissionInFlight.current = false;
+          setStopAvailable(false);
+          setRecoveryPolling(false);
+        }
       }
-      if (liveTurnConversationId !== nextConversationId) {
+      if (liveTurnConversationId.current !== nextConversationId) {
+        submissionEpoch.current += 1;
+        submissionInFlight.current = false;
         setLiveTurn(null);
-        setLiveTurnConversationId(undefined);
+        setLiveTurnConversationId(nextConversationId);
       }
       if (
         submissionPendingConversationId !== undefined &&
@@ -217,16 +330,22 @@ export function useConversationSession({
         setSubmissionPendingConversationId(undefined);
       }
     },
-    [liveTurnConversationId, submissionPendingConversationId],
+    [setLiveTurn, settleSessionInBackground, submissionPendingConversationId],
   );
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     detachForeignStream(activeConversationId);
   }, [activeConversationId, detachForeignStream]);
 
+  const applyPersistedStreamEvent = React.useEffectEvent(
+    (session: StreamSession, event: ConversationStreamEvent) => {
+      applyStreamEvent(session, event);
+    },
+  );
+
   React.useEffect(() => {
     const session = streamSession.current;
-    if (!session?.durable) return;
+    if (!session?.accepted || session.ready || !recoveryPolling) return;
     const status = persistedResponseStatus(
       turnsQuery.data?.items,
       session.turnId,
@@ -234,58 +353,134 @@ export function useConversationSession({
     );
     if (!status || status === "running") return;
 
+    if (status === "completed") {
+      const persistedTurn = turnsQuery.data?.items.find(
+        (turn) =>
+          turn.id === session.turnId &&
+          turn.responses.some((response) => response.id === session.responseId),
+      );
+      if (persistedTurn) {
+        applyPersistedStreamEvent(session, {
+          type: "response_ready",
+          turn: persistedTurn,
+        });
+      }
+      return;
+    }
+
+    session.performance?.markTerminal();
     session.superseded = true;
     streamSession.current = null;
-    discardStreamDeltas(session);
     session.controller.abort();
     submissionInFlight.current = false;
     setSubmissionPendingConversationId(undefined);
+    setStopAvailable(false);
+    setRecoveryPolling(false);
     setLiveTurn((current) =>
       current?.responseId === session.responseId ? null : current,
     );
-  }, [turnsQuery.data?.items]);
+  }, [recoveryPolling, setLiveTurn, turnsQuery.data?.items]);
 
   function updateConnectionState(
     session: StreamSession,
-    state: "connected" | "reconnecting",
+    state: "connected" | "offline" | "reconnecting",
   ) {
     if (streamSession.current !== session || session.superseded) return;
+    setRecoveryPolling(state !== "connected");
     setLiveTurn((current) =>
       current?.responseId === session.responseId
-        ? { ...current, connectionState: state }
+        ? {
+            ...current,
+            connectionState: state,
+            stopFailure: false,
+          }
         : current,
     );
   }
 
-  function flushStreamDeltas(session: StreamSession) {
-    session.deltaBuffer?.flush();
+  function reserveGeneration(
+    identity: string,
+    conversationId?: string,
+    turnId?: string,
+  ) {
+    const retry =
+      pendingGeneration.current?.identity === identity
+        ? pendingGeneration.current
+        : null;
+    const reserved: PendingGeneration = {
+      conversationId:
+        conversationId ?? retry?.conversationId ?? crypto.randomUUID(),
+      identity,
+      responseId: retry?.responseId ?? crypto.randomUUID(),
+      turnId: turnId ?? retry?.turnId ?? crypto.randomUUID(),
+    };
+    pendingGeneration.current = reserved;
+    return reserved;
   }
 
-  function queueStreamDelta(
-    session: StreamSession,
-    event: ConversationDeltaEvent,
+  function clearPendingGeneration(
+    session: Pick<StreamSession, "conversationId" | "turnId" | "responseId">,
   ) {
-    session.deltaBuffer ??= new ConversationDeltaBuffer((events) => {
-      if (streamSession.current !== session || session.superseded) return;
-      setLiveTurn((current) => reduceLiveTurnEvents(current, events));
+    const pending = pendingGeneration.current;
+    if (
+      pending?.conversationId === session.conversationId &&
+      pending.turnId === session.turnId &&
+      pending.responseId === session.responseId
+    ) {
+      pendingGeneration.current = null;
+    }
+  }
+
+  function markStreamAccepted(
+    session: StreamSession,
+    streamKind: ConversationStreamKind,
+  ) {
+    if (
+      streamSession.current !== session ||
+      session.superseded ||
+      session.accepted
+    ) {
+      return false;
+    }
+    session.accepted = true;
+    clearPendingGeneration(session);
+    setStopAvailable(true);
+    session.performance?.markAccepted(streamKind);
+    session.resolveAccepted?.();
+    session.resolveAccepted = undefined;
+    session.rejectAccepted = undefined;
+    const pendingLiveTurn = session.pendingLiveTurn;
+    session.pendingLiveTurn = undefined;
+    setLiveTurn((current) => {
+      if (pendingLiveTurn) {
+        return {
+          ...pendingLiveTurn,
+          connectionState: "connected",
+          phase: "queued",
+        };
+      }
+      return current?.responseId === session.responseId
+        ? { ...current, connectionState: "connected", phase: "queued" }
+        : current;
     });
-    session.deltaBuffer.push(event);
+    return true;
   }
 
   function applyStreamEvent(
     session: StreamSession,
     event: ConversationStreamEvent,
   ) {
-    if (streamSession.current !== session || session.superseded) return;
+    if (!ownsSession(session) || session.superseded) return;
+    const foreground = streamSession.current === session;
+    session.performance?.markEvent();
     if (
       event.type === "assistant_item_delta" ||
       event.type === "assistant_candidate_delta"
     ) {
       if (event.response_id !== session.responseId) return;
-      queueStreamDelta(session, event);
+      if (foreground) liveStore.dispatch(event);
       return;
     }
-    flushStreamDeltas(session);
     if (event.type === "start") {
       if (
         event.turn_id !== session.turnId ||
@@ -293,22 +488,9 @@ export function useConversationSession({
       ) {
         return;
       }
-      session.started = true;
-      session.resolveAccepted?.();
-      session.resolveAccepted = undefined;
-      session.rejectAccepted = undefined;
       if (!session.startNotified) {
         session.startNotified = true;
         onTurnStarted?.();
-      }
-      if (session.pendingLiveTurn) {
-        setLiveTurn({
-          ...session.pendingLiveTurn,
-          startedAtMs: Date.now(),
-          variantIndex: event.variant_index,
-        });
-        session.pendingLiveTurn = undefined;
-        return;
       }
     } else if (event.type === "response_ready") {
       if (
@@ -320,11 +502,12 @@ export function useConversationSession({
         return;
       }
       session.ready = true;
+      session.performance?.markReady();
       queryClient.setQueryData<ConversationTurnsResponse>(
         conversationKeys.turns(session.conversationId),
         (current) => upsertConversationTurn(current, event.turn),
       );
-      releaseSubmission(session);
+      if (foreground) releaseSubmission(session);
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.lists(),
       });
@@ -351,35 +534,58 @@ export function useConversationSession({
       return;
     }
 
-    setLiveTurn((current) => reduceLiveTurn(current, event));
+    if (foreground) liveStore.dispatch(event);
 
     if (event.type === "error" || event.type === "cancelled") {
-      releaseSubmission(session);
+      session.performance?.markTerminal();
+      if (foreground) releaseSubmission(session);
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.turns(session.conversationId),
       });
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.detail(session.conversationId),
       });
-      if (streamSession.current === session) streamSession.current = null;
-      discardStreamDeltas(session);
+      forgetSession(session);
+      if (foreground) setRecoveryPolling(false);
     }
     if (event.type === "complete") {
-      releaseSubmission(session);
+      if (foreground) setCompletionAnnouncementId(session.responseId);
+      session.performance?.markReady();
+      session.performance?.markTerminal();
+      if (session.performance) {
+        completedPerformance.current.set(
+          session.responseId,
+          session.performance,
+        );
+        if (completedPerformance.current.size > 8) {
+          const oldestResponseId = completedPerformance.current
+            .keys()
+            .next().value;
+          if (oldestResponseId) {
+            completedPerformance.current.delete(oldestResponseId);
+          }
+        }
+      }
+      if (foreground) releaseSubmission(session);
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.lists(),
       });
       void queryClient.invalidateQueries({
+        queryKey: conversationKeys.turns(session.conversationId),
+      });
+      void queryClient.invalidateQueries({
         queryKey: conversationKeys.detail(session.conversationId),
       });
-      if (streamSession.current === session) streamSession.current = null;
-      discardStreamDeltas(session);
-      setLiveTurn((current) =>
-        current?.turnId === session.turnId &&
-        current.responseId === session.responseId
-          ? null
-          : current,
-      );
+      forgetSession(session);
+      if (foreground) {
+        setRecoveryPolling(false);
+        setLiveTurn((current) =>
+          current?.turnId === session.turnId &&
+          current.responseId === session.responseId
+            ? null
+            : current,
+        );
+      }
     }
   }
 
@@ -403,15 +609,16 @@ export function useConversationSession({
       turnId: runningTurn.id,
       responseId: runningResponse.id,
       controller,
-      started: true,
+      accepted: true,
       startNotified: true,
       ready: false,
       superseded: false,
-      durable: true,
     };
     streamSession.current = session;
     submissionInFlight.current = true;
+    setStopAvailable(true);
     setSubmissionPendingConversationId(activeConversationId);
+    setRecoveryPolling(true);
     setLiveTurnConversationId(activeConversationId);
     setLiveTurn({
       ...createLiveTurn(
@@ -427,6 +634,7 @@ export function useConversationSession({
       trace: runningResponse.trace,
       references: runningResponse.references as Record<string, unknown> | null,
       connectionState: "reconnecting",
+      phase: runningResponse.content ? "answering" : "working",
     });
 
     void subscribeConversationEvents({
@@ -435,47 +643,48 @@ export function useConversationSession({
       responseId: runningResponse.id,
       signal: controller.signal,
       onEvent: (event) => applyStreamEvent(session, event),
-      onConnectionState: (state) => updateConnectionState(session, state),
+      onConnectionState: (state) => {
+        updateConnectionState(session, state);
+      },
     })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
+        if (
+          controller.signal.aborted ||
+          streamSession.current !== session ||
+          session.superseded
+        ) {
+          return;
+        }
+        setRecoveryPolling(false);
         setLiveTurn((current) =>
           current?.responseId === session.responseId
             ? {
                 ...current,
-                connectionState: "reconnecting",
+                connectionState: "connected",
                 failure: conversationFailureFromError(error),
+                phase: "error",
               }
             : current,
         );
       })
       .finally(() => {
+        if (settlingSessions.current.get(session.responseId) === session) {
+          settlingSessions.current.delete(session.responseId);
+        }
         if (streamSession.current !== session) return;
         streamSession.current = null;
         submissionInFlight.current = false;
         setSubmissionPendingConversationId(undefined);
+        setStopAvailable(false);
+        setRecoveryPolling(false);
         void queryClient.invalidateQueries({
           queryKey: conversationKeys.turns(activeConversationId),
         });
       });
-
-    return () => {
-      if (streamSession.current === session) {
-        session.superseded = true;
-        streamSession.current = null;
-        submissionInFlight.current = false;
-        setSubmissionPendingConversationId(undefined);
-        setLiveTurn((current) =>
-          current?.responseId === session.responseId ? null : current,
-        );
-      }
-      discardStreamDeltas(session);
-      controller.abort();
-    };
   });
 
   React.useEffect(() => {
-    return recoverRunningGeneration();
+    recoverRunningGeneration();
   }, [
     activeConversationId,
     runningResponse?.id,
@@ -486,93 +695,143 @@ export function useConversationSession({
   async function sendMessage(message: string) {
     detachForeignStream(activeConversationId);
     if (submissionInFlight.current) return;
-    submissionInFlight.current = true;
-    setSubmissionPendingConversationId(activeConversationId ?? null);
-    setLiveTurnConversationId(activeConversationId);
-    supersedeReadyStream();
-    const previousLiveTurn =
-      liveTurn?.state === "ready" || liveTurn?.state === "complete"
-        ? null
-        : liveTurn;
+    const submissionIdentity = ++submissionEpoch.current;
     const creatingConversation = !activeConversationId;
-    let nextConversationId = activeConversationId;
+    const turnContexts = getTurnContexts?.();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const generationIdentity = JSON.stringify({
+      operation: creatingConversation ? "start" : "turn",
+      conversationId: activeConversationId ?? null,
+      context: creatingConversation || updateExistingContext ? context : null,
+      locale,
+      message,
+      reasoningLevel,
+      scopeId,
+      scopeType,
+      timeZone,
+      turnContexts,
+    });
+    const reservedGeneration = reserveGeneration(
+      generationIdentity,
+      activeConversationId,
+    );
+    const {
+      conversationId: nextConversationId,
+      turnId,
+      responseId,
+    } = reservedGeneration;
+    supersedeReadyStream();
+    liveStore.flush();
+    const currentLiveTurn = liveStore.getSnapshot();
+    const previousLiveTurn =
+      currentLiveTurn?.phase === "ready" ? null : currentLiveTurn;
+    submissionInFlight.current = true;
+    setCompletionAnnouncementId(undefined);
+    setStopAvailable(false);
+    setSubmissionPendingConversationId(nextConversationId);
+    setLiveTurnConversationId(nextConversationId);
+    if (creatingConversation) {
+      previousActiveConversationIdRef.current = nextConversationId;
+      setCreatedConversationAccepted(false);
+      setCreatedConversationId(nextConversationId);
+    }
     let session: StreamSession | null = null;
+    const performance = createConversationPerformanceTracker();
+    setLiveTurn(
+      createLiveTurn(
+        turnId,
+        responseId,
+        message,
+        "initial",
+        (turnsQuery.data?.items.at(-1)?.depth ?? 0) + 1,
+      ),
+    );
+    window.requestAnimationFrame(() => performance.markFeedback());
+    composerForm.reset();
     try {
-      if (!nextConversationId) {
-        const conversation = await createConversation({
-          scope_type: scopeType,
-          scope_id: scopeId,
-          paper_context: context,
-        });
-        nextConversationId = conversation.id;
-        setSubmissionPendingConversationId(conversation.id);
-        setCreatedConversationId(conversation.id);
-        queryClient.setQueryData(
-          conversationKeys.detail(conversation.id),
-          conversation,
-        );
-        queryClient.setQueryData<ConversationTurnsResponse>(
-          conversationKeys.turns(conversation.id),
-          { items: [], next_cursor: null, path_revision: 0 },
-        );
-        void queryClient.invalidateQueries({
-          queryKey: conversationKeys.lists(),
-        });
-        onConversationCreated(conversation.id);
-      } else if (
+      if (
+        !creatingConversation &&
         updateExistingContext &&
         conversationQuery.data &&
         !sameContext(context, conversationQuery.data.paper_context)
       ) {
         await updateConversationContext(nextConversationId, context);
+        if (submissionEpoch.current !== submissionIdentity) return;
       }
 
       const controller = new AbortController();
-      const turnId = crypto.randomUUID();
-      const responseId = crypto.randomUUID();
       session = {
         conversationId: nextConversationId,
         turnId,
         responseId,
         controller,
-        started: false,
+        accepted: false,
         startNotified: false,
         ready: false,
         superseded: false,
-        durable: false,
+        performance,
       };
       streamSession.current = session;
       setLiveTurnConversationId(nextConversationId);
-      setLiveTurn(
-        createLiveTurn(
-          turnId,
-          responseId,
-          message,
-          "initial",
-          (turnsQuery.data?.items.at(-1)?.depth ?? 0) + 1,
-        ),
-      );
-      composerForm.reset();
-      await streamConversationTurn({
-        conversationId: nextConversationId,
-        request: {
-          contexts: getTurnContexts?.(),
-          turn_id: turnId,
-          response_id: responseId,
-          user_query: message,
-          locale,
-          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-          reasoning_level: reasoningLevel,
-        },
-        signal: controller.signal,
-        onEvent: (event) => applyStreamEvent(session!, event),
-        onAccepted: (durable) => {
-          session!.durable = durable;
-        },
-        onConnectionState: (state) => updateConnectionState(session!, state),
-      });
+      const turnRequest: ConversationTurnCreateRequest = {
+        contexts: turnContexts,
+        turn_id: turnId,
+        response_id: responseId,
+        user_query: message,
+        locale,
+        time_zone: timeZone,
+        reasoning_level: reasoningLevel,
+      };
+      const onAccepted = (streamKind: ConversationStreamKind) => {
+        if (!session || !markStreamAccepted(session, streamKind)) return;
+        if (
+          creatingConversation &&
+          submissionEpoch.current === submissionIdentity
+        ) {
+          setCreatedConversationAccepted(true);
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.lists(),
+          });
+          onConversationCreated(nextConversationId);
+        }
+      };
+      const onEvent = (event: ConversationStreamEvent) => {
+        if (session) applyStreamEvent(session, event);
+      };
+      const onConnectionState = (
+        state: "connected" | "offline" | "reconnecting",
+      ) => {
+        if (session) updateConnectionState(session, state);
+      };
+      if (creatingConversation) {
+        await streamConversationStart({
+          conversationId: nextConversationId,
+          request: {
+            conversation: {
+              scope_type: scopeType,
+              scope_id: scopeId,
+              paper_context: context,
+            },
+            turn: turnRequest,
+          },
+          signal: controller.signal,
+          onEvent,
+          onAccepted,
+          onConnectionState,
+        });
+      } else {
+        await streamConversationTurn({
+          conversationId: nextConversationId,
+          request: turnRequest,
+          signal: controller.signal,
+          onEvent,
+          onAccepted,
+          onConnectionState,
+        });
+      }
     } catch (error) {
-      if (session) flushStreamDeltas(session);
+      if (submissionEpoch.current !== submissionIdentity) return;
+      liveStore.flush();
       if (error instanceof DOMException && error.name === "AbortError") {
         if (session && !session.superseded && !session.ready) {
           const responseId = session.responseId;
@@ -581,12 +840,12 @@ export function useConversationSession({
               ? {
                   ...current,
                   durationMs: Math.max(0, Date.now() - current.startedAtMs),
-                  state: "cancelled",
+                  phase: "cancelled",
                 }
               : current,
           );
         }
-        if (nextConversationId && session && !session.ready) {
+        if (session?.accepted && !session.ready) {
           await Promise.all([
             queryClient.invalidateQueries({
               queryKey: conversationKeys.turns(nextConversationId),
@@ -597,20 +856,16 @@ export function useConversationSession({
           ]);
         }
       } else if (session?.ready) {
-        const responseId = session.responseId;
-        setLiveTurn((current) =>
-          current?.responseId === responseId
-            ? { ...current, state: "complete" }
-            : current,
-        );
-      } else if (session?.started) {
+        // response_ready already reconciled the canonical response.
+      } else if (session?.accepted) {
+        session.performance?.markTerminal();
         const responseId = session.responseId;
         setLiveTurn((current) =>
           current?.responseId === responseId
             ? {
                 ...current,
                 failure: conversationFailureFromError(error),
-                state: "error",
+                phase: "error",
               }
             : current,
         );
@@ -620,31 +875,47 @@ export function useConversationSession({
           shouldDirty: true,
           shouldValidate: true,
         });
+        restoreComposerFocus.current = true;
+        onSubmissionError?.();
         if (creatingConversation) {
+          if (error instanceof ApiError && error.status === 409) {
+            clearPendingGeneration(session ?? reservedGeneration);
+          }
           setCreatedConversationId(undefined);
-          onCreateError?.();
+          setCreatedConversationAccepted(false);
         }
       }
     } finally {
-      if (session) discardStreamDeltas(session);
-      if (!session || streamSession.current === session) {
+      liveStore.flush();
+      if (
+        session &&
+        settlingSessions.current.get(session.responseId) === session
+      ) {
+        settlingSessions.current.delete(session.responseId);
+      }
+      if (
+        submissionEpoch.current === submissionIdentity &&
+        (!session || streamSession.current === session)
+      ) {
         if (streamSession.current === session) streamSession.current = null;
         submissionInFlight.current = false;
         setSubmissionPendingConversationId(undefined);
+        setStopAvailable(false);
+        setRecoveryPolling(false);
       }
     }
   }
 
   function runExistingGeneration({
-    turnId,
-    responseId,
+    generationIdentity,
+    reservedTurnId,
     userMessage,
     generationKind,
     depth,
     stream,
   }: {
-    turnId: string;
-    responseId: string;
+    generationIdentity: string;
+    reservedTurnId?: string;
     userMessage: string;
     generationKind: "retry" | "branch";
     depth: number;
@@ -655,24 +926,32 @@ export function useConversationSession({
       return Promise.reject(new Error("Conversation is unavailable or busy"));
     }
     const sessionConversationId = activeConversationId;
-    submissionInFlight.current = true;
-    setSubmissionPendingConversationId(activeConversationId);
+    const reservedGeneration = reserveGeneration(
+      generationIdentity,
+      sessionConversationId,
+      reservedTurnId,
+    );
+    const { turnId, responseId } = reservedGeneration;
     supersedeReadyStream();
+    liveStore.flush();
+    const currentLiveTurn = liveStore.getSnapshot();
     const previousLiveTurn =
-      liveTurn?.state === "ready" || liveTurn?.state === "complete"
-        ? null
-        : liveTurn;
+      currentLiveTurn?.phase === "ready" ? null : currentLiveTurn;
+    submissionInFlight.current = true;
+    setCompletionAnnouncementId(undefined);
+    setStopAvailable(false);
+    setSubmissionPendingConversationId(activeConversationId);
     const controller = new AbortController();
     const session: StreamSession = {
       conversationId: sessionConversationId,
       turnId,
       responseId,
       controller,
-      started: false,
+      accepted: false,
       startNotified: false,
       ready: false,
       superseded: false,
-      durable: false,
+      performance: createConversationPerformanceTracker(),
     };
     const accepted = new Promise<void>((resolve, reject) => {
       session.resolveAccepted = resolve;
@@ -687,48 +966,51 @@ export function useConversationSession({
       generationKind,
       depth,
     );
+    window.requestAnimationFrame(() => session.performance?.markFeedback());
     if (generationKind === "branch") session.pendingLiveTurn = nextLiveTurn;
     else setLiveTurn(nextLiveTurn);
     async function runStream() {
       try {
         await stream(session);
       } catch (error) {
-        flushStreamDeltas(session);
+        liveStore.flush();
+        if (session.superseded || !ownsSession(session)) return;
         if (error instanceof DOMException && error.name === "AbortError") {
-          if (!session.started) {
+          if (!session.accepted) {
             session.rejectAccepted?.(error);
             session.resolveAccepted = undefined;
             session.rejectAccepted = undefined;
-            setLiveTurn(previousLiveTurn);
+            if (!session.superseded) setLiveTurn(previousLiveTurn);
           } else if (!session.superseded && !session.ready) {
             setLiveTurn((current) =>
               current?.responseId === session.responseId
                 ? {
                     ...current,
                     durationMs: Math.max(0, Date.now() - current.startedAtMs),
-                    state: "cancelled",
+                    phase: "cancelled",
                   }
                 : current,
             );
           }
         } else if (session.ready) {
-          setLiveTurn((current) =>
-            current?.responseId === session.responseId
-              ? { ...current, state: "complete" }
-              : current,
-          );
-        } else if (!session.started) {
+          // response_ready already reconciled the canonical response.
+        } else if (!session.accepted) {
+          if (error instanceof ApiError && error.status === 409) {
+            clearPendingGeneration(session);
+          }
           session.rejectAccepted?.(error);
           session.resolveAccepted = undefined;
           session.rejectAccepted = undefined;
           setLiveTurn(previousLiveTurn);
+          if (generationKind === "retry") onSubmissionError?.();
         } else {
+          session.performance?.markTerminal();
           setLiveTurn((current) =>
             current?.responseId === session.responseId
               ? {
                   ...current,
                   failure: conversationFailureFromError(error),
-                  state: "error",
+                  phase: "error",
                 }
               : current,
           );
@@ -742,19 +1024,24 @@ export function useConversationSession({
           }),
         ]);
       } finally {
-        discardStreamDeltas(session);
-        if (!session.started) {
+        liveStore.flush();
+        if (settlingSessions.current.get(session.responseId) === session) {
+          settlingSessions.current.delete(session.responseId);
+        }
+        if (!session.accepted) {
           session.rejectAccepted?.(
             new Error("Generation ended before the request was accepted"),
           );
           session.resolveAccepted = undefined;
           session.rejectAccepted = undefined;
-          setLiveTurn(previousLiveTurn);
+          if (!session.superseded) setLiveTurn(previousLiveTurn);
         }
         if (streamSession.current === session) {
           streamSession.current = null;
           submissionInFlight.current = false;
           setSubmissionPendingConversationId(undefined);
+          setStopAvailable(false);
+          setRecoveryPolling(false);
         }
       }
     }
@@ -765,11 +1052,15 @@ export function useConversationSession({
   async function retryResponse(
     turn: Pick<ConversationTurn, "id" | "user_query" | "depth">,
   ) {
-    const responseId = crypto.randomUUID();
+    if (!activeConversationId) return;
     try {
       await runExistingGeneration({
-        turnId: turn.id,
-        responseId,
+        generationIdentity: JSON.stringify({
+          operation: "retry",
+          conversationId: activeConversationId,
+          turnId: turn.id,
+        }),
+        reservedTurnId: turn.id,
         userMessage: turn.user_query,
         generationKind: "retry",
         depth: turn.depth,
@@ -777,12 +1068,10 @@ export function useConversationSession({
           streamConversationRetry({
             conversationId: session.conversationId,
             turnId: turn.id,
-            request: { response_id: responseId },
+            request: { response_id: session.responseId },
             signal: session.controller.signal,
             onEvent: (event) => applyStreamEvent(session, event),
-            onAccepted: (durable) => {
-              session.durable = durable;
-            },
+            onAccepted: (streamKind) => markStreamAccepted(session, streamKind),
             onConnectionState: (state) => updateConnectionState(session, state),
           }),
       });
@@ -792,11 +1081,16 @@ export function useConversationSession({
   }
 
   async function editMessage(turn: ConversationTurn, message: string) {
-    const turnId = crypto.randomUUID();
-    const responseId = crypto.randomUUID();
+    if (!activeConversationId) {
+      throw new Error("Conversation is unavailable");
+    }
     await runExistingGeneration({
-      turnId,
-      responseId,
+      generationIdentity: JSON.stringify({
+        operation: "branch",
+        conversationId: activeConversationId,
+        sourceTurnId: turn.id,
+        message,
+      }),
       userMessage: message,
       generationKind: "branch",
       depth: turn.depth,
@@ -805,15 +1099,13 @@ export function useConversationSession({
           conversationId: session.conversationId,
           turnId: turn.id,
           request: {
-            turn_id: turnId,
-            response_id: responseId,
+            turn_id: session.turnId,
+            response_id: session.responseId,
             user_query: message,
           },
           signal: session.controller.signal,
           onEvent: (event) => applyStreamEvent(session, event),
-          onAccepted: (durable) => {
-            session.durable = durable;
-          },
+          onAccepted: (streamKind) => markStreamAccepted(session, streamKind),
           onConnectionState: (state) => updateConnectionState(session, state),
         }),
     });
@@ -856,19 +1148,30 @@ export function useConversationSession({
     composerForm.setFocus("message");
   }
 
+  function markContentVisible(responseId: string) {
+    const session = streamSession.current;
+    if (session?.responseId === responseId && !session.superseded) {
+      session.performance?.markContentVisible();
+    }
+    const completedTracker = completedPerformance.current.get(responseId);
+    completedTracker?.markContentVisible();
+    completedPerformance.current.delete(responseId);
+  }
+
   function stop() {
     const session = streamSession.current;
-    if (!session) return;
-    if (!session.durable) {
-      session.controller.abort();
-      return;
-    }
+    if (!session?.accepted || cancellingSession.current === session) return;
+    cancellingSession.current = session;
+    restoreComposerFocus.current = true;
+    setStopAvailable(false);
     void cancelConversationGeneration({
       conversationId: session.conversationId,
       turnId: session.turnId,
       responseId: session.responseId,
     })
       .then(async (result) => {
+        if (session.superseded || streamSession.current !== session) return;
+        session.performance?.markTerminal();
         session.superseded = true;
         session.controller.abort();
         releaseSubmission(session);
@@ -879,7 +1182,7 @@ export function useConversationSession({
               ? {
                   ...current,
                   durationMs: Math.max(0, Date.now() - current.startedAtMs),
-                  state: "cancelled",
+                  phase: "cancelled",
                 }
               : current,
           );
@@ -897,47 +1200,65 @@ export function useConversationSession({
             current?.responseId === session.responseId ? null : current,
           );
         }
+        if (!streamSession.current || streamSession.current === session) {
+          setRecoveryPolling(false);
+        }
       })
       .catch(() => {
+        if (session.superseded || streamSession.current !== session) return;
+        if (streamSession.current === session) setStopAvailable(true);
         setLiveTurn((current) =>
           current?.responseId === session.responseId
-            ? { ...current, connectionState: "stop_failed" }
+            ? { ...current, stopFailure: true }
             : current,
         );
+      })
+      .finally(() => {
+        if (cancellingSession.current === session) {
+          cancellingSession.current = null;
+        }
       });
   }
 
-  const activeLiveTurn =
-    liveTurnConversationId === activeConversationId ? liveTurn : null;
+  const activeLiveTurn = liveStore;
   const activeSubmissionPending =
     submissionPendingConversationId !== undefined &&
     submissionPendingConversationId === (activeConversationId ?? null);
-  const conversationBusy =
-    activeSubmissionPending || activeLiveTurn?.state === "streaming";
+  React.useEffect(() => {
+    if (activeSubmissionPending || !restoreComposerFocus.current) return;
+    restoreComposerFocus.current = false;
+    composerForm.setFocus("message");
+  }, [activeSubmissionPending, composerForm]);
+  const conversationBusy = activeSubmissionPending;
   const conversationUnavailable = activeConversationId
-    ? conversationQuery.isPending ||
-      conversationQuery.isError ||
-      turnsQuery.isError ||
-      conversationQuery.data?.capabilities.send !== true
+    ? !activeSubmissionPending &&
+      (conversationQuery.isPending ||
+        conversationQuery.isError ||
+        turnsQuery.isError ||
+        conversationQuery.data?.capabilities.send !== true)
     : false;
 
   return {
     activeConversationId,
-    canSend: activeConversationId
-      ? conversationQuery.data?.capabilities.send === true
-      : true,
+    canSend:
+      activeSubmissionPending ||
+      !activeConversationId ||
+      conversationQuery.data?.capabilities.send === true,
     composerForm,
+    completionAnnouncementId,
     context,
     conversationBusy,
     conversationQuery,
     conversationUnavailable,
     editMessage,
     liveTurn: activeLiveTurn,
+    markContentVisible,
     retryResponse,
     selectBranch,
     selectResponse,
     sendMessage,
     stop,
+    stopAvailable,
     submissionPending: activeSubmissionPending,
     turnsQuery,
     useSuggestion,

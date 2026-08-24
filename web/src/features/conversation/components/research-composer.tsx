@@ -564,6 +564,7 @@ export function ResearchComposer({
   onSubmit,
   onStop,
   onTurnContextClear,
+  stopAvailable = false,
   surface,
   unavailable,
   turnContextLabel,
@@ -582,6 +583,7 @@ export function ResearchComposer({
   onTurnContextClear?: () => void;
   surface: ResearchComposerSurface;
   unavailable?: boolean;
+  stopAvailable?: boolean;
   turnContextLabel?: string;
 }) {
   const t = useTranslations("Home");
@@ -638,16 +640,18 @@ export function ResearchComposer({
           )}
           data-focus-delegate="surface"
           data-focus-origin={focusOrigin ?? undefined}
-          disabled={busy || unavailable}
+          aria-busy={busy || undefined}
+          disabled={unavailable}
+          readOnly={busy}
           onKeyDown={(event) => {
-            if (event.key === "@") setPickerOpen(true);
+            if (!busy && event.key === "@") setPickerOpen(true);
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
               !isImeComposing(event)
             ) {
               event.preventDefault();
-              void composerForm.handleSubmit(submit)();
+              if (!busy) void composerForm.handleSubmit(submit)();
             }
           }}
           placeholder={placeholder}
@@ -705,12 +709,21 @@ export function ResearchComposer({
           />
           {busy && onStop ? (
             <IconButton
+              aria-busy={!stopAvailable || undefined}
+              aria-disabled={!stopAvailable || undefined}
               className="size-9 min-h-9 rounded-full"
-              label={t("composer.stop")}
-              onClick={onStop}
+              label={t(stopAvailable ? "composer.stop" : "composer.pending")}
+              onClick={stopAvailable ? onStop : undefined}
               type="button"
             >
-              <Icon glyph={StopIcon} size={16} tone="inverse" />
+              {stopAvailable ? (
+                <Icon glyph={StopIcon} size={16} tone="inverse" />
+              ) : (
+                <span
+                  aria-hidden
+                  className="motion-spinner size-4 rounded-full border-2 border-current border-r-transparent"
+                />
+              )}
             </IconButton>
           ) : (
             <IconButton
@@ -751,16 +764,18 @@ export function ResearchComposer({
         data-focus-delegate="surface"
         data-focus-origin={focusOrigin ?? undefined}
         data-mobile-composer-input
-        disabled={busy || unavailable}
+        aria-busy={busy || undefined}
+        disabled={unavailable}
+        readOnly={busy}
         onKeyDown={(event) => {
-          if (event.key === "@") setPickerOpen(true);
+          if (!busy && event.key === "@") setPickerOpen(true);
           if (
             event.key === "Enter" &&
             !event.shiftKey &&
             !isImeComposing(event)
           ) {
             event.preventDefault();
-            void composerForm.handleSubmit(submit)();
+            if (!busy) void composerForm.handleSubmit(submit)();
           }
         }}
         placeholder={placeholder}
@@ -813,15 +828,24 @@ export function ResearchComposer({
       />
       {busy && onStop ? (
         <IconButton
+          aria-busy={!stopAvailable || undefined}
+          aria-disabled={!stopAvailable || undefined}
           className={cn(
             "col-start-3 row-start-1 size-12 rounded-full lg:col-start-4 lg:size-11",
             expanded ? "lg:row-start-3" : "lg:row-start-1",
           )}
-          label={t("composer.stop")}
-          onClick={onStop}
+          label={t(stopAvailable ? "composer.stop" : "composer.pending")}
+          onClick={stopAvailable ? onStop : undefined}
           type="button"
         >
-          <Icon glyph={StopIcon} size={20} tone="inverse" />
+          {stopAvailable ? (
+            <Icon glyph={StopIcon} size={20} tone="inverse" />
+          ) : (
+            <span
+              aria-hidden
+              className="motion-spinner size-5 rounded-full border-2 border-current border-r-transparent"
+            />
+          )}
         </IconButton>
       ) : (
         <IconButton

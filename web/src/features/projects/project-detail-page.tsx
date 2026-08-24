@@ -169,6 +169,8 @@ function ProjectChat({
   project: Project;
 }) {
   const t = useTranslations("Projects.chat");
+  const conversationT = useTranslations("Home.conversation");
+  const toast = useToast();
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const [contextOverrides, setContextOverrides] = React.useState<
@@ -187,6 +189,11 @@ function ProjectChat({
     conversationId,
     defaultContext,
     onConversationCreated: (id) => onConversationChange(id),
+    onSubmissionError: () =>
+      toast.notify({
+        title: conversationT("error"),
+        description: conversationT("retryHint"),
+      }),
     reasoningLevel,
     scopeId: project.id,
     scopeType: "project",
@@ -237,21 +244,27 @@ function ProjectChat({
       <div className="min-h-0 flex-1">
         <ConversationView
           canSend={session.canSend}
+          completionAnnouncementId={session.completionAnnouncementId}
           composerForm={session.composerForm}
           context={session.context}
           emptyState={{
             description: t("emptyDescription"),
             title: t("emptyTitle"),
           }}
-          error={session.turnsQuery.isError}
+          error={!session.submissionPending && session.turnsQuery.isError}
           layout="side-panel"
           liveTurn={session.liveTurn}
-          loading={session.turnsQuery.isPending && Boolean(conversationId)}
+          loading={
+            session.turnsQuery.isPending &&
+            Boolean(conversationId) &&
+            !session.submissionPending
+          }
           onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
           onRetry={() => void session.turnsQuery.refetch()}
           onRetryResponse={(turn) => void session.retryResponse(turn)}
           onEditMessage={(turn, message) => session.editMessage(turn, message)}
+          onLiveContentVisible={session.markContentVisible}
           onSelectBranch={(turnId) => void session.selectBranch(turnId)}
           onSelectResponse={(turnId, responseId) =>
             void session.selectResponse(turnId, responseId)
@@ -263,6 +276,7 @@ function ProjectChat({
           projects={[project]}
           reasoningLevel={reasoningLevel}
           readOnlyReason={session.conversationQuery.data?.read_only_reason}
+          stopAvailable={session.stopAvailable}
           submissionPending={session.submissionPending}
           turns={session.turnsQuery.data?.items ?? []}
         />

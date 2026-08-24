@@ -113,24 +113,31 @@ Home consumes only the public conversation, project, library-paper, and actor
 contracts. It does not import from `client/` and does not define duplicate wire
 DTOs.
 
-Conversation creation and continuation request `Prefer: respond-async`. A
-successful `202` receipt identifies the persisted Turn/Response, after which
-the Web app follows its detachable SSE endpoint with `Last-Event-ID`. A legacy
-inline `200` SSE response remains a compatible fallback. Both paths use one
-standard SSE decoder. The stream accepts `start`, the stable-ID
+Conversation continuation uses the direct durable SSE response, and a first
+prompt uses `POST /api/v1/conversations/{id}/start` to atomically create the
+client-identified Conversation, Turn, Response, job, and outbox dispatch. HTTP
+acceptance therefore makes generation durable and enables Stop without a
+separately committed empty Conversation or a second subscription round trip.
+The optimistic transcript and Composer clear happen immediately on local
+submission and are rolled back exactly if acceptance fails. Explicit
+`Prefer: respond-async` remains the compatible detachable `202` mode for other
+clients. If the direct subscription drops, the Web app follows the response
+event endpoint with `Last-Event-ID`; both paths use one standard SSE decoder.
+The stream accepts `start`, the stable-ID
 `assistant_item_start → delta → complete`
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`. The additive `/events/candidates` subscription
-returns sanitized partial `final_answer` arguments through
+arrive as bounded `progress`. Direct requests opt into candidates, and the
+additive `/events/candidates` resume subscription returns sanitized partial
+`final_answer` arguments through
 `assistant_candidate_start`, `assistant_candidate_delta`, and
 `assistant_candidate_reset` while the structured answer is still arriving. A
 bounded suffix and all private citation markers stay server-side, and a model
 validation retry resets the candidate before replacement text appears. Clients
-fall back to the original `/events` route when the additive endpoint is absent;
-that route returns only the validated item lifecycle. A `final` item completes
-only after structured answer validation.
+do not fall back to the original `/events` route: an incompatible deployment is
+surfaced and retried instead of silently changing an active answer's event
+contract. A `final` item completes only after structured answer validation.
 `response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose. A
@@ -156,12 +163,13 @@ releases that conversation's local Composer state; its accepted generation
 continues on the Server, so a different conversation can generate independently
 while the original remains limited to one running response. Stop is a separate
 authorized Server cancellation and the UI discloses when that cancellation
-cannot yet be confirmed. Once
-a turn is accepted into the optimistic transcript, the Composer clears
-immediately and its send action becomes the standard stop-square action for
-the lifetime of that stream. A failure before optimistic acceptance preserves
-the draft; a later stream failure preserves the submitted user message in the
-transcript instead of restoring duplicate text to the Composer.
+cannot yet be confirmed. The submitted user message enters the optimistic
+transcript and the Composer clears immediately. Before HTTP acceptance the
+pending state does not expose an invalid Stop action; after acceptance the
+standard stop-square action remains for the lifetime of the durable generation.
+A pre-acceptance failure restores the exact draft and focus; a later stream
+failure preserves the submitted user message in the transcript instead of
+restoring duplicate text to the Composer.
 Capacity dependency outages are returned as `unavailable`, not as a user quota
 exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains stable failure code, retryability, correlation ID, and
@@ -169,9 +177,13 @@ public diagnostic ID across refresh without exposing provider bodies, raw
 exceptions, or Redis details. Provider timeouts, invalid output, filtering,
 operation limits, and configuration failures have distinct localized copy.
 
-Visible assistant deltas are coalesced to at most one browser animation-frame
-commit, so a fast provider cannot force repeated Markdown layout between
-paints. Conversation auto-follow observes real transcript size changes and
+Incoming events update one feature-private target state, while React can read
+only a separately published snapshot. Consecutive answer deltas are coalesced
+and published at most every 50 ms, aligned to an animation frame while visible;
+terminal, cancellation, error, and reset events publish immediately. Historical
+turns, Workspace navigation, and Reader pages do not subscribe to live content,
+and streaming Markdown consumes a deferred snapshot. Conversation auto-follow
+observes real transcript size changes and
 drives one retargetable animation toward the latest content; it never starts a
 new native smooth-scroll operation for each token. Wheel, touch, keyboard, or
 scrollbar movement away from the bottom cancels following immediately and
@@ -185,7 +197,7 @@ Editing saves a durable
 sibling prompt branch at the original depth, selects that branch, and generates
 its first response from the shared prefix. The selected branch replaces the
 entire visible suffix rather than splicing turns client-side. Save remains in
-the editor until a valid SSE `start` event accepts the request; an early HTTP,
+the editor until the durable POST is accepted; an early HTTP,
 network, abort, or malformed-stream failure keeps the exact draft, error state,
 and editor focus for correction or retry. Once accepted, the editor closes and
 the standard live-turn recovery contract takes over. A branch pager beside the
@@ -221,7 +233,8 @@ same leaf after refresh. Version navigation includes completed variants only
 and is shown only while that turn remains latest.
 Selecting a suggestion only fills and focuses the Composer so the user can edit
 it before sending. Suggestion generation is a non-critical sidecar that starts
-alongside answer generation. If it finishes later, its typed SSE event updates
+only after the main provider produces its first public stream event. If it
+finishes later, its typed SSE event updates
 both live state and the latest cached turn. There is no pending card, failure
 message, polling state, or automatic client retry; a failed or timed-out sidecar
 simply leaves suggestions absent without delaying answer actions.

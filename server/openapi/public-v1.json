@@ -2645,6 +2645,24 @@
         "title": "ConversationSearchResult",
         "type": "object"
       },
+      "ConversationStartRequest": {
+        "additionalProperties": false,
+        "description": "Atomically create a Conversation and accept its first turn.\n\nReplay identity uses the client IDs, owner, originally accepted scope,\nimmutable Turn fields, and the Turn's paper-context snapshot. Mutable Conversation\ntitle, current scope, current context, and tool permissions are not replay-identity\nfields.",
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationCreateRequest"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ConversationTurnCreateRequest"
+          }
+        },
+        "required": [
+          "conversation",
+          "turn"
+        ],
+        "title": "ConversationStartRequest",
+        "type": "object"
+      },
       "ConversationStreamActivityEvent": {
         "properties": {
           "activity": {
@@ -2931,13 +2949,17 @@
         "type": "object"
       },
       "ConversationStreamEventSchema": {
-        "description": "Compatible schema for the existing inline SSE response.",
+        "description": "Complete event union for a direct durable generation SSE response.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_candidate_delta": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent",
+            "assistant_candidate_reset": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent",
+            "assistant_candidate_start": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
             "references": "#/components/schemas/ConversationStreamReferencesEvent",
@@ -2974,6 +2996,18 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamErrorEvent"
@@ -12186,6 +12220,97 @@
         "summary": "Select Conversation Branch"
       }
     },
+    "/api/v1/conversations/{conversation_id}/start": {
+      "post": {
+        "operationId": "start_conversation_api_v1_conversations__conversation_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_candidates",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Candidates",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              }
+            },
+            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationAccepted"
+                }
+              }
+            },
+            "description": "Durable generation accepted for background delivery."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start Conversation"
+      }
+    },
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
       "put": {
         "operationId": "update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put",
@@ -12327,6 +12452,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_candidates",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Candidates",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12356,18 +12491,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
-                }
-              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
           },
           "202": {
             "content": {
@@ -12377,7 +12507,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {
@@ -12423,6 +12553,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_candidates",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Candidates",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12452,18 +12592,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
-                }
-              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
           },
           "202": {
             "content": {
@@ -12473,7 +12608,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {
@@ -12519,6 +12654,16 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_candidates",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Candidates",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "prefer",
             "required": false,
@@ -12548,18 +12693,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
-                }
-              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "Standard SSE stream of typed conversation events. Sanitized candidate events are additive when include_candidates is true."
           },
           "202": {
             "content": {
@@ -12569,7 +12709,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {

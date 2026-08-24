@@ -554,15 +554,22 @@ Conversation generation has one externally observable acceptance boundary.
 Quota, access, immutable context resolution, rate limiting, and concurrency
 acquisition run before product writes. The following short command atomically
 creates the Turn/Response, selected path, DurableJob, and outbox dispatch; for
-prompt branches it also restores the source turn's paper-context snapshot. A
-command conflict releases the lease. `Prefer: respond-async` returns a `202`
-receipt after commit, and subscribers consume `start` and later events from the
-response event endpoint. Disconnecting a subscriber never cancels generation;
+the first prompt it may also create the client-identified Conversation, and for
+prompt branches it restores the source turn's paper-context snapshot. A command
+conflict releases only a concurrency lease newly created by that acceptance
+attempt; conflicting reuse of an active Response ID preserves the existing
+generation's lease. `Prefer: respond-async` returns a `202` receipt after
+commit. Without that preference, the POST returns a direct subscription
+to the same durable generation, flushes a comment-only acceptance frame, and
+then consumes Redis-ID events. Neither path runs the agent inside the HTTP
+request. Disconnecting a subscriber never cancels generation;
 only the authorized cancellation command transitions the running Response and
 job. Event subscriptions may reconnect from `Last-Event-ID`, but generation is
 never automatically replayed. If a worker lease expires, the Response fails as
 `generation_interrupted` because replaying a partially executed model/tool
-sequence is not generally idempotent.
+sequence is not generally idempotent. A process-local notification wakes the
+accepting API process's outbox dispatcher after commit; the bounded poll remains
+the cross-process and recovery fallback.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Replay-safe command

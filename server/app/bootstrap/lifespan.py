@@ -26,6 +26,7 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
         dispatcher = asyncio.create_task(
             run_job_dispatcher(
                 stop_dispatcher,
+                wakeup=application.state.job_dispatcher_wakeup,
                 recover_conversation=fail_interrupted_conversation_response,
                 recover_unclaimed_pdf=recover_unclaimed_pdf_job,
             ),

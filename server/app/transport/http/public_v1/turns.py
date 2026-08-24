@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 from app.bootstrap.execution import (
@@ -12,6 +13,7 @@ from app.modules.conversations.application.chat import ConversationChat
 from app.modules.conversations.application.contracts.turns import (
     ConversationCandidateSubscriptionEventSchema,
     ConversationResponseCreateRequest,
+    ConversationStartRequest,
     ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
     ConversationTurnCreateRequest,
@@ -48,11 +50,10 @@ class ConversationEventStreamResponse(StreamingResponse):
 def _stream_responses() -> dict[int | str, dict[str, object]]:
     return {
         200: {
-            "description": "Standard SSE stream of typed conversation events.",
-            # FastAPI uses the additional response model to register every nested
-            # event definition under OpenAPI components. The explicit content
-            # entry below remains the canonical transport media type.
-            "model": ConversationStreamEventSchema,
+            "description": (
+                "Standard SSE stream of typed conversation events. Sanitized "
+                "candidate events are additive when include_candidates is true."
+            ),
             "content": {
                 "text/event-stream": {
                     "schema": {
@@ -60,7 +61,11 @@ def _stream_responses() -> dict[int | str, dict[str, object]]:
                     }
                 }
             },
-        }
+        },
+        202: {
+            "description": "Durable generation accepted for background delivery.",
+            "model": ConversationGenerationAccepted,
+        },
     }
 
 
@@ -110,6 +115,52 @@ def _prefers_background(prefer: str | None) -> bool:
     )
 
 
+_EVENT_STREAM_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
+
+
+def _event_stream_response(
+    events: AsyncIterator[str],
+) -> ConversationEventStreamResponse:
+    return ConversationEventStreamResponse(
+        events,
+        headers=_EVENT_STREAM_HEADERS,
+    )
+
+
+async def _accepted_response(
+    *,
+    accepted: ConversationGenerationAccepted,
+    chat: ConversationChat,
+    actor: Actor,
+    prefer: str | None,
+    include_candidates: bool,
+) -> Response:
+    if _prefers_background(prefer):
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=accepted.model_dump(mode="json"),
+            headers={"Preference-Applied": "respond-async"},
+        )
+
+    async def events() -> AsyncIterator[str]:
+        yield ": accepted\n\n"
+        subscription = await chat.subscribe(
+            actor=actor,
+            conversation_id=accepted.conversation_id,
+            turn_id=accepted.turn_id,
+            response_id=accepted.response_id,
+            last_event_id=None,
+            include_assistant_candidates=include_candidates,
+        )
+        async for frame in subscription:
+            yield frame
+
+    return _event_stream_response(events())
+
+
 def _conversation_operation(
     *,
     conversation_id: UUID,
@@ -138,10 +189,52 @@ def get_chat_capabilities(
 
 
 @turn_router.post(
+    "/{conversation_id}/start",
+    response_class=Response,
+    response_model=ConversationStreamEventSchema,
+    status_code=status.HTTP_200_OK,
+    responses=_stream_responses(),
+)
+async def start_conversation(
+    conversation_id: UUID,
+    start: ConversationStartRequest,
+    http_request: Request,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    request_operation: OperationContext = Depends(get_required_operation),
+    operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
+    prefer: str | None = Header(default=None),
+    include_candidates: bool = False,
+) -> Response:
+    operation = _conversation_operation(
+        conversation_id=conversation_id,
+        turn_id=start.turn.turn_id,
+        request_operation=request_operation,
+        operation_factory=operation_factory,
+    )
+    attach_operation_context(http_request, operation, actor_id=str(current_user.id))
+    accepted = await chat.accept_start(
+        actor=current_user,
+        operation=operation,
+        conversation_id=conversation_id,
+        conversation=start.conversation,
+        request=start.turn,
+        client_ip=http_client_ip(http_request),
+    )
+    return await _accepted_response(
+        accepted=accepted,
+        chat=chat,
+        actor=current_user,
+        prefer=prefer,
+        include_candidates=include_candidates,
+    )
+
+
+@turn_router.post(
     "/{conversation_id}/turns",
-    response_class=JSONResponse,
-    response_model=ConversationGenerationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
+    response_class=Response,
+    response_model=ConversationStreamEventSchema,
+    status_code=status.HTTP_200_OK,
     responses=_stream_responses(),
 )
 async def create_conversation_turn(
@@ -153,6 +246,7 @@ async def create_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -161,34 +255,27 @@ async def create_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
-    if _prefers_background(prefer):
-        accepted = await chat.accept(
-            actor=current_user,
-            operation=operation,
-            conversation_id=conversation_id,
-            request=turn,
-            client_ip=http_client_ip(http_request),
-        )
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content=accepted.model_dump(mode="json"),
-            headers={"Preference-Applied": "respond-async"},
-        )
-    stream = await chat.stream(
+    accepted = await chat.accept(
         actor=current_user,
         operation=operation,
         conversation_id=conversation_id,
         request=turn,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return await _accepted_response(
+        accepted=accepted,
+        chat=chat,
+        actor=current_user,
+        prefer=prefer,
+        include_candidates=include_candidates,
+    )
 
 
 @turn_router.post(
     "/{conversation_id}/turns/{turn_id}/responses",
-    response_class=JSONResponse,
-    response_model=ConversationGenerationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
+    response_class=Response,
+    response_model=ConversationStreamEventSchema,
+    status_code=status.HTTP_200_OK,
     responses=_stream_responses(),
 )
 async def retry_conversation_turn(
@@ -201,6 +288,7 @@ async def retry_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -209,21 +297,7 @@ async def retry_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
-    if _prefers_background(prefer):
-        accepted = await chat.accept_retry(
-            actor=current_user,
-            operation=operation,
-            conversation_id=conversation_id,
-            turn_id=turn_id,
-            response_id=response.response_id,
-            client_ip=http_client_ip(http_request),
-        )
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content=accepted.model_dump(mode="json"),
-            headers={"Preference-Applied": "respond-async"},
-        )
-    stream = await chat.retry(
+    accepted = await chat.accept_retry(
         actor=current_user,
         operation=operation,
         conversation_id=conversation_id,
@@ -231,14 +305,20 @@ async def retry_conversation_turn(
         response_id=response.response_id,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return await _accepted_response(
+        accepted=accepted,
+        chat=chat,
+        actor=current_user,
+        prefer=prefer,
+        include_candidates=include_candidates,
+    )
 
 
 @turn_router.post(
     "/{conversation_id}/turns/{turn_id}/branches",
-    response_class=JSONResponse,
-    response_model=ConversationGenerationAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
+    response_class=Response,
+    response_model=ConversationStreamEventSchema,
+    status_code=status.HTTP_200_OK,
     responses=_stream_responses(),
 )
 async def branch_conversation_turn(
@@ -251,6 +331,7 @@ async def branch_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    include_candidates: bool = False,
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -259,21 +340,7 @@ async def branch_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
-    if _prefers_background(prefer):
-        accepted = await chat.accept_branch(
-            actor=current_user,
-            operation=operation,
-            conversation_id=conversation_id,
-            source_turn_id=turn_id,
-            request=branch,
-            client_ip=http_client_ip(http_request),
-        )
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content=accepted.model_dump(mode="json"),
-            headers={"Preference-Applied": "respond-async"},
-        )
-    stream = await chat.branch(
+    accepted = await chat.accept_branch(
         actor=current_user,
         operation=operation,
         conversation_id=conversation_id,
@@ -281,7 +348,13 @@ async def branch_conversation_turn(
         request=branch,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return await _accepted_response(
+        accepted=accepted,
+        chat=chat,
+        actor=current_user,
+        prefer=prefer,
+        include_candidates=include_candidates,
+    )
 
 
 @turn_router.get(
@@ -304,7 +377,7 @@ async def subscribe_conversation_response(
         response_id=response_id,
         last_event_id=last_event_id,
     )
-    return ConversationEventStreamResponse(events)
+    return _event_stream_response(events)
 
 
 @turn_router.get(
@@ -328,7 +401,7 @@ async def subscribe_conversation_response_candidates(
         last_event_id=last_event_id,
         include_assistant_candidates=True,
     )
-    return ConversationEventStreamResponse(events)
+    return _event_stream_response(events)
 
 
 @turn_router.post(

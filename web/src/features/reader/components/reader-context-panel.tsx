@@ -1134,9 +1134,15 @@ export function ReaderContextPanel({
                 <ConversationView
                   layout="side-panel"
                   canSend={conversationSession.canSend}
+                  completionAnnouncementId={
+                    conversationSession.completionAnnouncementId
+                  }
                   composerForm={conversationSession.composerForm}
                   context={context}
-                  error={conversationSession.turnsQuery.isError}
+                  error={
+                    !conversationSession.submissionPending &&
+                    conversationSession.turnsQuery.isError
+                  }
                   emptyState={{
                     description: t("conversations.emptyDescription"),
                     title: t("conversations.emptyTitle"),
@@ -1144,7 +1150,8 @@ export function ReaderContextPanel({
                   liveTurn={conversationSession.liveTurn}
                   loading={
                     conversationSession.turnsQuery.isPending &&
-                    Boolean(conversationId)
+                    Boolean(conversationId) &&
+                    !conversationSession.submissionPending
                   }
                   onContextChange={onContextChange}
                   onDocumentSourceOpen={onSourceOpen}
@@ -1156,6 +1163,7 @@ export function ReaderContextPanel({
                   onEditMessage={(turn, message) =>
                     conversationSession.editMessage(turn, message)
                   }
+                  onLiveContentVisible={conversationSession.markContentVisible}
                   onSelectBranch={(turnId) =>
                     void conversationSession.selectBranch(turnId)
                   }
@@ -1172,6 +1180,7 @@ export function ReaderContextPanel({
                   readOnlyReason={
                     conversationSession.conversationQuery.data?.read_only_reason
                   }
+                  stopAvailable={conversationSession.stopAvailable}
                   submissionPending={conversationSession.submissionPending}
                   turnContextLabel={turnContextLabel}
                   turns={conversationSession.turnsQuery.data?.items ?? []}

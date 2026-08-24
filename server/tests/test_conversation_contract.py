@@ -489,6 +489,7 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     assert "/api/v1/conversations/{conversation_id}/scope" in paths
     assert "/api/v1/conversations/{conversation_id}/context" in paths
     assert "/api/v1/conversations/{conversation_id}/turns" in paths
+    assert "/api/v1/conversations/{conversation_id}/start" in paths
     assert "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses" in paths
     assert (
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response"
@@ -546,7 +547,7 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     )
 
 
-def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
+def test_conversation_turns_expose_the_complete_durable_sse_contract() -> None:
     response = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
         "post"
     ]["responses"]["200"]
@@ -563,10 +564,14 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamAssistantItemStartEvent",
         "ConversationStreamAssistantItemDeltaEvent",
         "ConversationStreamAssistantItemCompleteEvent",
+        "ConversationStreamAssistantCandidateStartEvent",
+        "ConversationStreamAssistantCandidateDeltaEvent",
+        "ConversationStreamAssistantCandidateResetEvent",
         "ConversationStreamReferencesEvent",
         "ConversationStreamResponseReadyEvent",
         "ConversationStreamSuggestionsEvent",
         "ConversationStreamCompleteEvent",
+        "ConversationStreamCancelledEvent",
         "ConversationStreamErrorEvent",
     }
 
@@ -613,6 +618,53 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "generation_kind"
     ]
     assert "branch" in start_generation["enum"]
+
+    start_operation = app.openapi()["paths"][
+        "/api/v1/conversations/{conversation_id}/start"
+    ]["post"]
+    assert (
+        start_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ConversationStartRequest"
+    )
+    assert set(start_operation["responses"]) >= {"200", "202"}
+    assert (
+        start_operation["responses"]["200"]["content"]["text/event-stream"]["schema"][
+            "$ref"
+        ]
+        == "#/components/schemas/ConversationStreamEventSchema"
+    )
+    assert {parameter["name"] for parameter in start_operation["parameters"]} >= {
+        "conversation_id",
+        "include_candidates",
+        "prefer",
+    }
+    start_schema = schemas["ConversationStartRequest"]
+    assert set(start_schema["properties"]) == {"conversation", "turn"}
+    assert "originally accepted scope" in start_schema["description"]
+    assert "current scope" in start_schema["description"]
+    assert "title" in start_schema["description"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/conversations/{conversation_id}/start",
+        "/api/v1/conversations/{conversation_id}/turns",
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses",
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches",
+    ],
+)
+def test_generation_posts_document_exact_response_media_types(path: str) -> None:
+    responses = app.openapi()["paths"][path]["post"]["responses"]
+
+    assert set(responses["200"]["content"]) == {"text/event-stream"}
+    assert responses["200"]["content"]["text/event-stream"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationStreamEventSchema"
+    )
+    assert set(responses["202"]["content"]) == {"application/json"}
+    assert responses["202"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationGenerationAccepted"
+    )
 
 
 def test_turn_cursor_rejects_a_changed_branch_revision() -> None:
@@ -1406,8 +1458,10 @@ def test_paper_context_snapshot_only_loads_anchor_full_text(
         ),
     }
     monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat_data.document_repository.find_accessible",
-        lambda _db, *, document_id, user: papers.get(document_id),
+        "app.bootstrap.adapters.conversation_chat_data.document_repository.find_accessible_many",
+        lambda _db, *, document_ids, user: [
+            papers[document_id] for document_id in document_ids if document_id in papers
+        ],
     )
     db = MagicMock(spec=Session)
     db.execute.return_value.all.return_value = []
