@@ -17,7 +17,7 @@ describe("activityTrendPath", () => {
     expect(path).toContain("M200.00,33.33 L300.00,0.00");
   });
 
-  it("renders a visible point when the selected range has one day", () => {
+  it("renders a compact, non-duplicated state when the selected range has one day", () => {
     const { container } = render(
       React.createElement(ActivityTrendChart, {
         days: [{ activeMs: 60_000, date: "2026-08-24" }],
@@ -27,6 +27,8 @@ describe("activityTrendPath", () => {
           date: "Date",
           events: "Events",
           sessions: "Sessions",
+          singleDay:
+            "Your reading trend starts here. More reading days will reveal the pattern.",
           table: "View data table",
           team: "Team reading",
           visible: "Visible time",
@@ -35,11 +37,12 @@ describe("activityTrendPath", () => {
       }),
     );
 
-    expect(container.querySelector('path[d^="M360.00,"]')).toBeInTheDocument();
     expect(
-      container.querySelector('circle[data-series="personal"]'),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Aug 24")).toHaveLength(2);
+      screen.getByRole("group", { name: "Activity trend" }),
+    ).toHaveAttribute("data-visualization", "activity-trend-single-day");
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Aug 24")).toHaveLength(1);
+    expect(screen.getAllByText("1 min")).toHaveLength(2);
   });
 });
 

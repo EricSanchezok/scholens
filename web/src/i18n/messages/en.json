@@ -2027,7 +2027,11 @@
     "metricCollectionSince": "Activity metrics available since {date}",
     "partialHistory": "Activity before {date} may be incomplete. Empty days and pages in that period do not necessarily mean no activity.",
     "metricVersion": "Measurement method: {version}",
+    "metricDefinitions": {
+      "activeReadingV1": "Active reading estimate v1"
+    },
     "actions": {
+      "data": "Data",
       "retry": "Try again",
       "export": "Export activity",
       "settings": "Activity settings",
@@ -2088,6 +2092,7 @@
       "teamReading": "Anonymous team reading estimate",
       "date": "Date",
       "events": "Shared events",
+      "singleDay": "Your reading trend starts here. More reading days will reveal the pattern.",
       "showTable": "View data table",
       "paperLabel": "Daily active reading estimate for this paper",
       "projectLabel": "My and anonymous team reading estimates by day",

@@ -233,6 +233,9 @@ distinct and has a keyboard-accessible tabular equivalent. Neither the chart
 nor heatmap claims gaze, attention, comprehension, or completion. An in-
 progress local session may update its visible summary without changing the
 settled server history until acknowledgement.
+When only one calendar day has been collected, the trend region uses a compact
+first-day state with one date and the measured values instead of drawing a
+full-height line chart with duplicated endpoints.
 
 `GET /api/v1/papers/{document_id}/insights` supplies the authorized projection.
 Reader requests `range=all` for the summary and pages and `range=30d` for the

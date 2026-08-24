@@ -6,7 +6,16 @@ import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
-import { Button, focusSurfaceVariants } from "@/components/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  focusSurfaceVariants,
+} from "@/components/ui";
+import { Icon } from "@/design-system/icons/icon";
+import { DeleteIcon, ExpandIcon } from "@/design-system/icons/semantic-icons";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PaperResearchInsights } from "../types";
@@ -21,18 +30,18 @@ export function PaperInsightsPanel({
   error,
   insights,
   loading,
+  onDeleteActivity,
   onPageSelect,
   onRetry,
   recordingEnabled,
-  toolbar,
 }: {
   error?: boolean;
   insights?: PaperResearchInsights;
   loading?: boolean;
+  onDeleteActivity?: () => void;
   onPageSelect: (page: number) => void;
   onRetry: () => void;
   recordingEnabled?: boolean;
-  toolbar?: React.ReactNode;
 }) {
   const t = useTranslations("ResearchActivity");
   const locale = useLocale();
@@ -129,6 +138,10 @@ export function PaperInsightsPanel({
     sessions: t("metrics.sessions"),
     visible_ms: t("metrics.visibleTime"),
   };
+  const metricDefinitionLabel =
+    insights.metricDefinitionVersion === "active-reading-v1"
+      ? t("metricDefinitions.activeReadingV1")
+      : insights.metricDefinitionVersion;
   return (
     <div
       className={cn(
@@ -137,37 +150,54 @@ export function PaperInsightsPanel({
       )}
       tabIndex={0}
     >
-      <div className="grid gap-8 p-5">
+      <div className="grid gap-6 p-5">
         <section aria-labelledby="paper-insights-summary">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2
-                className="text-base font-semibold"
-                id="paper-insights-summary"
-              >
-                {t("paper.summary")}
-              </h2>
-              <p className="text-secondary mt-1 text-xs leading-5">
-                {t("paper.approximate")}
-              </p>
-              <p className="text-muted mt-1 text-[0.6875rem]">
-                {t("metricVersion", {
-                  version: insights.metricDefinitionVersion,
-                })}
-              </p>
+          <div className="grid gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2
+                  className="text-base font-semibold"
+                  id="paper-insights-summary"
+                >
+                  {t("paper.summary")}
+                </h2>
+                <p className="text-secondary mt-1 text-xs leading-5 text-pretty">
+                  {t("paper.approximate")}
+                </p>
+              </div>
+              {onDeleteActivity ? (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="px-2" size="sm" variant="ghost">
+                      {t("actions.data")}
+                      <Icon glyph={ExpandIcon} size={16} tone="secondary" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem destructive onSelect={onDeleteActivity}>
+                      <Icon glyph={DeleteIcon} size={16} tone="danger" />
+                      {t("actions.delete")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
             </div>
-            {(recordingSince ?? metricCollectionSince) ? (
-              <p className="text-muted text-xs">
-                {t(recordingSince ? "since" : "metricCollectionSince", {
-                  date: new Intl.DateTimeFormat(locale, {
-                    dateStyle: "medium",
-                  }).format(
-                    new Date(recordingSince ?? metricCollectionSince ?? 0),
-                  ),
-                })}
-              </p>
-            ) : null}
-            {toolbar}
+            <div className="text-muted flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span>
+                {t("metricVersion", { version: metricDefinitionLabel })}
+              </span>
+              {(recordingSince ?? metricCollectionSince) ? (
+                <span>
+                  {t(recordingSince ? "since" : "metricCollectionSince", {
+                    date: new Intl.DateTimeFormat(locale, {
+                      dateStyle: "medium",
+                    }).format(
+                      new Date(recordingSince ?? metricCollectionSince ?? 0),
+                    ),
+                  })}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="mt-5">
             <MetricStrip
@@ -282,6 +312,7 @@ export function PaperInsightsPanel({
                   date: t("chart.date"),
                   events: t("chart.events"),
                   sessions: t("metrics.sessions"),
+                  singleDay: t("chart.singleDay"),
                   table: t("chart.showTable"),
                   team: t("chart.teamReading"),
                   visible: t("metrics.visibleTime"),

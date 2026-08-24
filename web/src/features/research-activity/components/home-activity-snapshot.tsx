@@ -9,6 +9,8 @@ import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PersonalResearchInsights } from "../types";
 
+const HOME_ACTIVITY_WINDOW_DAYS = 30;
+
 export function HomeActivitySnapshot({
   error,
   insights,
@@ -85,6 +87,14 @@ export function HomeActivitySnapshot({
     1,
     ...(insights?.daily.map((day) => day.activeMs) ?? []),
   );
+  const recentDays = insights?.daily.slice(-HOME_ACTIVITY_WINDOW_DAYS) ?? [];
+  const activityWindow = [
+    ...Array.from(
+      { length: HOME_ACTIVITY_WINDOW_DAYS - recentDays.length },
+      () => null,
+    ),
+    ...recentDays,
+  ];
   const settingsDestination = !hasEvidence && recordingEnabled !== true;
   return (
     <Link
@@ -131,17 +141,35 @@ export function HomeActivitySnapshot({
               {activeMs > 0 ? (
                 <span
                   aria-hidden
-                  className="col-span-2 flex h-10 min-w-0 items-end gap-px sm:col-span-1"
+                  className="border-line-subtle col-span-2 grid h-10 min-w-0 items-end gap-px border-b sm:col-span-1 sm:w-full sm:max-w-lg sm:justify-self-end"
+                  data-visualization="home-activity-trend"
+                  style={{
+                    gridTemplateColumns: `repeat(${HOME_ACTIVITY_WINDOW_DAYS}, minmax(0, 1fr))`,
+                  }}
                 >
-                  {insights?.daily.slice(-30).map((day) => (
+                  {activityWindow.map((day, index) => (
                     <span
-                      className="bg-activity-peak min-w-px flex-1 rounded-t-[1px]"
-                      key={day.date}
+                      className={cn(
+                        "w-1.5 min-w-px justify-self-center rounded-t-[1px]",
+                        day === null
+                          ? "h-0"
+                          : day.activeMs === 0
+                            ? "bg-activity-empty h-px"
+                            : "bg-activity-peak min-h-1",
+                      )}
+                      data-activity-slot={
+                        day === null
+                          ? "missing"
+                          : day.activeMs === 0
+                            ? "empty"
+                            : "active"
+                      }
+                      key={day?.date ?? `missing-${index}`}
                       style={{
                         height:
-                          day.activeMs === 0
-                            ? 0
-                            : `${Math.max(4, (day.activeMs / peak) * 100)}%`,
+                          day !== null && day.activeMs > 0
+                            ? `${Math.max(4, (day.activeMs / peak) * 100)}%`
+                            : undefined,
                       }}
                     />
                   ))}

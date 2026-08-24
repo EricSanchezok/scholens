@@ -53,4 +53,37 @@ describe("HomeActivitySnapshot", () => {
       ),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps a single recorded day in one slot of the 30-day trend", () => {
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <HomeActivitySnapshot
+          insights={{
+            activityHistoryCompleteSince: null,
+            daily: [{ activeMs: 180_000, date: "2026-08-25" }],
+            historyPartial: false,
+            metricDefinitionVersion: "active-reading-v1",
+            papers: [],
+            projects: [],
+            range: "30d",
+            readingDataSince: "2026-08-25T00:00:00Z",
+            summary: [
+              { key: "active_ms", unit: "milliseconds", value: 180_000 },
+              { key: "active_days", unit: "count", value: 1 },
+              { key: "papers_with_activity", unit: "count", value: 1 },
+            ],
+          }}
+          onRetry={vi.fn()}
+          recordingEnabled
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(
+      container.querySelectorAll('[data-activity-slot="missing"]'),
+    ).toHaveLength(29);
+    expect(
+      container.querySelectorAll('[data-activity-slot="active"]'),
+    ).toHaveLength(1);
+  });
 });

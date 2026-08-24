@@ -19,7 +19,7 @@ export function MetricStrip({
   metrics: ResearchActivityMetric[];
 }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
       {metrics.map((metric) => (
         <div className="min-w-0" key={metric.key}>
           <dt className="text-secondary text-xs leading-5">
@@ -116,6 +116,7 @@ export function ActivityTrendChart({
     date: string;
     events: string;
     sessions: string;
+    singleDay: string;
     table: string;
     team: string;
     visible: string;
@@ -151,57 +152,121 @@ export function ActivityTrendChart({
   const showEvents = days.some((day) => day.sharedEventCount !== undefined);
   const showSessions = days.some((day) => day.sessionCount !== undefined);
   const showVisible = days.some((day) => day.visibleMs !== undefined);
+  const singleDay = days.length === 1 ? days[0] : undefined;
+  const formatDate = (date: string) =>
+    new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "short",
+    }).format(new Date(`${date}T00:00:00`));
 
   return (
     <div className="min-w-0">
-      <svg
-        aria-label={labels.chart}
-        className="h-48 w-full overflow-visible"
-        data-visualization="activity-trend"
-        preserveAspectRatio="none"
-        role="img"
-        viewBox={`0 0 ${width} ${height}`}
-      >
-        {[0, 1, 2, 3, 4].map((line) => (
-          <line
-            key={line}
-            stroke="var(--color-border-subtle)"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-            x1="0"
-            x2={width}
-            y1={(line / 4) * height}
-            y2={(line / 4) * height}
-          />
-        ))}
-        {showTeam && teamPath ? (
-          <path
-            d={teamPath}
-            fill="none"
-            stroke="var(--color-research-activity-secondary)"
-            strokeDasharray="5 5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : null}
-        {personalPath ? (
-          <path
-            d={personalPath}
-            fill="none"
-            stroke="var(--color-research-activity-peak)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2.5"
-            vectorEffect="non-scaling-stroke"
-          />
-        ) : null}
-        {showTeam
-          ? days.map((day, index) => {
-              if (day.teamActiveMs == null) return null;
+      {singleDay ? (
+        <div
+          aria-label={labels.chart}
+          className="bg-subtle grid min-h-24 gap-4 rounded-[var(--radius-xl)] px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          data-visualization="activity-trend-single-day"
+          role="group"
+        >
+          <div className="min-w-0">
+            <p className="text-secondary text-xs font-medium tabular-nums">
+              {formatDate(singleDay.date)}
+            </p>
+            <p className="text-muted mt-1 max-w-sm text-xs leading-5 text-pretty">
+              {labels.singleDay}
+            </p>
+          </div>
+          <dl className="grid gap-2 sm:justify-items-end sm:text-right">
+            <div>
+              <dt className="text-secondary text-xs">{labels.active}</dt>
+              <dd className="mt-0.5 text-lg font-semibold tabular-nums">
+                {formatActivityDuration(singleDay.activeMs, locale)}
+              </dd>
+            </div>
+            {showTeam && singleDay.teamActiveMs != null ? (
+              <div>
+                <dt className="text-secondary text-xs">{labels.team}</dt>
+                <dd className="mt-0.5 text-sm font-medium tabular-nums">
+                  {formatActivityDuration(singleDay.teamActiveMs, locale)}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      ) : null}
+      {!singleDay ? (
+        <>
+          <svg
+            aria-label={labels.chart}
+            className="h-48 w-full overflow-visible"
+            data-visualization="activity-trend"
+            preserveAspectRatio="none"
+            role="img"
+            viewBox={`0 0 ${width} ${height}`}
+          >
+            {[0, 1, 2, 3, 4].map((line) => (
+              <line
+                key={line}
+                stroke="var(--color-border-subtle)"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+                x1="0"
+                x2={width}
+                y1={(line / 4) * height}
+                y2={(line / 4) * height}
+              />
+            ))}
+            {showTeam && teamPath ? (
+              <path
+                d={teamPath}
+                fill="none"
+                stroke="var(--color-research-activity-secondary)"
+                strokeDasharray="5 5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+            {personalPath ? (
+              <path
+                d={personalPath}
+                fill="none"
+                stroke="var(--color-research-activity-peak)"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+            {showTeam
+              ? days.map((day, index) => {
+                  if (day.teamActiveMs == null) return null;
+                  const point = activityTrendPoint(
+                    day.teamActiveMs,
+                    index,
+                    days.length,
+                    width,
+                    height,
+                    maximum,
+                  );
+                  return (
+                    <circle
+                      aria-hidden
+                      cx={point.x}
+                      cy={point.y}
+                      data-series="team"
+                      fill="var(--color-research-activity-secondary)"
+                      key={`team-${day.date}`}
+                      r="2.5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                })
+              : null}
+            {days.map((day, index) => {
               const point = activityTrendPoint(
-                day.teamActiveMs,
+                day.activeMs,
                 index,
                 days.length,
                 width,
@@ -213,69 +278,38 @@ export function ActivityTrendChart({
                   aria-hidden
                   cx={point.x}
                   cy={point.y}
-                  data-series="team"
-                  fill="var(--color-research-activity-secondary)"
-                  key={`team-${day.date}`}
-                  r="2.5"
+                  data-series="personal"
+                  fill="var(--color-research-activity-peak)"
+                  key={`personal-${day.date}`}
+                  r="3"
                   vectorEffect="non-scaling-stroke"
                 />
               );
-            })
-          : null}
-        {days.map((day, index) => {
-          const point = activityTrendPoint(
-            day.activeMs,
-            index,
-            days.length,
-            width,
-            height,
-            maximum,
-          );
-          return (
-            <circle
-              aria-hidden
-              cx={point.x}
-              cy={point.y}
-              data-series="personal"
-              fill="var(--color-research-activity-peak)"
-              key={`personal-${day.date}`}
-              r="3"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-      </svg>
-      {days.length > 0 ? (
-        <div className="text-muted mt-1 flex justify-between gap-3 text-xs tabular-nums">
-          <span>
-            {new Intl.DateTimeFormat(locale, {
-              day: "numeric",
-              month: "short",
-            }).format(new Date(`${days[0]?.date}T00:00:00`))}
-          </span>
-          <span>
-            {new Intl.DateTimeFormat(locale, {
-              day: "numeric",
-              month: "short",
-            }).format(new Date(`${days.at(-1)?.date}T00:00:00`))}
-          </span>
-        </div>
+            })}
+          </svg>
+          {days.length > 0 ? (
+            <div className="text-muted mt-1 flex justify-between gap-3 text-xs tabular-nums">
+              <span>{formatDate(days[0]?.date ?? "1970-01-01")}</span>
+              <span>{formatDate(days.at(-1)?.date ?? "1970-01-01")}</span>
+            </div>
+          ) : null}
+          <div className="text-secondary mt-2 flex flex-wrap gap-4 text-xs">
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden className="bg-activity-peak h-0.5 w-5" />
+              {labels.active}
+            </span>
+            {showTeam ? (
+              <span className="inline-flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="border-activity-secondary w-5 border-t-2 border-dashed"
+                />
+                {labels.team}
+              </span>
+            ) : null}
+          </div>
+        </>
       ) : null}
-      <div className="text-secondary mt-2 flex flex-wrap gap-4 text-xs">
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden className="bg-activity-peak h-0.5 w-5" />
-          {labels.active}
-        </span>
-        {showTeam ? (
-          <span className="inline-flex items-center gap-2">
-            <span
-              aria-hidden
-              className="border-activity-secondary w-5 border-t-2 border-dashed"
-            />
-            {labels.team}
-          </span>
-        ) : null}
-      </div>
       {showTable ? (
         <details className="mt-4" open={tableInitiallyOpen || undefined}>
           <summary

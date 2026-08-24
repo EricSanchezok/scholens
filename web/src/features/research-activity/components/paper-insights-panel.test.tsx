@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
 
@@ -147,5 +147,34 @@ describe("PaperInsightsPanel", () => {
     expect(
       screen.queryByText("Activity metrics available since Aug 1, 2026"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps destructive activity deletion inside the Data menu", async () => {
+    const onDeleteActivity = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <PaperInsightsPanel
+          insights={{
+            ...annotationOnlyInsights,
+            summary: [
+              { key: "active_ms", unit: "milliseconds", value: 60_000 },
+              { key: "annotations", unit: "count", value: 1 },
+            ],
+          }}
+          onDeleteActivity={onDeleteActivity}
+          onPageSelect={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Data" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Delete activity" }),
+    );
+    expect(onDeleteActivity).toHaveBeenCalledOnce();
   });
 });

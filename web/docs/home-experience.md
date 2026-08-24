@@ -272,7 +272,10 @@ not above or inside an active conversation. Its complete surface links to
 The desktop snapshot is one quiet editorial group with an active-reading
 estimate, active days, substantively engaged papers, annotations, private
 questions, and durable output counts, followed by a compact unsmoothed daily
-trend. Effort, process, and outcomes remain separate values;
+trend. Its visual axis always retains 30 equal date slots: days before the
+collection boundary stay absent, recorded zeroes keep a quiet baseline, and a
+single recorded day occupies only its own slot rather than stretching across
+the period. Effort, process, and outcomes remain separate values;
 they are not summed into a productivity score. Visible time may appear as
 supporting detail, but it never replaces the “Active reading estimate” label.
 The initial snapshot uses accumulated days, papers, annotations, questions, and
