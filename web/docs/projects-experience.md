@@ -94,10 +94,12 @@ header and single-layer overview groups, with no reserved chat rail.
 Opening chat adds the same responsive `clamp(23rem, 34vw, 31.25rem)` side panel
 used by Reader. Mobile uses a Reader-style full-screen Sheet aligned to the
 visual viewport height and vertical offset with shared safe-area padding; the
-Workspace app bar remains the only visible
-page title, while conversation history and New Conversation keep the same
-placement and icons as Reader. Papers and rows become one-column compositions
-below the desktop breakpoints, and all controls remain usable at 320px.
+Workspace app bar remains the only visible page title. The in-panel toolbar
+runs from conversation history, as its only flexible and widest item, to the
+compact label-only reasoning-strength selector, New Conversation, and Collapse.
+The existing New Conversation and Collapse glyph buttons keep their behavior
+and appearance. Papers and rows become one-column compositions below the
+desktop breakpoints, and all controls remain usable at 320px.
 
 Project detail inherits the Library collection language: underlined tabs,
 pill-shaped search, the shared light-line Select surface for sorting and kind,
@@ -187,8 +189,8 @@ Canonical Figma file: [Scholens — Product Design](https://www.figma.com/design
 | paper filters / columns / folded preview    | `1172:1891`              | `Library` interaction and account preference states         |
 | outputs populated / empty                   | `1087:1622`              | `Outputs`, `OutputsEmpty`                                   |
 | manage / Add papers first                   | `1087:1715`              | `Papers`                                                    |
-| mobile 390 project / chat                   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |
-| mobile 430 project / chat                   | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat`                                   |
+| mobile 390 project / ordered chat toolbar   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |
+| mobile 430 project / ordered chat toolbar   | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat430`                                |
 | collaborator delivery states                | `1151:2`                 | `Features/Projects/Manage collaborators` → `DeliveryStates` |
 | collaborator 390 / 320 dark zh-CN           | `1154:2`, `1154:74`      | `Mobile390`, `SmallMobile320`, `ChineseDark`                |
 | invitation desktop states / 430 zh-CN retry | `1152:2`, `1154:98`      | `Features/Projects/Accept invitation`                       |
