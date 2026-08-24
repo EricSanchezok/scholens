@@ -100,9 +100,26 @@ const items: PaperCollectionItem[] = [
     activityTrail: (
       <span
         aria-label="Page reading distribution"
-        className="block h-1.5 bg-[linear-gradient(90deg,var(--color-activity-peak),transparent,var(--color-activity-medium))]"
+        className="flex h-2 items-center gap-0.5"
         role="img"
-      />
+      >
+        {[
+          "bg-activity-low",
+          "bg-activity-medium",
+          "bg-activity-peak",
+          "bg-activity-high",
+          "bg-activity-empty",
+          "bg-activity-medium",
+          "bg-activity-low",
+          "bg-activity-empty",
+        ].map((className, index) => (
+          <span
+            aria-hidden
+            className={`h-1.5 w-2.5 shrink-0 rounded-[1px] ${className}`}
+            key={index}
+          />
+        ))}
+      </span>
     ),
     addedAt: "Aug 20, 2026",
     authors: ["Eric Hanchen Jiang", "Zhi Zhang", "Yuchen Wu"],

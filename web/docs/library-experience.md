@@ -89,8 +89,12 @@ Default columns are Paper, Active reading, Status, Tags, Authors, Publication,
 and Last opened. Added and DOI are optional; every column except Paper can be
 hidden and the visible columns can be reordered. Active reading is a compact
 duration column; the Paper cell keeps a separate, label-backed page-distribution
-trail whose smooth intensity changes show where reading accumulated without
-claiming completion progress. Column order, per-column widths, preview width,
+trail of up to twelve contiguous page-range cells whose semantic intensity
+shows where reading accumulated without claiming completion progress. Each cell
+retains its source page range and hover description; longer distributions are
+aggregated without discarding activity. When the document's total page count is
+not yet available, the trail ends with an ellipsis so its observed page range
+cannot be mistaken for the full paper. Column order, per-column widths, preview width,
 and preview disclosure are account-scoped and shared with Project Papers; sort
 and filters remain URL state. The Paper column can contract to 160 px and expand
 to 1,600 px. Dragging an internal column boundary redistributes the stored

@@ -57,10 +57,60 @@ describe("compact paper activity", () => {
     const activity = screen.getByLabelText("2 min active reading estimate");
     expect(activity).toBeInTheDocument();
     expect(activity).not.toHaveAccessibleName(/coverage/i);
-    expect(screen.getByLabelText("Page reading distribution")).toHaveStyle({
-      backgroundImage:
-        "linear-gradient(90deg, transparent 0%, var(--color-activity-peak) 25%, transparent 50%, var(--color-activity-medium) 75%, transparent 100%)",
-    });
+    const trail = screen.getByLabelText("Recorded page reading distribution");
+    const cells = trail.querySelectorAll("[data-paper-activity-cell]");
+    expect(cells).toHaveLength(3);
+    expect(trail).toHaveAttribute("data-page-range-complete", "false");
+    expect(
+      trail.querySelector("[data-paper-activity-continuation]"),
+    ).toHaveTextContent("…");
+    expect(cells[0]).toHaveClass("bg-activity-peak");
+    expect(cells[0]).toHaveAttribute("title", "Page 1: 2 min active reading");
+    expect(cells[1]).toHaveClass("bg-activity-empty");
+    expect(cells[2]).toHaveClass("bg-activity-medium");
+  });
+
+  it("bounds dense page distributions to twelve contiguous cells", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CompactPaperActivityTrail
+          summary={{
+            ...summary,
+            activeMs: 180_000,
+            coveragePercent: 60,
+            pageBuckets: Array.from({ length: 18 }, (_, index) => ({
+              activeMs: (index + 1) * 1_000,
+              endPage: index + 1,
+              startPage: index + 1,
+            })),
+          }}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    const cells = screen
+      .getByLabelText("Page reading distribution")
+      .querySelectorAll("[data-paper-activity-cell]");
+    expect(cells).toHaveLength(12);
+    expect(cells[0]).toHaveAttribute("data-page-range", "1");
+    expect(cells[11]).toHaveAttribute("data-page-range", "17–18");
+    expect(
+      screen
+        .getByLabelText("Page reading distribution")
+        .querySelector("[data-paper-activity-continuation]"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits an empty distribution instead of exposing an empty image", () => {
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CompactPaperActivityTrail
+          summary={{ ...summary, activeMs: 60_000, pageBuckets: [] }}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("keeps known coverage as supporting text in the reading column", () => {

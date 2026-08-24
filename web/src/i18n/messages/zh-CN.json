@@ -2208,7 +2208,10 @@
       "durationAndCoverage": "{duration} · 覆盖 {coverage}%",
       "coverageValue": "覆盖 {coverage}%",
       "distributionLabel": "页面阅读分布",
-      "distributionDescription": "页面阅读分布。颜色越深，主动阅读时间越长。"
+      "distributionDescription": "页面阅读分布。每格代表一个页段；颜色越深，主动阅读时间越长。",
+      "partialDistributionLabel": "已记录页面的阅读分布",
+      "partialDistributionDescription": "已记录页面的阅读分布。当前缺少论文总页数，省略号表示论文可能仍有后续页面。",
+      "bucketDescription": "第 {pageRange} 页：主动阅读 {duration}"
     },
     "home": {
       "title": "研究活动",

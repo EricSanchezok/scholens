@@ -2208,7 +2208,10 @@
       "durationAndCoverage": "{duration} · {coverage}% covered",
       "coverageValue": "{coverage}% covered",
       "distributionLabel": "Page reading distribution",
-      "distributionDescription": "Page reading distribution. Darker areas indicate more active reading."
+      "distributionDescription": "Page reading distribution. Each cell is a page range; darker cells indicate more active reading.",
+      "partialDistributionLabel": "Recorded page reading distribution",
+      "partialDistributionDescription": "Recorded page reading distribution. Total page count is not available, so the ellipsis means the paper may continue beyond these cells.",
+      "bucketDescription": "Page {pageRange}: {duration} active reading"
     },
     "home": {
       "title": "Research activity",
