@@ -11,6 +11,9 @@ from app.modules.papers.infrastructure.access import (
     get_document_access,
     require_document_access,
 )
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_READING_ACTIVITY_COLUMNS,
+)
 from app.modules.reading_activity.application.activity import ReadingMutationResult
 from app.modules.reading_activity.application.contracts import (
     ReadingActivityExportResponse,
@@ -149,6 +152,7 @@ class ReadingActivityMutationRepository(ReadingActivityRepositoryBase):
             document_id=document_id,
             user_id=actor.id,
             project_id=request.project_id,
+            document_columns=DOCUMENT_READING_ACTIVITY_COLUMNS,
         )
         now = self._clock.now()
         if request.started_at > now + timedelta(minutes=5):
@@ -255,6 +259,7 @@ class ReadingActivityMutationRepository(ReadingActivityRepositoryBase):
             document_id=model.document_id,
             user_id=actor.id,
             project_id=model.project_id,
+            document_columns=DOCUMENT_READING_ACTIVITY_COLUMNS,
         )
         if access is None:
             raise AppError(
