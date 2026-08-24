@@ -48,6 +48,7 @@ import {
 import {
   ConversationSwitcher,
   ConversationView,
+  ReasoningMenu,
   useConversationSession,
   type ReasoningLevel,
   type ResearchContext,
@@ -1112,6 +1113,14 @@ export function ReaderContextPanel({
               <div className="flex h-full min-h-0 flex-col">
                 <ConversationSwitcher
                   activeId={conversationId}
+                  beforeNewAction={
+                    <ReasoningMenu
+                      className="lg:hidden"
+                      onChange={setReasoningLevel}
+                      value={reasoningLevel}
+                      variant="panelHeader"
+                    />
+                  }
                   conversations={conversations}
                   labels={{
                     empty: t("conversations.empty"),

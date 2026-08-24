@@ -72,26 +72,51 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
 DropdownMenuCheckboxItem.displayName =
   DropdownPrimitive.CheckboxItem.displayName;
 
+type DropdownMenuRadioItemProps = React.ComponentPropsWithoutRef<
+  typeof DropdownPrimitive.RadioItem
+> & {
+  indicator?: React.ReactNode;
+  indicatorPosition?: "start" | "end";
+};
+
 export const DropdownMenuRadioItem = React.forwardRef<
   React.ElementRef<typeof DropdownPrimitive.RadioItem>,
-  React.ComponentPropsWithoutRef<typeof DropdownPrimitive.RadioItem>
->(({ children, className, ...props }, ref) => (
-  <DropdownPrimitive.RadioItem
-    className={cn(
-      "data-[highlighted]:bg-hover data-[state=checked]:bg-subtle data-[disabled]:text-disabled relative flex min-h-11 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-2 pl-8 text-sm outline-none data-[disabled]:pointer-events-none sm:min-h-9",
+  DropdownMenuRadioItemProps
+>(
+  (
+    {
+      children,
       className,
-    )}
-    ref={ref}
-    {...props}
-  >
-    <span className="absolute left-2">
-      <DropdownPrimitive.ItemIndicator>
-        <span className="bg-primary block size-2 rounded-full" />
-      </DropdownPrimitive.ItemIndicator>
-    </span>
-    {children}
-  </DropdownPrimitive.RadioItem>
-));
+      indicator = <span className="bg-primary block size-2 rounded-full" />,
+      indicatorPosition = "start",
+      ...props
+    },
+    ref,
+  ) => (
+    <DropdownPrimitive.RadioItem
+      className={cn(
+        "data-[highlighted]:bg-hover data-[state=checked]:bg-subtle data-[disabled]:text-disabled relative flex min-h-11 cursor-default items-center rounded-[var(--radius-md)] py-2 text-sm outline-none data-[disabled]:pointer-events-none sm:min-h-9",
+        indicatorPosition === "end" ? "ps-2.5 pe-8" : "ps-8 pe-2",
+        className,
+      )}
+      ref={ref}
+      {...props}
+    >
+      <span
+        className={cn(
+          "absolute grid size-4 place-items-center",
+          indicatorPosition === "end" ? "end-2.5" : "start-2",
+        )}
+        data-slot="dropdown-menu-radio-indicator"
+      >
+        <DropdownPrimitive.ItemIndicator>
+          {indicator}
+        </DropdownPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownPrimitive.RadioItem>
+  ),
+);
 DropdownMenuRadioItem.displayName = DropdownPrimitive.RadioItem.displayName;
 
 export const DropdownMenuSubTrigger = React.forwardRef<

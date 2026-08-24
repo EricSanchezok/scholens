@@ -629,13 +629,55 @@ test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Close project chat" }),
   ).toBeVisible();
-  const history = page
+  const chat = page.getByRole("region", { name: "Project chat" });
+  const switcher = chat.locator("[data-conversation-switcher]");
+  const history = switcher.locator("[data-conversation-switcher-history]");
+  const reasoning = switcher.getByRole("button", {
+    name: "Reasoning strength: Standard",
+  });
+  const create = switcher
     .getByRole("button", { name: "New conversation" })
-    .first();
-  const create = page.getByRole("button", { name: "New conversation" }).last();
-  expect((await history.boundingBox())!.x).toBeLessThan(
-    (await create.boundingBox())!.x,
+    .last();
+  const close = switcher.getByRole("button", { name: "Close project chat" });
+  const controlBoxes = await Promise.all(
+    [history, reasoning, create, close].map((control) => control.boundingBox()),
   );
+  expect(controlBoxes.every(Boolean)).toBe(true);
+  expect(controlBoxes.map((box) => Math.round(box!.x))).toEqual(
+    [...controlBoxes]
+      .sort((left, right) => left!.x - right!.x)
+      .map((box) => Math.round(box!.x)),
+  );
+  expect(controlBoxes[0]!.width).toBeGreaterThan(
+    Math.max(...controlBoxes.slice(1).map((box) => box!.width)),
+  );
+  expect(
+    controlBoxes
+      .slice(0, -1)
+      .every((box, index) => box!.x + box!.width <= controlBoxes[index + 1]!.x),
+  ).toBe(true);
+  expect(
+    await switcher.evaluate((element) => element.scrollWidth),
+  ).toBeLessThanOrEqual(
+    await switcher.evaluate((element) => element.clientWidth),
+  );
+
+  const conversation = projectConversationFixtures[0]!;
+  await history.click();
+  await page
+    .getByRole("button", { exact: true, name: conversation.title })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`conversation=${conversation.id}`));
+  await reasoning.click();
+  await page.getByRole("menuitemradio", { name: /Deep/ }).click();
+  await expect(
+    switcher.getByRole("button", { name: "Reasoning strength: Deep" }),
+  ).toBeVisible();
+  await create.click();
+  await expect(page).toHaveURL(/panel=chat/);
+  await expect(page).not.toHaveURL(/conversation=/);
+  await expect(history).toHaveText("New conversation");
+  await expect(chat).toBeVisible();
   const composer = page.getByPlaceholder("Ask a follow-up");
   const composerBox = await composer.boundingBox();
   expect(composerBox).not.toBeNull();

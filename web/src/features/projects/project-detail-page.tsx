@@ -72,6 +72,7 @@ import {
   conversationQueries,
   ConversationSwitcher,
   ConversationView,
+  ReasoningMenu,
   setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
@@ -213,6 +214,14 @@ function ProjectChat({
     >
       <ConversationSwitcher
         activeId={conversationId}
+        beforeNewAction={
+          <ReasoningMenu
+            className="lg:hidden"
+            onChange={setReasoningLevel}
+            value={reasoningLevel}
+            variant="panelHeader"
+          />
+        }
         conversations={conversations}
         labels={{
           empty: t("empty"),
