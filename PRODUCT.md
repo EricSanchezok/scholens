@@ -305,6 +305,46 @@ second provider request; raw selected source text is not retained in the cache.
 Access to a cached result is always re-authorized against the paper before the
 result is returned.
 
+## Research activity should reward reflection, not surveillance
+
+Research work should become legible at three connected scales: the paper the
+researcher is reading, the researcher's private history, and the shared Project.
+The product should make accumulated work easy to recognize without implying
+that elapsed time is the goal. A useful account combines effort, process, and
+outcome: an active-reading estimate and sessions; coverage, revisits,
+annotations, and collaboration; and durable papers, conversations, outputs, and
+other research artifacts.
+
+Those signals retain their own meanings. Scholens must not compress them into a
+productivity score, use reading time as proof of attention or comprehension, or
+rank Project members by activity. Personal comparisons and milestones should
+help a researcher notice consistency, depth, and completed work relative to
+their own history. They should not turn an unbroken daily streak, idle browser
+time, or a growing count of low-value actions into the definition of success.
+
+Reading duration is always an estimate derived from bounded evidence that the
+Reader was visible, focused, and recently active. Page and document heatmaps
+must explain their scale, pair color with values that do not require color
+vision, and distinguish no visit from no data. Historical values keep their
+measurement-definition version, and insight surfaces say when collection began
+instead of backfilling invented time from a last-opened timestamp.
+
+Personal sessions, page history, and research trends are private. A Project may
+show a selected-period team aggregate only after enough members contributed to
+prevent an individual from being inferred; it never exposes member timelines,
+member filtering, or a reading-time leaderboard. Project activity continues to
+come from the papers, annotations, outputs, comments, and membership records
+that already own those facts rather than a duplicated surveillance log.
+
+Reading recording and anonymous Project contribution are independently
+controllable account preferences. They are enabled by default, are explained
+where the resulting insight appears, and may be disabled for future activity.
+Disabling collection is not presented as deletion: researchers can separately
+export their history or delete a retained-detail session, a paper's history,
+one Project contribution, or all reading activity. Project-only removal
+preserves the researcher's private history, while account and Project deletion
+retain their normal ownership boundaries.
+
 ## Annotations are anchored threads, not separate highlight and comment silos
 
 Reader annotations use one durable mental model across personal reading and

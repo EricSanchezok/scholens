@@ -65,6 +65,13 @@ from app.transport.http.public_v1.paper_list_preferences import (
     paper_list_preferences_router,
 )
 from app.transport.http.public_v1.reflows import paper_reflows_router
+from app.transport.http.public_v1.reading_activity import (
+    reading_activity_me_router,
+    reading_activity_papers_router,
+    reading_activity_preferences_router,
+    reading_activity_projects_router,
+    reading_activity_sessions_router,
+)
 from app.modules.identity.infrastructure.sanchezcloud_identity import (
     sanchezcloud_identity_router,
     identity_user_router,
@@ -147,11 +154,13 @@ def _public_router() -> APIRouter:
     router.include_router(library_project_papers_router, prefix="/library")
     router.include_router(library_tags_router, prefix="/library")
     router.include_router(document_router, prefix="/papers")
+    router.include_router(reading_activity_papers_router, prefix="/papers")
     router.include_router(paper_translations_router, prefix="/papers")
     router.include_router(paper_reflows_router, prefix="/papers")
     router.include_router(paper_projects_router, prefix="/papers")
     router.include_router(public_document_router, prefix="/shares")
     router.include_router(projects_router, prefix="/projects")
+    router.include_router(reading_activity_projects_router, prefix="/projects")
     router.include_router(project_papers_router, prefix="/projects")
     router.include_router(projects_invitation_router)
     router.include_router(paper_search_router, prefix="/discovery/papers")
@@ -173,6 +182,9 @@ def _public_router() -> APIRouter:
     router.include_router(onboarding_router, prefix="/me/onboarding")
     router.include_router(translation_preferences_router, prefix="/me")
     router.include_router(paper_list_preferences_router, prefix="/me")
+    router.include_router(reading_activity_preferences_router, prefix="/me")
+    router.include_router(reading_activity_me_router, prefix="/me")
+    router.include_router(reading_activity_sessions_router, prefix="/reading-sessions")
     router.include_router(
         access_keys_router,
         prefix="/me/access-keys",
@@ -327,6 +339,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             "X-Correlation-ID",
             "X-Request-ID",
             "Preference-Applied",
+            "X-Next-Cursor",
         ],
         allow_credentials=True,
         max_age=600,

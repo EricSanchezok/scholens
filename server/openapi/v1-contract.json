@@ -218,6 +218,22 @@
       "patch",
       "put"
     ],
+    "/api/v1/me/reading-activity": [
+      "delete"
+    ],
+    "/api/v1/me/reading-activity-preferences": [
+      "get",
+      "put"
+    ],
+    "/api/v1/me/reading-activity/export": [
+      "get"
+    ],
+    "/api/v1/me/reading-activity/paper-summaries": [
+      "post"
+    ],
+    "/api/v1/me/research-insights": [
+      "get"
+    ],
     "/api/v1/me/translation-preferences": [
       "get",
       "put"
@@ -253,8 +269,17 @@
     "/api/v1/papers/{document_id}/download-url": [
       "get"
     ],
+    "/api/v1/papers/{document_id}/insights": [
+      "get"
+    ],
     "/api/v1/papers/{document_id}/projects": [
       "get"
+    ],
+    "/api/v1/papers/{document_id}/reading-activity": [
+      "delete"
+    ],
+    "/api/v1/papers/{document_id}/reading-sessions": [
+      "post"
     ],
     "/api/v1/papers/{document_id}/reflow": [
       "get"
@@ -286,11 +311,17 @@
       "get",
       "patch"
     ],
+    "/api/v1/projects/{project_id}/activity": [
+      "get"
+    ],
     "/api/v1/projects/{project_id}/audio-overviews": [
       "post"
     ],
     "/api/v1/projects/{project_id}/data-tables": [
       "post"
+    ],
+    "/api/v1/projects/{project_id}/insights": [
+      "get"
     ],
     "/api/v1/projects/{project_id}/invitations": [
       "get",
@@ -304,6 +335,9 @@
     ],
     "/api/v1/projects/{project_id}/leave": [
       "post"
+    ],
+    "/api/v1/projects/{project_id}/me/reading-activity": [
+      "delete"
     ],
     "/api/v1/projects/{project_id}/members": [
       "get"
@@ -333,6 +367,10 @@
     ],
     "/api/v1/projects/{project_id}/transfer": [
       "post"
+    ],
+    "/api/v1/reading-sessions/{session_id}": [
+      "delete",
+      "put"
     ],
     "/api/v1/research-items/{item_id}": [
       "delete"

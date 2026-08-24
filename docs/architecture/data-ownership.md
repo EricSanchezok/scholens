@@ -9,7 +9,7 @@ This document defines the Scholens-specific database and deployment contract.
 | Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens                | Documents, projects, collaboration, product profile/admin/block state, paid subscriptions, product plan grants, quota overrides, integration connections, and usage                             | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
+| Scholens                | Documents, projects, collaboration, research-activity history, product profile/admin/block state, paid subscriptions, product plan grants, quota overrides, integration connections, and usage          | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -133,8 +133,8 @@ boundary.
 
 ## Library storage and projections
 
-`Document` owns canonical paper metadata, generated summary and summary
-citations, and source-object identity. A PDF-processing callback updates those
+`Document` owns canonical paper metadata, page count, generated summary and
+summary citations, and source-object identity. A PDF-processing callback updates those
 document-owned fields; ingestion never creates a Conversation, Turn, or
 Response. Paper-scoped conversations exist only after an explicit user action
 and consume the Document as context rather than owning its canonical summary.
@@ -217,6 +217,69 @@ and AI-profile revisions. They never own or duplicate raw selection source
 text. Deleting the source Document cascades its derived translation results.
 Redis does not own completed translations; it owns only short-lived capacity
 and single-flight coordination.
+
+## Research activity ownership
+
+Research activity is first-party product data in `scholens.*`, following
+[ADR 0038](../decisions/0038-first-party-research-activity-ledger.md). The Web
+observes bounded Reader evidence and submits cumulative values through the
+public API; browser state is not the durable owner. Server owns authentication,
+paper and Project authorization, monotonic validation, rollup updates,
+retention, export, and deletion. Jobs does not collect reading events or own an
+activity projection.
+
+The activity model separates four responsibilities:
+
+- the user-owned reading-activity preference independently controls future
+  recording and future contribution to anonymous Project aggregates; both are
+  enabled by default, and disabling either retains existing history until an
+  explicit deletion;
+- a reading session owns the user, Document, optional Project attribution,
+  metric-definition version, coarse lifecycle, and cumulative visible and
+  active-estimate durations;
+- session-page rows own the temporary fine-grained page and normalized
+  20-region trajectory. They contain durations and positions, never selected
+  text, pointer coordinates, viewport captures, or document content;
+- personal and Project page/hour rollups own the authorized insight
+  projections. Personal rollups remain actor-private. Project-attributed rows
+  retain enough internal ownership to remove one member's contribution, but no
+  public team response exposes a member dimension or exact session path.
+
+`active-reading-v1` is the initial estimate definition. Web admits at most
+five-second slices while the document is foreground-visible and focused, and
+counts the active estimate only while qualifying interaction is no more than
+120 seconds old. It flushes cumulative evidence at most every 30 seconds and at
+lifecycle boundaries. Server requires active duration not to exceed visible
+duration and derives substantive page coverage at 15 active seconds. These
+values describe an estimate, not gaze, attention, comprehension, or
+productivity; definition changes create a new version instead of rewriting
+history.
+
+Fine session-page trajectories have a 90-day retention ceiling. Coarse sessions
+and personal page/hour rollups remain until scoped deletion or account deletion.
+Project rollups remain until their contributor removes that attribution, their
+source activity is deleted, or the Project is deleted. Deleting one Project
+contribution does not delete the same evidence from the contributor's personal
+rollups. Export is actor-scoped and available as JSON or CSV. Insight
+projections disclose their collection start and history-completeness boundary;
+legacy `last_accessed_at` values are not converted into invented sessions.
+One-session deletion is exact only while its session-page deltas remain. After
+the 90-day purge, the session records that its detail was removed and rejects
+that narrow deletion rather than subtracting a guessed contribution; paper,
+Project-contribution, all-history, Project, and account deletion remain exact.
+
+A team reading aggregate is available only when the selected period contains
+at least three distinct contributors. Returned team duration is rounded to
+five-minute units, and the contract has no member filter, member timeline, or
+member leaderboard. The Project activity feed is a permission-filtered read
+projection over canonical Project-paper membership, Project-audience Research
+items and annotation comments, and Project collaboration rows. There is no
+parallel `project_activity_facts` table or dual write.
+
+PostHog, OpenTelemetry, logs, metrics, the append-only Operation Journal, and
+Redis are explicitly not activity-data owners. Operational instrumentation may
+record bounded low-cardinality request outcomes, but it must not receive actor
+timelines, session/page payloads, research content, or exported history.
 
 ## Integration credentials
 

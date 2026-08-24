@@ -1,8 +1,9 @@
-"""PostgreSQL-only proofs for quota and administrator concurrency invariants."""
+"""PostgreSQL-only proofs for transactional and concurrency invariants."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import os
 import threading
 from unittest.mock import MagicMock
@@ -36,6 +37,17 @@ from app.modules.identity.infrastructure.application_gateway import (
 )
 from app.modules.jobs.infrastructure.models import DurableJob
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
+from app.modules.reading_activity.application.contracts import (
+    ReadingHourSnapshotRequest,
+    ReadingPageSnapshotRequest,
+)
+from app.modules.reading_activity.infrastructure.ledger_management import (
+    ReadingLedgerManager,
+)
+from app.modules.reading_activity.infrastructure.models import ReadingSession
+from app.modules.reading_activity.infrastructure.rollup_mutations import (
+    ReadingRollupWriter,
+)
 from app.shared.application import (
     Actor,
     CliOrigin,
@@ -907,6 +919,339 @@ def test_paid_subscription_write_uses_the_account_capacity_lock() -> None:
         _delete_users(admin_engine, [user_id])
         holder_engine.dispose()
         writer_engine.dispose()
+        admin_engine.dispose()
+
+
+def test_reading_rollups_bound_sql_reads_for_100_page_ingest_and_10k_page_delete() -> (
+    None
+):
+    """The ledger hot path must preload by table, never query once per row."""
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    app_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    sessions = sessionmaker(bind=app_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, "pg-reading-rollup-bulk", 1)
+    user_id, email = users[0]
+    document_id = uuid4()
+    project_id = uuid4()
+    large_document_id = uuid4()
+    large_project_id = uuid4()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    started_at = now - timedelta(seconds=10)
+    select_count = 0
+
+    @event.listens_for(app_engine, "before_cursor_execute")
+    def _count_selects(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_count += 1
+
+    try:
+        with admin_engine.begin() as connection:
+            for current_document_id, current_project_id, page_count in (
+                (document_id, project_id, 100),
+                (large_document_id, large_project_id, 10_000),
+            ):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO scholens.documents
+                            (id, sha256, original_filename, mime_type, size_bytes,
+                             s3_object_key, title, raw_content, processing_status,
+                             created_by_id, page_count)
+                        VALUES
+                            (:document_id, :sha256, 'fixture.pdf', 'application/pdf',
+                             1024, :object_key, 'Reading fixture', '', 'completed',
+                             :user_id, :page_count)
+                        """
+                    ),
+                    {
+                        "document_id": current_document_id,
+                        "sha256": current_document_id.hex * 2,
+                        "object_key": f"documents/{current_document_id.hex * 2}/source.pdf",
+                        "user_id": user_id,
+                        "page_count": page_count,
+                    },
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO scholens.projects (id, title, owner_id) "
+                        "VALUES (:project_id, 'Reading fixture', :user_id)"
+                    ),
+                    {"project_id": current_project_id, "user_id": user_id},
+                )
+
+        def apply_snapshot(page_count: int) -> int:
+            nonlocal select_count
+            session_id = uuid4()
+            model = ReadingSession(
+                id=session_id,
+                user_id=user_id,
+                document_id=document_id,
+                project_id=project_id,
+                view_mode="pdf",
+                time_zone="UTC",
+                metric_definition_version="active-reading-v1",
+                revision=0,
+                visible_ms=0,
+                active_ms=0,
+                started_at=started_at,
+                last_seen_at=started_at,
+                ended_at=None,
+                last_snapshot_digest=None,
+                contribute_to_project_aggregates=True,
+                page_detail_purged_at=None,
+            )
+            with sessions.begin() as db:
+                db.add(model)
+                db.flush()
+                select_count = 0
+                ReadingRollupWriter(db).apply_snapshots(
+                    model=model,
+                    hours=[
+                        ReadingHourSnapshotRequest(
+                            bucket_start=started_at.replace(
+                                minute=0,
+                                second=0,
+                                microsecond=0,
+                            ),
+                            visible_ms=page_count * 10,
+                            active_ms=page_count * 5,
+                        )
+                    ],
+                    pages=[
+                        ReadingPageSnapshotRequest(
+                            page_number=page_number,
+                            visible_ms=10,
+                            active_ms=5,
+                            visit_count=1,
+                            vertical_segments_ms=[5, *([0] * 19)],
+                        )
+                        for page_number in range(1, page_count + 1)
+                    ],
+                    materialize_session_count=True,
+                )
+                db.flush()
+                reads = select_count
+            return reads
+
+        assert apply_snapshot(1) == apply_snapshot(100) == 7
+
+        large_session_id = uuid4()
+        bucket = started_at.replace(minute=0, second=0, microsecond=0)
+        with admin_engine.begin() as connection:
+            values = {
+                "session_id": large_session_id,
+                "user_id": user_id,
+                "document_id": large_document_id,
+                "project_id": large_project_id,
+                "bucket": bucket,
+                "started_at": started_at,
+                "last_seen_at": now,
+            }
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_sessions
+                        (id, user_id, document_id, project_id, view_mode, time_zone,
+                         metric_definition_version, revision, visible_ms, active_ms,
+                         started_at, last_seen_at, contribute_to_project_aggregates)
+                    VALUES
+                        (:session_id, :user_id, :document_id, :project_id, 'pdf', 'UTC',
+                         'active-reading-v1', 1, 10000, 10000,
+                         :started_at, :last_seen_at, true)
+                    """
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_session_hours
+                        (session_id, metric_definition_version, bucket_start,
+                         visible_ms, active_ms, session_count)
+                    VALUES
+                        (:session_id, 'active-reading-v1', :bucket, 10000, 10000, 1)
+                    """
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_personal_hour_rollups
+                        (user_id, document_id, metric_definition_version, bucket_start,
+                         visible_ms, active_ms, session_count)
+                    VALUES
+                        (:user_id, :document_id, 'active-reading-v1', :bucket,
+                         10000, 10000, 1)
+                    """
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_project_hour_rollups
+                        (project_id, user_id, document_id, metric_definition_version,
+                         bucket_start, visible_ms, active_ms)
+                    VALUES
+                        (:project_id, :user_id, :document_id, 'active-reading-v1',
+                         :bucket, 10000, 10000)
+                    """
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_session_pages
+                        (session_id, metric_definition_version, page_number,
+                         visible_ms, active_ms, visit_count, vertical_segments_ms)
+                    SELECT :session_id, 'active-reading-v1', page_number,
+                           1, 1, 1, ARRAY[1::bigint] || array_fill(0::bigint, ARRAY[19])
+                    FROM generate_series(1, 10000) AS page_number
+                    """
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_personal_page_rollups
+                        (user_id, document_id, metric_definition_version, page_number,
+                         visible_ms, active_ms, visit_count, vertical_segments_ms)
+                    SELECT :user_id, :document_id, 'active-reading-v1', page_number,
+                           1, 1, 1, ARRAY[1::bigint] || array_fill(0::bigint, ARRAY[19])
+                    FROM generate_series(1, 10000) AS page_number
+                    """
+                ),
+                values,
+            )
+            for table in (
+                "reading_project_personal_page_rollups",
+                "reading_project_page_rollups",
+            ):
+                connection.execute(
+                    text(
+                        f"""
+                        INSERT INTO scholens.{table}
+                            (project_id, user_id, document_id,
+                             metric_definition_version, page_number, active_ms)
+                        SELECT :project_id, :user_id, :document_id,
+                               'active-reading-v1', page_number, 1
+                        FROM generate_series(1, 10000) AS page_number
+                        """  # noqa: S608 - table names are fixed literals above
+                    ),
+                    values,
+                )
+
+        with sessions.begin() as db:
+            select_count = 0
+            deleted = ReadingLedgerManager(
+                db,
+                clock=MagicMock(now=lambda: now),
+            ).delete_session(
+                actor=_actor(user_id, email),
+                session_id=large_session_id,
+            )
+            db.flush()
+            assert deleted == 1
+            # advisory boundary + session row + seven bulk source/projection reads
+            assert select_count <= 9
+
+        with admin_engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text("SELECT COUNT(*) FROM scholens.reading_sessions WHERE id=:id"),
+                    {"id": large_session_id},
+                )
+                == 0
+            )
+
+        zero_session_id = uuid4()
+        with admin_engine.begin() as connection:
+            zero_values = {
+                "session_id": zero_session_id,
+                "user_id": user_id,
+                "document_id": large_document_id,
+                "project_id": large_project_id,
+                "bucket": bucket,
+                "started_at": started_at,
+            }
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_sessions
+                        (id, user_id, document_id, project_id, view_mode, time_zone,
+                         metric_definition_version, revision, visible_ms, active_ms,
+                         started_at, last_seen_at, contribute_to_project_aggregates)
+                    VALUES
+                        (:session_id, :user_id, :document_id, :project_id, 'pdf', 'UTC',
+                         'active-reading-v1', 1, 0, 0,
+                         :started_at, :started_at, true)
+                    """
+                ),
+                zero_values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_session_hours
+                        (session_id, metric_definition_version, bucket_start,
+                         visible_ms, active_ms, session_count)
+                    VALUES
+                        (:session_id, 'active-reading-v1', :bucket, 0, 0, 1)
+                    """
+                ),
+                zero_values,
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO scholens.reading_personal_hour_rollups
+                        (user_id, document_id, metric_definition_version, bucket_start,
+                         visible_ms, active_ms, session_count)
+                    VALUES
+                        (:user_id, :document_id, 'active-reading-v1', :bucket, 0, 0, 1)
+                    """
+                ),
+                zero_values,
+            )
+
+        with sessions.begin() as db:
+            assert (
+                ReadingLedgerManager(
+                    db,
+                    clock=MagicMock(now=lambda: now),
+                ).delete_session(
+                    actor=_actor(user_id, email),
+                    session_id=zero_session_id,
+                )
+                == 1
+            )
+
+        with admin_engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT COUNT(*) FROM scholens.reading_project_hour_rollups "
+                        "WHERE user_id=:user_id AND project_id=:project_id"
+                    ),
+                    {"user_id": user_id, "project_id": large_project_id},
+                )
+                == 0
+            )
+    finally:
+        _delete_users(admin_engine, [user_id])
+        app_engine.dispose()
         admin_engine.dispose()
 
 

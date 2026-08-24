@@ -92,9 +92,11 @@ def test_pdf_failure_code_preserves_safe_codes_and_hides_private_diagnostics(
     )
 
 
+@pytest.mark.parametrize("include_page_count", [False, True])
 @pytest.mark.asyncio
 async def test_pdf_completion_persists_summary_without_creating_conversation(
     monkeypatch: pytest.MonkeyPatch,
+    include_page_count: bool,
 ) -> None:
     job_id = uuid4()
     document_id = uuid4()
@@ -164,7 +166,8 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         success=True,
         job_id=str(job_id),
         raw_content="Parsed paper content",
-        page_offset_map={1: [0, 20]},
+        page_offset_map={1: [0, 10], 3: [10, 20]},
+        **({"page_count": 3} if include_page_count else {}),
         s3_object_key=f"documents/{'a' * 64}/source.pdf",
         metadata=PaperMetadataExtraction(
             title="Canonical paper title",
@@ -198,6 +201,11 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
     update = update_canonical.call_args.kwargs["update"]
     assert update.summary == result.metadata.summary
     assert update.summary_citations == [citation]
+    if include_page_count:
+        assert update.page_count == 3
+        assert "page_count" in update.model_fields_set
+    else:
+        assert "page_count" not in update.model_fields_set
     assert handled.value == {
         "status": "webhook processed",
         "document_id": str(document_id),
@@ -205,6 +213,54 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
     assert all(
         not str(change.action).startswith("conversation.") for change in handled.changes
     )
+
+
+def test_zotero_pdf_callback_omission_preserves_existing_page_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job_id = uuid4()
+    document_id = uuid4()
+    existing_paper = SimpleNamespace(
+        id=document_id,
+        title="Zotero paper",
+        page_count=11,
+    )
+    update_canonical = MagicMock(return_value=existing_paper)
+    monkeypatch.setattr(
+        document_job_callbacks.document_repository,
+        "find_by_upload_job",
+        MagicMock(return_value=existing_paper),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.document_repository,
+        "update_canonical",
+        update_canonical,
+    )
+    monkeypatch.setattr(
+        document_job_callbacks,
+        "apply_persisted_zotero_annotations",
+        MagicMock(),
+    )
+    old_worker_result = PDFProcessingResult(
+        success=True,
+        job_id=str(job_id),
+        raw_content="Parsed paper content",
+        page_offset_map={1: [0, 20]},
+        parser_backend="pymupdf4llm",
+        parser_quality="full",
+        parser_version="old-worker",
+    )
+
+    finalized = document_job_callbacks._finalize_zotero_import(
+        MagicMock(),
+        str(job_id),
+        _actor(),
+        old_worker_result,
+    )
+
+    assert finalized == str(document_id)
+    update = update_canonical.call_args.kwargs["update"]
+    assert "page_count" not in update.model_fields_set
 
 
 @pytest.mark.asyncio

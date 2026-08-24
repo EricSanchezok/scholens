@@ -61,7 +61,8 @@ Every release updates the runtime stack with digest-qualified images. It owns:
 - a private Cloud Map `A` record for worker callbacks, registered directly from each API
   task's `awsvpc` ENI; the ECS service registry therefore carries only the registry ARN,
   while `/internal/v1` is never on the ALB;
-- an EventBridge Scheduler one-shot task for daily Zotero orchestration;
+- an EventBridge Scheduler one-shot task for hourly Server maintenance,
+  including independent Zotero orchestration and reading-detail retention;
 - migration and scheduler task definitions, autoscaling policies, alarms, logs, and the
   `SanchezCloud-Scholens` dashboard.
 
@@ -75,7 +76,7 @@ or cluster.
 | --- | --- | --- |
 | `sanchezcloud-scholens-web` | canonical `web/` Next.js standalone server | Public values are baked at build time; browser source maps are removed from the image and stored privately. |
 | `sanchezcloud-scholens-api` | API, dedicated Conversation worker, and one-off product migration | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process. |
-| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. |
+| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot hourly maintenance scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. The scheduler independently attempts Zotero orchestration and drains Server-owned reading-detail retention batches; either failure makes the task fail after both are attempted. |
 
 The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its
 locked dependencies on the digest-pinned Debian Python image because PyMuPDF publishes
@@ -154,7 +155,8 @@ CloudFormation from rolling back a failed resource create.
 KMS keys, buckets, secrets, repositories, queues, schedules, topics, log groups, alarms,
 dashboards, ALB/WAF resources, and runtime task families use Scholens ARNs or product/stack
 tags. The runtime role's EventBridge Scheduler lifecycle is bound to the single declared
-`sanchezcloud-scholens-zotero-sync` schedule. `Resource: "*"` remains only where the AWS
+`sanchezcloud-scholens-zotero-sync` schedule; its retained resource name is historical,
+while the task now runs both hourly Server-maintenance duties. `Resource: "*"` remains only where the AWS
 authorization model requires it or where a create operation has no resource ARN yet:
 service/resource discovery (`Describe*`, selected `List*`, Cloud Map reads), KMS `CreateKey`
 and `ListAliases`, Secrets Manager
@@ -584,7 +586,8 @@ stack.
    billing usage, private entitlement grants, Zotero, source-map, alarm, and
    autoscaling paths. Checkout, subscription mutation, Stripe webhook, and
    PostHog remain intentionally absent from the current production release.
-9. Enable the scheduler only after the one-shot job and maintenance queue are verified.
+9. Enable the scheduler only after its independent Zotero and reading-detail-retention
+   calls and the maintenance queue are verified.
 
 ## Subsequent releases and migrations
 

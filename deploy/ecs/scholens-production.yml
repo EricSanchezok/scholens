@@ -2679,7 +2679,7 @@ Resources:
         Command:
         - python
         - -m
-        - src.schedule_zotero
+        - src.schedule_maintenance
         ReadonlyRootFilesystem: true
         LinuxParameters:
           InitProcessEnabled: true
@@ -3455,10 +3455,10 @@ Resources:
     Type: AWS::Scheduler::Schedule
     Properties:
       Name: sanchezcloud-scholens-zotero-sync
-      Description: Persist due per-user Zotero synchronization jobs once per day
+      Description: Run hourly Server maintenance and persist Zotero jobs when due
       FlexibleTimeWindow:
         Mode: 'OFF'
-      ScheduleExpression: rate(1 day)
+      ScheduleExpression: rate(1 hour)
       State:
         Ref: SchedulerState
       Target:

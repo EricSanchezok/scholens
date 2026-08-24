@@ -78,3 +78,42 @@ def schedule_zotero_sync(
             operation=operation, threshold_seconds=threshold_seconds
         )
     )
+
+
+@terminal_router.post("/schedules/reading-activity-retention")
+def purge_reading_activity_detail(
+    verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    batch_size: int = Query(default=100, ge=1, le=100),
+    operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> dict[str, int | str]:
+    """Apply one hourly, bounded page-detail retention batch."""
+
+    operation = operation_factory.root(
+        initiated_by=OperationInitiator.SYSTEM,
+        origin=SchedulerOrigin(
+            task_name="reading_activity_retention",
+            run_id=verified.request_id,
+        ),
+        credential=None,
+    )
+    result = executor.command(
+        lambda capabilities: (
+            capabilities.reading_activity_retention.purge_scheduled_session_pages(
+                operation=operation,
+                batch_size=batch_size,
+            )
+        )
+    )
+    return {
+        "cutoff": result.cutoff.isoformat(),
+        "candidates": result.candidates,
+        "purged_sessions": result.purged_sessions,
+        "purged_pages": result.purged_pages,
+        "remaining_candidates": max(
+            0,
+            result.candidates - result.purged_sessions,
+        ),
+    }

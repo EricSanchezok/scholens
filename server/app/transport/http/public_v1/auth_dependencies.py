@@ -24,6 +24,7 @@ from fastapi import Depends, HTTPException, Request, status
 from app.transport.http.observability import (
     attach_operation_context,
     ensure_request_id,
+    is_reading_activity_request,
 )
 
 
@@ -79,7 +80,12 @@ def resolve_actor_from_identity_user(
         )
     )
     request.state.authenticated = True
-    attach_operation_context(request, operation, actor_id=str(actor.id))
+    if is_reading_activity_request(request.scope):
+        # Mutation routes still need the canonical operation for the journal,
+        # but reading telemetry must not bind actor/operation identifiers.
+        request.state.operation_context = operation
+    else:
+        attach_operation_context(request, operation, actor_id=str(actor.id))
     return actor
 
 
