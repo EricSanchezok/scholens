@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
-import { Button, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PaperResearchInsights } from "../types";
@@ -130,7 +130,13 @@ export function PaperInsightsPanel({
     visible_ms: t("metrics.visibleTime"),
   };
   return (
-    <div className="h-full overflow-y-auto" tabIndex={0}>
+    <div
+      className={cn(
+        "h-full overflow-y-auto",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
+      tabIndex={0}
+    >
       <div className="grid gap-8 p-5">
         <section aria-labelledby="paper-insights-summary">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -297,7 +303,7 @@ export function PaperInsightsPanel({
                   <button
                     className={cn(
                       "hover:bg-hover flex min-h-12 w-full items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 text-left text-sm",
-                      keyboardFocusRing,
+                      focusSurfaceVariants({ intent: "neutral" }),
                     )}
                     onClick={() => onPageSelect(page.navigationPageNumber)}
                     type="button"

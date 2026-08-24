@@ -4,7 +4,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
-import { Button, Skeleton, keyboardFocusRing } from "@/components/ui";
+import { Button, Skeleton, focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PersonalResearchInsights } from "../types";
@@ -90,7 +90,7 @@ export function HomeActivitySnapshot({
     <Link
       className={cn(
         "bg-subtle hover:bg-hover active:bg-pressed block rounded-[var(--radius-xl)] p-4 text-left",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       href={
         (settingsDestination

@@ -4,7 +4,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { ProjectResearchInsights } from "../types";
@@ -28,7 +28,10 @@ export function ProjectPaperProgress({
   return (
     <>
       <div
-        className="hidden max-w-full min-w-0 overflow-x-auto sm:block"
+        className={cn(
+          "hidden max-w-full min-w-0 overflow-x-auto sm:block",
+          focusSurfaceVariants({ intent: "scroll" }),
+        )}
         tabIndex={0}
       >
         <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
@@ -58,7 +61,7 @@ export function ProjectPaperProgress({
                   <Link
                     className={cn(
                       "line-clamp-2 font-medium hover:underline",
-                      keyboardFocusRing,
+                      focusSurfaceVariants({ intent: "inline" }),
                     )}
                     href={
                       `/reader/${paper.documentId}?project=${projectId}&panel=insights` as Route
@@ -104,7 +107,7 @@ export function ProjectPaperProgress({
             <Link
               className={cn(
                 "hover:bg-hover block rounded-[var(--radius-md)] px-2 py-3",
-                keyboardFocusRing,
+                focusSurfaceVariants({ intent: "neutral" }),
               )}
               href={
                 `/reader/${paper.documentId}?project=${projectId}&panel=insights` as Route
@@ -151,7 +154,10 @@ export function ProjectPaperProgress({
             })}
           </span>
           <Link
-            className={cn("font-medium hover:underline", keyboardFocusRing)}
+            className={cn(
+              "font-medium hover:underline",
+              focusSurfaceVariants({ intent: "inline" }),
+            )}
             href={`/projects/${projectId}?view=papers` as Route}
           >
             {t("project.viewPapers")}

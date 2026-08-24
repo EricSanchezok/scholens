@@ -1,6 +1,6 @@
 "use client";
 
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import {
   activityIntensity,
@@ -72,10 +72,8 @@ export function ReadingIntensityMap({
                 "relative flex min-h-10 w-full min-w-0 items-center justify-center rounded-[var(--radius-sm)] text-xs font-semibold tabular-nums",
                 activityIntensityClasses[intensity],
                 intensity >= 3 && "text-inverse",
-                onPageSelect
-                  ? "hover:outline-line-strong cursor-pointer hover:outline"
-                  : "cursor-default",
-                keyboardFocusRing,
+                onPageSelect ? "cursor-pointer" : "cursor-default",
+                focusSurfaceVariants({ intent: "neutral" }),
               )}
               disabled={!onPageSelect}
               onClick={() => onPageSelect?.(page.navigationPageNumber)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration, formatActivityMetric } from "../format";
 import type { ResearchActivityDay, ResearchActivityMetric } from "../types";
@@ -281,13 +281,16 @@ export function ActivityTrendChart({
           <summary
             className={cn(
               "hover:bg-hover inline-flex min-h-10 cursor-pointer items-center rounded-[var(--radius-md)] px-2 text-sm font-medium",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
           >
             {labels.table}
           </summary>
           <div
-            className="border-line mt-2 max-h-72 overflow-auto rounded-[var(--radius-md)] border"
+            className={cn(
+              "border-line mt-2 max-h-72 overflow-auto rounded-[var(--radius-md)] border",
+              focusSurfaceVariants({ intent: "scroll" }),
+            )}
             tabIndex={0}
           >
             <table className="w-full min-w-[28rem] border-collapse text-left text-xs">

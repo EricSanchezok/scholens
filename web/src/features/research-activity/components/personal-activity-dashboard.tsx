@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
 import { LoadingState } from "@/components/feedback";
-import { Button, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PersonalResearchInsights, ResearchActivityRange } from "../types";
@@ -234,7 +234,10 @@ export function PersonalActivityDashboard({
                 {t("personal.calendarDescription")}
               </p>
               <div
-                className="mt-4 max-w-full min-w-0 overflow-x-auto pb-2"
+                className={cn(
+                  "mt-4 max-w-full min-w-0 overflow-x-auto pb-2",
+                  focusSurfaceVariants({ intent: "scroll" }),
+                )}
                 tabIndex={0}
               >
                 <ActivityCalendar
@@ -313,7 +316,7 @@ export function PersonalActivityDashboard({
                           <Link
                             className={cn(
                               "hover:text-secondary truncate rounded-[var(--radius-sm)] font-medium",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "inline" }),
                             )}
                             href={
                               `/projects/${project.projectId}?range=${projectRange}` as Route
@@ -367,7 +370,7 @@ export function PersonalActivityDashboard({
                       <Link
                         className={cn(
                           "hover:bg-hover flex min-h-14 items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 py-2",
-                          keyboardFocusRing,
+                          focusSurfaceVariants({ intent: "neutral" }),
                         )}
                         href={
                           `/reader/${paper.documentId}?panel=insights` as Route

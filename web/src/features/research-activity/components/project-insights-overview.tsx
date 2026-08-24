@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
 import { LoadingState } from "@/components/feedback";
-import { Button, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type {
   ProjectActivityEvent,
@@ -270,7 +270,7 @@ export function ProjectInsightsOverview({
                       <Link
                         className={cn(
                           "mt-0.5 block rounded-[var(--radius-sm)] text-sm leading-5 font-medium hover:underline",
-                          keyboardFocusRing,
+                          focusSurfaceVariants({ intent: "inline" }),
                         )}
                         href={
                           `/reader/${event.documentId}?project=${projectId}&panel=insights` as Route
