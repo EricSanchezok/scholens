@@ -41,12 +41,6 @@ def upgrade() -> None:
         sa.Column("page_count", sa.Integer(), nullable=True),
         schema="scholens",
     )
-    op.create_check_constraint(
-        "ck_documents_page_count",
-        "documents",
-        "page_count IS NULL OR page_count BETWEEN 1 AND 10000",
-        schema="scholens",
-    )
 
     op.create_table(
         "reading_metric_definitions",
@@ -61,11 +55,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("version"),
         schema="scholens",
     )
-    op.execute(
-        sa.text(
-            "INSERT INTO scholens.reading_metric_definitions (version) "
-            "VALUES ('active-reading-v1')"
-        )
+    op.bulk_insert(
+        sa.table(
+            "reading_metric_definitions",
+            sa.column("version", sa.String(length=64)),
+            schema="scholens",
+        ),
+        [{"version": "active-reading-v1"}],
     )
 
     op.create_table(

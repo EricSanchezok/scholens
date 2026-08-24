@@ -203,10 +203,6 @@ class Document(Base):
             "processing_status IN ('pending', 'processing', 'completed', 'failed')",
             name="ck_documents_processing_status",
         ),
-        CheckConstraint(
-            "page_count IS NULL OR page_count BETWEEN 1 AND 10000",
-            name="ck_documents_page_count",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
