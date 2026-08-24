@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-import re
 from typing import Literal
 from uuid import UUID
 
@@ -33,32 +32,13 @@ from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.llm.conversation_titles import fallback_conversation_title
 from app.shared.application import Actor
 from app.shared.infrastructure.sql_patterns import literal_contains_pattern
+from app.shared.infrastructure.text_excerpt import plain_query_excerpt
 
 MatchField = Literal["title", "scope", "user_query", "assistant_response"]
 
 
 def _plain_snippet(content: str | None, query: str, *, limit: int = 220) -> str | None:
-    if not content:
-        return None
-    plain = re.sub(r"<[^>]+>", " ", content)
-    plain = re.sub(r"!\[([^]]*)\]\([^)]+\)", r"\1", plain)
-    plain = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", plain)
-    plain = re.sub(r"[`#>*_~|]", " ", plain)
-    plain = re.sub(r"\s+", " ", plain).strip()
-    if not plain:
-        return None
-    lowered = plain.casefold()
-    terms = [query.casefold(), *query.casefold().split()]
-    positions = [lowered.find(term) for term in terms if term]
-    positions = [position for position in positions if position >= 0]
-    start = max(0, min(positions) - 70) if positions else 0
-    end = min(len(plain), start + limit)
-    snippet = plain[start:end].strip()
-    if start > 0:
-        snippet = f"…{snippet}"
-    if end < len(plain):
-        snippet = f"{snippet}…"
-    return snippet
+    return plain_query_excerpt(content, query, limit=limit)
 
 
 class PostgresConversationSearch:

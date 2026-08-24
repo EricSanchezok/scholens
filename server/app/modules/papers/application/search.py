@@ -13,7 +13,7 @@ from app.modules.papers.application.contracts.search import (
 )
 from app.shared.application import Actor, SignedCursorCodec
 
-SEARCH_CURSOR_REVISION = "paper-search:2"
+SEARCH_CURSOR_REVISION = "paper-search:3"
 
 
 class SearchCursorCodec(SignedCursorCodec):

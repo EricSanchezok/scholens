@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 import logging
+import math
+import re
 from typing import Literal
 import unicodedata
 from uuid import UUID
 
-from scholens_ai import EMBEDDING_MODEL_REVISION, try_local_embedder
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    try_local_embedder,
+)
 
 from app.helpers.s3 import s3_service
 from app.modules.papers.application.contracts.search import (
@@ -40,12 +46,204 @@ from app.modules.projects.infrastructure.models import (
     ProjectPaper,
 )
 from app.shared.application import Actor
-from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
+from app.shared.infrastructure.sql_patterns import literal_contains_pattern
+from app.shared.infrastructure.text_excerpt import plain_query_excerpt
+from sqlalchemy import ColumnElement, and_, case, exists, false, func, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 logger = logging.getLogger(__name__)
 
 RetrievalMode = Literal["exact", "full_text", "fuzzy", "semantic"]
+_TRIGRAM_SIMILARITY_MIN = 0.12
+# These conservative acceptance guardrails are scoped to this exact local E5
+# projection. A model revision must deliberately review them; loosening them
+# requires the fixed relevance evaluation set called for by ADR 0030.
+_E5_POLICY_MODEL_REVISION = "multilingual-e5-small-onnx-o4-v1"
+if EMBEDDING_MODEL_REVISION != _E5_POLICY_MODEL_REVISION:
+    raise RuntimeError("paper search semantic acceptance policy requires review")
+_E5_SEMANTIC_MAX_COSINE_DISTANCE = 0.20
+_E5_SEMANTIC_BEST_DISTANCE_DELTA = 0.04
+_E5_SEMANTIC_ONLY_RESULT_LIMIT = 20
+_CJK_RANGES = (
+    (0x3040, 0x30FF),
+    (0x31F0, 0x31FF),
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xAC00, 0xD7AF),
+    (0xF900, 0xFAFF),
+    (0x20000, 0x2FA1F),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _PaperSearchQueryPlan:
+    normalized: str
+    compact: str
+    hybrid: bool
+    publication_year: int | None
+
+
+def _normalize_query(query: str) -> str:
+    return unicodedata.normalize("NFKC", query).strip().casefold()
+
+
+def _compact_query(query: str) -> str:
+    normalized = _normalize_query(query)
+    return "".join(character for character in normalized if character.isalnum())
+
+
+def _normalize_doi(value: str) -> str:
+    normalized = _normalize_query(value)
+    normalized = re.sub(
+        r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)",
+        "",
+        normalized,
+    )
+    return "".join(normalized.split())
+
+
+def _strict_word_pattern(query: str) -> str:
+    return rf"(^|[^[:alnum:]]){re.escape(query)}([^[:alnum:]]|$)"
+
+
+def _contains_complete_metadata_token(value: str, query: str) -> bool:
+    normalized_value = _normalize_query(value)
+    if not query:
+        return False
+    start = normalized_value.find(query)
+    while start >= 0:
+        end = start + len(query)
+        left_boundary = start == 0 or not normalized_value[start - 1].isalnum()
+        right_boundary = (
+            end == len(normalized_value) or not normalized_value[end].isalnum()
+        )
+        if left_boundary and right_boundary:
+            return True
+        start = normalized_value.find(query, start + 1)
+    return False
+
+
+def _query_plan(query: str) -> _PaperSearchQueryPlan:
+    normalized = _normalize_query(query)
+    compact = _compact_query(normalized)
+    numeric_only = normalized.isdecimal()
+    cjk_count = sum(
+        any(start <= ord(character) <= end for start, end in _CJK_RANGES)
+        for character in normalized
+    )
+    return _PaperSearchQueryPlan(
+        normalized=normalized,
+        compact=compact,
+        hybrid=not numeric_only and (len(compact) >= 3 or cjk_count >= 2),
+        publication_year=(
+            int(normalized) if numeric_only and len(normalized) == 4 else None
+        ),
+    )
+
+
+def _metadata_exact_condition(
+    plan: _PaperSearchQueryPlan,
+) -> ColumnElement[bool]:
+    if not plan.normalized:
+        return false()
+    normalized_doi = func.regexp_replace(
+        func.regexp_replace(
+            func.lower(func.btrim(func.coalesce(Document.doi, ""))),
+            r"^(https?://(dx\.)?doi\.org/|doi:[[:space:]]*)",
+            "",
+            "i",
+        ),
+        r"[[:space:]]+",
+        "",
+        "g",
+    )
+    normalized_query_doi = _normalize_doi(plan.normalized)
+    conditions: list[ColumnElement[bool]] = (
+        [normalized_doi == normalized_query_doi] if normalized_query_doi else []
+    )
+    if plan.hybrid:
+        pattern = literal_contains_pattern(plan.normalized)
+        compact_title = func.regexp_replace(
+            func.lower(func.coalesce(Document.title, "")),
+            "[^[:alnum:]]",
+            "",
+            "g",
+        )
+        conditions.extend(
+            [
+                func.lower(func.coalesce(Document.title, "")).like(
+                    pattern, escape="\\"
+                ),
+                and_(
+                    Document.search_text_compact.contains(plan.compact),
+                    compact_title.contains(plan.compact),
+                ),
+                func.lower(
+                    func.coalesce(func.array_to_string(Document.authors, " "), "")
+                ).like(pattern, escape="\\"),
+                func.lower(
+                    func.coalesce(func.array_to_string(Document.keywords, " "), "")
+                ).like(pattern, escape="\\"),
+            ]
+        )
+    else:
+        word_pattern = _strict_word_pattern(plan.normalized)
+        conditions.extend(
+            [
+                func.coalesce(Document.title, "").op("~*")(word_pattern),
+                func.coalesce(func.array_to_string(Document.authors, " "), "").op("~*")(
+                    word_pattern
+                ),
+                func.coalesce(func.array_to_string(Document.keywords, " "), "").op(
+                    "~*"
+                )(word_pattern),
+            ]
+        )
+    if plan.publication_year is not None:
+        conditions.append(
+            func.extract("year", Document.publish_date) == plan.publication_year
+        )
+    return or_(*conditions)
+
+
+def _accepted_semantic_candidates(
+    candidates: list[tuple[UUID, float]],
+    *,
+    lexical_ids: set[UUID],
+    has_exact_metadata: bool,
+) -> list[UUID]:
+    """Apply conservative E5 acceptance guardrails without dropping lexical hits."""
+
+    finite_candidates = [
+        (document_id, distance)
+        for document_id, distance in candidates
+        if math.isfinite(distance)
+    ]
+    if not finite_candidates:
+        return []
+    best_distance = min(distance for _document_id, distance in finite_candidates)
+    accepted: list[UUID] = []
+    accepted_set: set[UUID] = set()
+    semantic_only_count = 0
+    for document_id, distance in finite_candidates:
+        if document_id in accepted_set:
+            continue
+        if document_id in lexical_ids:
+            accepted.append(document_id)
+            accepted_set.add(document_id)
+            continue
+        if has_exact_metadata:
+            continue
+        if semantic_only_count >= _E5_SEMANTIC_ONLY_RESULT_LIMIT:
+            continue
+        if (
+            distance <= _E5_SEMANTIC_MAX_COSINE_DISTANCE
+            and distance <= best_distance + _E5_SEMANTIC_BEST_DISTANCE_DELTA
+        ):
+            accepted.append(document_id)
+            accepted_set.add(document_id)
+            semantic_only_count += 1
+    return accepted
 
 
 def _visibility_condition(
@@ -93,46 +291,52 @@ def _visibility_condition(
     return or_(*conditions)
 
 
-def _matching_fields(document: Document, query: str, *, has_passage: bool) -> list[str]:
-    needle = query.casefold()
+def _matching_fields(
+    document: Document,
+    plan: _PaperSearchQueryPlan,
+    *,
+    has_passage: bool,
+) -> list[str]:
     fields: list[str] = []
     candidates = (
         ("title", document.title),
         ("authors", " ".join(document.authors or [])),
         ("keywords", " ".join(document.keywords or [])),
         ("abstract", document.abstract),
+        ("doi", document.doi),
     )
     for name, value in candidates:
-        if value and needle in value.casefold():
+        normalized_value = _normalize_query(value or "")
+        if plan.hybrid:
+            literal_match = bool(
+                plan.normalized and plan.normalized in normalized_value
+            )
+            compact_match = name == "title" and bool(
+                plan.compact and plan.compact in _compact_query(normalized_value)
+            )
+            matches = literal_match or compact_match
+        elif name in {"title", "authors", "keywords"}:
+            matches = _contains_complete_metadata_token(
+                normalized_value,
+                plan.normalized,
+            )
+        elif name == "doi":
+            matches = _normalize_doi(normalized_value) == _normalize_doi(
+                plan.normalized
+            )
+        else:
+            matches = False
+        if matches:
             fields.append(name)
-    if has_passage or (
-        document.raw_content and needle in document.raw_content.casefold()
+    if (
+        plan.publication_year is not None
+        and document.publish_date is not None
+        and document.publish_date.year == plan.publication_year
     ):
+        fields.append("publish_date")
+    if has_passage:
         fields.append("body")
     return fields
-
-
-def _fallback_snippet(document: Document, query: str) -> PaperSearchSnippet | None:
-    content = document.raw_content or document.abstract or document.summary
-    if not content:
-        return None
-    lines = content.splitlines()
-    needle = query.casefold()
-    for index, line in enumerate(lines):
-        if needle in line.casefold():
-            start = max(index - 1, 0)
-            end = min(index + 2, len(lines))
-            return PaperSearchSnippet(
-                text="\n".join(lines[start:end])[:1_200],
-                start_line=start + 1,
-                end_line=end,
-            )
-    return PaperSearchSnippet(text=content[:1_200])
-
-
-def _compact_query(query: str) -> str:
-    normalized = unicodedata.normalize("NFKC", query).casefold()
-    return "".join(character for character in normalized if character.isalnum())
 
 
 def _matching_passages(
@@ -140,6 +344,7 @@ def _matching_passages(
     *,
     document_ids: list[UUID],
     text_query: object,
+    query: str,
 ) -> dict[UUID, list[PaperSearchSnippet]]:
     if not document_ids:
         return {}
@@ -168,16 +373,28 @@ def _matching_passages(
             ranked.c.document_id,
             ranked.c.start_line,
             ranked.c.end_line,
-            ranked.c.content,
+            func.ts_headline(
+                "pg_catalog.english",
+                ranked.c.content,
+                text_query,
+                "MaxFragments=1,MinWords=12,MaxWords=36,ShortWord=2",
+            ).label("content"),
         )
         .where(ranked.c.position <= 3)
         .order_by(ranked.c.document_id, ranked.c.position)
     ).all()
     snippets: defaultdict[UUID, list[PaperSearchSnippet]] = defaultdict(list)
     for document_id, start_line, end_line, content in rows:
+        excerpt = plain_query_excerpt(
+            content,
+            query,
+            limit=240,
+        )
+        if excerpt is None:
+            continue
         snippets[document_id].append(
             PaperSearchSnippet(
-                text=content[:1_200],
+                text=excerpt,
                 start_line=start_line,
                 end_line=end_line,
             )
@@ -265,71 +482,88 @@ class PostgresPaperSearch:
         request: PaperSearchQuery,
     ) -> PaperSearchResponse:
         conditions = self._filters(actor=actor, request=request)
+        plan = _query_plan(request.query)
         text_query = func.websearch_to_tsquery("pg_catalog.english", request.query)
-        compact_query = _compact_query(request.query)
-        similarity = func.similarity(Document.search_text_compact, compact_query)
-        contains_query = Document.search_text_compact.contains(compact_query)
-
-        fuzzy_candidates: list[tuple[UUID, bool]] = (
-            [
-                (document_id, bool(exact))
-                for document_id, exact in self._db.execute(
-                    select(Document.id, contains_query.label("contains_query"))
-                    .where(
-                        *conditions,
-                        or_(contains_query, similarity >= 0.08),
-                    )
+        exact_metadata = _metadata_exact_condition(plan)
+        similarity = func.similarity(Document.search_text_compact, plan.compact)
+        candidate_match = (
+            or_(exact_metadata, similarity >= _TRIGRAM_SIMILARITY_MIN)
+            if plan.hybrid
+            else exact_metadata
+        )
+        candidate_statement = select(
+            Document.id, exact_metadata.label("exact_metadata")
+        ).where(*conditions, candidate_match)
+        if plan.hybrid:
+            candidate_statement = candidate_statement.order_by(
+                case((exact_metadata, 0), else_=1),
+                similarity.desc(),
+                Document.id,
+            )
+        else:
+            candidate_statement = candidate_statement.order_by(Document.id)
+        fuzzy_candidates = [
+            (document_id, bool(exact))
+            for document_id, exact in self._db.execute(
+                candidate_statement.limit(self._CANDIDATE_LIMIT)
+            ).tuples()
+        ]
+        full_text_ids = (
+            list(
+                self._db.scalars(
+                    select(Document.id)
+                    .where(*conditions, Document.ts_vector.op("@@")(text_query))
                     .order_by(
-                        case((contains_query, 0), else_=1),
-                        similarity.desc(),
+                        func.ts_rank_cd(Document.ts_vector, text_query).desc(),
                         Document.id,
                     )
                     .limit(self._CANDIDATE_LIMIT)
-                ).tuples()
-            ]
-            if compact_query
+                ).all()
+            )
+            if plan.hybrid
             else []
         )
-        full_text_ids = list(
-            self._db.scalars(
-                select(Document.id)
-                .where(*conditions, Document.ts_vector.op("@@")(text_query))
-                .order_by(
-                    func.ts_rank_cd(Document.ts_vector, text_query).desc(),
-                    Document.id,
-                )
-                .limit(self._CANDIDATE_LIMIT)
-            ).all()
+        has_exact_metadata = any(exact for _document_id, exact in fuzzy_candidates)
+        lexical_ids = {document_id for document_id, _exact in fuzzy_candidates} | set(
+            full_text_ids
         )
 
-        semantic_ids: list[UUID] = []
-        embedder = try_local_embedder() if self._semantic else None
+        semantic_candidates: list[tuple[UUID, float]] = []
+        embedder = try_local_embedder() if self._semantic and plan.hybrid else None
         if embedder is not None:
             try:
                 query_embedding = embedder.embed_query(request.query)
-                semantic_ids = list(
-                    self._db.scalars(
-                        select(Document.id)
+                distance = DocumentSearchEmbedding.embedding.cosine_distance(
+                    query_embedding
+                )
+                semantic_conditions: list[ColumnElement[bool]] = [
+                    *conditions,
+                    DocumentSearchEmbedding.model_revision == EMBEDDING_MODEL_REVISION,
+                ]
+                if has_exact_metadata:
+                    semantic_conditions.append(
+                        Document.id.in_(sorted(lexical_ids, key=str))
+                    )
+                semantic_candidates = [
+                    (document_id, float(candidate_distance))
+                    for document_id, candidate_distance in self._db.execute(
+                        select(Document.id, distance.label("cosine_distance"))
                         .join(
                             DocumentSearchEmbedding,
                             DocumentSearchEmbedding.document_id == Document.id,
                         )
-                        .where(
-                            *conditions,
-                            DocumentSearchEmbedding.model_revision
-                            == EMBEDDING_MODEL_REVISION,
-                        )
-                        .order_by(
-                            DocumentSearchEmbedding.embedding.cosine_distance(
-                                query_embedding
-                            ),
-                            Document.id,
-                        )
+                        .where(*semantic_conditions)
+                        .order_by(distance, Document.id)
                         .limit(self._CANDIDATE_LIMIT)
-                    ).all()
-                )
+                    ).tuples()
+                ]
             except Exception:
                 logger.exception("paper.search.semantic_lane_failed")
+        semantic_ids = _accepted_semantic_candidates(
+            semantic_candidates,
+            lexical_ids=lexical_ids,
+            has_exact_metadata=has_exact_metadata,
+        )
 
         scores: defaultdict[UUID, float] = defaultdict(float)
         retrieval_modes: defaultdict[UUID, set[RetrievalMode]] = defaultdict(set)
@@ -380,20 +614,21 @@ class PostgresPaperSearch:
             conditions=conditions
         )
         document_ids = [document.id for document, _entry in page_rows]
-        passages = _matching_passages(
-            self._db,
-            document_ids=document_ids,
-            text_query=text_query,
+        passages = (
+            _matching_passages(
+                self._db,
+                document_ids=document_ids,
+                text_query=text_query,
+                query=request.query,
+            )
+            if plan.hybrid
+            else {}
         )
 
         items: list[PaperSearchResult] = []
         for document, library_entry in page_rows:
             snippets = passages.get(document.id, [])
             has_matching_passage = bool(snippets)
-            if not snippets:
-                fallback = _fallback_snippet(document, request.query)
-                if fallback is not None:
-                    snippets = [fallback]
             items.append(
                 PaperSearchResult(
                     document_id=document.id,
@@ -443,7 +678,7 @@ class PostgresPaperSearch:
                     ),
                     matched_fields=_matching_fields(
                         document,
-                        request.query,
+                        plan,
                         has_passage=has_matching_passage,
                     ),
                     retrieval_modes=sorted(retrieval_modes[document.id]),

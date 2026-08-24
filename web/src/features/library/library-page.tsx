@@ -30,11 +30,14 @@ import { useAuthSession, type Actor } from "@/features/authentication";
 import { integrationQueries } from "@/features/integrations";
 import { useSettingsLauncher } from "@/features/settings";
 import {
-  PaperSearchResults,
+  PaperSearchForm,
   paperSearchQueries,
+  usePaperSearchDraft,
+  usePaperSearchWorkbench,
 } from "@/features/paper-search";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import { usePrimaryContentReady } from "@/lib/observability/web-performance";
+import { isSearchQuery } from "@/lib/search/query";
 import {
   ZoteroOperationStatus,
   clearZoteroCallbackParams,
@@ -126,7 +129,11 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     () => parseLibrarySearch(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
-  const paperSearchActive = parsed.query.trim().length >= 2;
+  const paperSearchActive = isSearchQuery(parsed.query);
+  const [paperSearchDraft, setPaperSearchDraft] = usePaperSearchDraft(
+    parsed.query,
+    "library-papers",
+  );
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -215,6 +222,23 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [paperSearchQuery.data?.pages],
   );
+  const paperSearchWorkbench = usePaperSearchWorkbench({
+    enabled: parsed.tab === "papers" && paperSearchActive,
+    error: paperSearchQuery.error,
+    hasMore: paperSearchQuery.hasNextPage,
+    loading: paperSearchQuery.isPending,
+    loadingMore: paperSearchQuery.isFetchingNextPage,
+    onLoadMore: () => paperSearchQuery.fetchNextPage().then(() => undefined),
+    onRetry: () => void paperSearchQuery.refetch(),
+    onTagClick: (tagId) =>
+      replaceSearch({
+        cursor: undefined,
+        tagIds: parsed.tagIds.includes(tagId)
+          ? parsed.tagIds
+          : [...parsed.tagIds, tagId],
+      }),
+    papers: paperSearchResults,
+  });
   const outputsQuery = useQuery({
     ...libraryQueries.outputs({
       cursor: parsed.cursor,
@@ -503,7 +527,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
             >
               <PapersView
                 attentionCount={summaryQuery.data?.attention_count ?? 0}
-                key={`${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
                 data={paperList}
                 error={papersQuery.error}
                 ingestions={ingestion.rows}
@@ -557,45 +580,20 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                   replaceSearch({ cursor: undefined, tagIds })
                 }
                 search={
-                  <DebouncedLibrarySearch
-                    key={`papers:${parsed.query}`}
+                  <PaperSearchForm
+                    committedQuery={parsed.query}
+                    draft={paperSearchDraft}
                     label={t("papers.search")}
-                    onQueryChange={(query) =>
+                    onCommit={(query) =>
                       replaceSearch({ cursor: undefined, query })
                     }
-                    value={parsed.query}
+                    onDraftChange={setPaperSearchDraft}
                   />
                 }
-                searchResults={
-                  paperSearchActive
-                    ? (toolbar) => (
-                        <PaperSearchResults
-                          error={paperSearchQuery.error}
-                          hasMore={paperSearchQuery.hasNextPage}
-                          loading={paperSearchQuery.isPending}
-                          loadingMore={paperSearchQuery.isFetchingNextPage}
-                          onLoadMore={() =>
-                            paperSearchQuery
-                              .fetchNextPage()
-                              .then(() => undefined)
-                          }
-                          onRetry={() => void paperSearchQuery.refetch()}
-                          onTagClick={(tagId) =>
-                            replaceSearch({
-                              cursor: undefined,
-                              tagIds: parsed.tagIds.includes(tagId)
-                                ? parsed.tagIds
-                                : [...parsed.tagIds, tagId],
-                            })
-                          }
-                          papers={paperSearchResults}
-                          toolbar={toolbar}
-                          total={paperSearchQuery.data?.pages[0]?.total}
-                        />
-                      )
-                    : undefined
-                }
+                searchTotal={paperSearchQuery.data?.pages[0]?.total}
+                searchWorkbench={paperSearchWorkbench}
                 paperCount={summaryQuery.data?.paper_count ?? 0}
+                resultSetKey={`${parsed.tab}:${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
                 sort={parsed.sort as PaperSort}
                 tagIds={parsed.tagIds}
                 statuses={parsed.statuses}

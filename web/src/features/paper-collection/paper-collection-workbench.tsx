@@ -756,27 +756,34 @@ function Preview({
   );
 }
 
-export function PaperCollectionWorkbench({
-  actions,
-  beforeTable,
-  items,
-  leading,
-  onStatusChange,
-  onTagClick,
-  personalLabels = false,
-  tableFooter,
-  toolbar,
-}: {
+export type PaperCollectionWorkbenchProps = {
   actions?: (item: PaperCollectionItem) => React.ReactNode;
   beforeTable?: React.ReactNode;
+  /** Replaces the table body while defined; null intentionally renders no body. */
+  contentState?: React.ReactNode;
   items: PaperCollectionItem[];
   leading?: (item: PaperCollectionItem) => React.ReactNode;
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels?: boolean;
+  scrollResetKey?: string;
   tableFooter?: React.ReactNode;
   toolbar?: React.ReactNode;
-}) {
+};
+
+export function PaperCollectionWorkbench({
+  actions,
+  beforeTable,
+  contentState,
+  items,
+  leading,
+  onStatusChange,
+  onTagClick,
+  personalLabels = false,
+  scrollResetKey,
+  tableFooter,
+  toolbar,
+}: PaperCollectionWorkbenchProps) {
   const t = useTranslations("PaperCollection");
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -891,6 +898,7 @@ export function PaperCollectionWorkbench({
     items.find((item) => item.id === previewId) ??
     items[0];
   const previewVisible = Boolean(
+    contentState === undefined &&
     preview &&
     preferences.preview_open &&
     measuredWidth > 0 &&
@@ -950,10 +958,16 @@ export function PaperCollectionWorkbench({
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: items.length,
+    enabled: contentState === undefined,
     estimateSize: () => 64,
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
+  React.useLayoutEffect(() => {
+    if (contentState === undefined && scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [contentState, scrollResetKey]);
   const orderedColumns = React.useMemo<PaperCollectionSizedColumn[]>(
     () => ["paper", ...effectiveColumns],
     [effectiveColumns],
@@ -1111,8 +1125,16 @@ export function PaperCollectionWorkbench({
         </div>
       </div>
       {beforeTable ? <div className="shrink-0">{beforeTable}</div> : null}
+      {contentState !== undefined ? (
+        <div className="border-line min-h-0 min-w-0 flex-1 overflow-auto border-t">
+          {contentState}
+        </div>
+      ) : null}
       <div
-        className="border-line grid min-h-0 min-w-0 flex-1 items-stretch overflow-hidden border-t"
+        className={cn(
+          "border-line min-h-0 min-w-0 flex-1 items-stretch overflow-hidden border-t",
+          contentState === undefined ? "grid" : "hidden",
+        )}
         data-paper-collection-split=""
         style={
           previewVisible && !sidePanelLayout
@@ -1323,10 +1345,10 @@ export function PaperCollectionWorkbench({
                         {leading ? (
                           <div role="cell">{leading(item)}</div>
                         ) : null}
-                        <div className="min-w-0" role="cell">
+                        <div className="min-w-0 overflow-hidden" role="cell">
                           <Link
                             className={cn(
-                              "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--radius-sm)]",
+                              "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 overflow-hidden rounded-[var(--radius-sm)]",
                               focusSurfaceVariants({ intent: "selection" }),
                             )}
                             data-state={
@@ -1335,12 +1357,15 @@ export function PaperCollectionWorkbench({
                             href={item.href}
                           >
                             <PaperThumbnail item={item} />
-                            <span className="min-w-0">
+                            <span
+                              className="max-h-[52px] min-w-0 overflow-hidden"
+                              data-paper-result-text=""
+                            >
                               <span className="line-clamp-2 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
                                 {item.title}
                               </span>
                               {item.snippet ? (
-                                <span className="text-secondary mt-0.5 line-clamp-1 block text-[0.6875rem]">
+                                <span className="text-secondary mt-0.5 line-clamp-1 text-[0.6875rem]">
                                   {item.snippet}
                                 </span>
                               ) : null}

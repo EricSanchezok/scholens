@@ -120,3 +120,21 @@ export const CollectionToolbarSelectTrigger = React.forwardRef<
   </SelectTrigger>
 ));
 CollectionToolbarSelectTrigger.displayName = "CollectionToolbarSelectTrigger";
+
+export function CollectionToolbarStaticValue({
+  glyph = SortIcon,
+  label,
+}: {
+  glyph?: IconGlyph;
+  label: string;
+}) {
+  return (
+    <span
+      className="border-line bg-surface flex size-11 shrink-0 items-center justify-center gap-0 rounded-full border px-0 text-sm sm:h-11 sm:w-auto sm:min-w-40 sm:justify-start sm:gap-2 sm:px-3"
+      title={label}
+    >
+      <Icon className="sm:hidden" glyph={glyph} size={20} tone="secondary" />
+      <span className="sr-only sm:not-sr-only">{label}</span>
+    </span>
+  );
+}
