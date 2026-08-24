@@ -30,6 +30,7 @@ from app.database.models import (
 from app.helpers.s3 import s3_service
 from app.main import app
 from app.modules.papers.application.contracts.documents import (
+    DocumentMetadataOverrides,
     DocumentResponse,
     LibraryPaperSort,
 )
@@ -146,6 +147,26 @@ def test_library_response_returns_private_signed_preview(monkeypatch) -> None:
     assert response.document.document_id == entry.document_id
     assert response.preview_url == "https://signed.example.invalid/preview"
     assert response.metadata_overrides.title == "My title"
+
+
+def test_library_metadata_override_lists_match_existing_runtime_bounds() -> None:
+    value = DocumentMetadataOverrides(
+        authors=["  Ada Lovelace  "],
+        institutions=["A" * 500],
+    )
+
+    assert value.authors == ["Ada Lovelace"]
+    assert value.institutions == ["A" * 500]
+    for field in ("authors", "institutions"):
+        with pytest.raises(ValidationError):
+            DocumentMetadataOverrides.model_validate({field: [""]})
+        with pytest.raises(ValidationError):
+            DocumentMetadataOverrides.model_validate({field: ["A" * 501]})
+        item_schema = DocumentMetadataOverrides.model_json_schema()["properties"][
+            field
+        ]["anyOf"][0]["items"]
+        assert item_schema["minLength"] == 1
+        assert item_schema["maxLength"] == 500
 
 
 def test_document_response_column_profile_excludes_canonical_content() -> None:

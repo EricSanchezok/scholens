@@ -179,13 +179,15 @@ def _schema_correction_entry(
     target: str,
     pointer: str,
     value: object,
+    boundary: str = "mcp",
+    change_kind: str = "one_of_added",
 ) -> dict[str, object]:
     return {
         "id": identifier,
-        "boundary": "mcp",
+        "boundary": boundary,
         "target": target,
         "schema_pointer": pointer,
-        "change_kind": "one_of_added",
+        "change_kind": change_kind,
         "base_value_sha256": None,
         "revision_value_sha256": checker._canonical_sha256(value),
         "owner": "scholens-platform",
@@ -228,6 +230,28 @@ def test_schema_corrections_are_exact_and_transition_bound() -> None:
         )
         == []
     )
+    prepared_mcp, prepared_http = checker.prepare_schema_correction_bases(
+        registry=registry,
+        base_mcp=base_mcp,
+        revision_mcp=revision_mcp,
+        base_http=http,
+        revision_http=http,
+    )
+    assert "oneOf" not in base_mcp["tools"]["update_annotation_thread"]["input_schema"]
+    assert (
+        prepared_mcp["tools"]["update_annotation_thread"]["input_schema"]["oneOf"]
+        == one_of
+    )
+    assert prepared_http == http
+    tombstone_mcp, tombstone_http = checker.prepare_schema_correction_bases(
+        registry=registry,
+        base_mcp=revision_mcp,
+        revision_mcp=revision_mcp,
+        base_http=http,
+        revision_http=http,
+    )
+    assert tombstone_mcp == revision_mcp
+    assert tombstone_http == http
 
     mismatched = json.loads(json.dumps(registry))
     mismatched["entries"][0]["revision_value_sha256"] = "0" * 64
@@ -287,6 +311,82 @@ def test_schema_correction_checker_rejects_unregistered_unique_items() -> None:
         "#/tools/remove_library_papers/input_schema/properties/document_ids/"
         "uniqueItems (unique_items_enabled)"
     ]
+
+
+def test_http_schema_corrections_follow_nested_refs() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    mcp, base_http = _empty_public_contracts()
+    base_http["paths"] = {
+        "/api/v1/example": {
+            "patch": {
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/Request"}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    base_http["components"] = {
+        "schemas": {
+            "Request": {
+                "type": "object",
+                "properties": {"metadata": {"$ref": "#/components/schemas/Metadata"}},
+            },
+            "Metadata": {
+                "type": "object",
+                "properties": {
+                    "authors": {
+                        "anyOf": [
+                            {"type": "array", "items": {"type": "string"}},
+                            {"type": "null"},
+                        ]
+                    }
+                },
+            },
+        }
+    }
+    revision_http = json.loads(json.dumps(base_http))
+    item_schema = revision_http["components"]["schemas"]["Metadata"]["properties"][
+        "authors"
+    ]["anyOf"][0]["items"]
+    item_schema["minLength"] = 1
+    pointer = "#/components/schemas/Metadata/properties/authors/anyOf/0/items/minLength"
+    entry = _schema_correction_entry(
+        checker,
+        identifier="http-example-author-minimum",
+        boundary="http",
+        target="PATCH /api/v1/example",
+        pointer=pointer,
+        value=1,
+        change_kind="minLength_increased",
+    )
+    registry = {"contract_version": 1, "entries": [entry]}
+    empty_registry = {"contract_version": 1, "entries": []}
+
+    assert (
+        checker.schema_correction_failures(
+            base_registry=empty_registry,
+            registry=registry,
+            base_mcp=mcp,
+            revision_mcp=mcp,
+            base_http=base_http,
+            revision_http=revision_http,
+        )
+        == []
+    )
+    prepared_mcp, prepared_http = checker.prepare_schema_correction_bases(
+        registry=registry,
+        base_mcp=mcp,
+        revision_mcp=mcp,
+        base_http=base_http,
+        revision_http=revision_http,
+    )
+    assert checker._resolve_pointer(base_http, pointer) is checker._MISSING
+    assert checker._resolve_pointer(prepared_http, pointer) == 1
+    assert prepared_mcp == mcp
 
 
 def test_repository_schema_correction_registry_is_machine_readable() -> None:

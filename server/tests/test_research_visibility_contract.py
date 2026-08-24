@@ -601,6 +601,12 @@ def test_annotation_positions_match_the_persisted_integer_range() -> None:
     with pytest.raises(ValidationError):
         ParsedTextPosition(start_offset=maximum + 1, end_offset=maximum + 2)
     with pytest.raises(ValidationError):
+        ParsedTextPosition(
+            start_offset=0,
+            end_offset=1,
+            page_number=maximum + 1,
+        )
+    with pytest.raises(ValidationError):
         PdfTextPosition(page_number=maximum + 1, rects=[rect])
     with pytest.raises(ValidationError):
         PdfTextPageSegment(page_number=maximum + 1, rects=[rect])
@@ -610,6 +616,7 @@ def test_annotation_positions_match_the_persisted_integer_range() -> None:
     segment_schema = PdfTextPageSegment.model_json_schema()["properties"]
     assert parsed_schema["start_offset"]["maximum"] == maximum
     assert parsed_schema["end_offset"]["maximum"] == maximum
+    assert parsed_schema["page_number"]["anyOf"][0]["maximum"] == maximum
     assert pdf_schema["page_number"]["maximum"] == maximum
     assert segment_schema["page_number"]["maximum"] == maximum
 

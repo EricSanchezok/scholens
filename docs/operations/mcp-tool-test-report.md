@@ -613,7 +613,7 @@ schema/metadata/deprecation/correction 检查已通过；固定版本 `oasdiff` 
 ### 9.4 最终本地集成证据
 
 2026-08-24 在未安装依赖、未执行迁移、未启动持久服务、未调用生产 repair 的前提下，根目录
-统一门禁 `./scripts/run-gates.sh all` 完整通过：Server 1679 passed / 13 skipped，MCP
+统一门禁 `./scripts/run-gates.sh all` 完整通过：Server 1681 passed / 13 skipped，MCP
 connector 22 passed，Jobs 154 passed，共享包 128 passed，Web unit 274 passed、Storybook
 516 passed、E2E 124 passed，legacy client E2E 2 passed / 2 skipped，deployment contract
 141 passed；两个 Web production build、Storybook build、文档与 63-tool snapshot 对齐检查也

@@ -254,15 +254,23 @@ jobs:
             --revision-mcp server/contracts/mcp-v1.json \
             --base-http /tmp/compatible-base-openapi.json \
             --revision-http server/openapi/public-v1.json
+          python scripts/mcp_contract_compatibility.py prepare-schema-correction-bases \
+            --registry server/contracts/schema-corrections.json \
+            --base-mcp /tmp/compatible-base-mcp.json \
+            --revision-mcp server/contracts/mcp-v1.json \
+            --base-http /tmp/compatible-base-openapi.json \
+            --revision-http server/openapi/public-v1.json \
+            --output-mcp /tmp/corrected-base-mcp.json \
+            --output-http /tmp/corrected-base-openapi.json
           python scripts/mcp_contract_compatibility.py render-openapi \
-            --contract /tmp/compatible-base-mcp.json \
+            --contract /tmp/corrected-base-mcp.json \
             --output /tmp/base-mcp-openapi.json
           python scripts/mcp_contract_compatibility.py render-openapi \
             --contract server/contracts/mcp-v1.json \
             --output /tmp/revision-mcp-openapi.json
           oasdiff breaking \
             --fail-on WARN --flatten-allof \
-            /tmp/compatible-base-openapi.json server/openapi/public-v1.json
+            /tmp/corrected-base-openapi.json server/openapi/public-v1.json
           oasdiff breaking \
             --fail-on WARN --flatten-allof \
             /tmp/base-mcp-openapi.json /tmp/revision-mcp-openapi.json

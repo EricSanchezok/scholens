@@ -136,6 +136,9 @@ def _schema_restrictions(
     boundary: str,
     target: str,
     pointer: str,
+    base_document: dict[str, Any] | None = None,
+    revision_document: dict[str, Any] | None = None,
+    visited_refs: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[RestrictiveSchemaChange]:
     """Find request restrictions that oasdiff 1.29.1 does not reliably reject.
 
@@ -146,6 +149,33 @@ def _schema_restrictions(
     """
     if not isinstance(base, dict) or not isinstance(revision, dict):
         return []
+    base_ref = base.get("$ref")
+    revision_ref = revision.get("$ref")
+    if (
+        base_document is not None
+        and revision_document is not None
+        and isinstance(base_ref, str)
+        and isinstance(revision_ref, str)
+        and base_ref.startswith("#/")
+        and revision_ref.startswith("#/")
+    ):
+        ref_pair = (base_ref, revision_ref)
+        if ref_pair in visited_refs:
+            return []
+        resolved_base = _resolve_pointer(base_document, base_ref)
+        resolved_revision = _resolve_pointer(revision_document, revision_ref)
+        if resolved_base is _MISSING or resolved_revision is _MISSING:
+            raise ValueError("request schema references an unknown value")
+        return _schema_restrictions(
+            resolved_base,
+            resolved_revision,
+            boundary=boundary,
+            target=target,
+            pointer=revision_ref,
+            base_document=base_document,
+            revision_document=revision_document,
+            visited_refs=visited_refs | {ref_pair},
+        )
     changes: list[RestrictiveSchemaChange] = []
 
     for keyword, kind in (
@@ -296,6 +326,9 @@ def _schema_restrictions(
                     boundary=boundary,
                     target=target,
                     pointer=(f"{pointer}/{container}/{_pointer_token(str(name))}"),
+                    base_document=base_document,
+                    revision_document=revision_document,
+                    visited_refs=visited_refs,
                 )
             )
     if "items" in base and "items" in revision:
@@ -306,8 +339,31 @@ def _schema_restrictions(
                 boundary=boundary,
                 target=target,
                 pointer=f"{pointer}/items",
+                base_document=base_document,
+                revision_document=revision_document,
+                visited_refs=visited_refs,
             )
         )
+    for container in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        old_children = base.get(container)
+        new_children = revision.get(container)
+        if not isinstance(old_children, list) or not isinstance(new_children, list):
+            continue
+        for index, (old_child, new_child) in enumerate(
+            zip(old_children, new_children, strict=False)
+        ):
+            changes.extend(
+                _schema_restrictions(
+                    old_child,
+                    new_child,
+                    boundary=boundary,
+                    target=target,
+                    pointer=f"{pointer}/{container}/{index}",
+                    base_document=base_document,
+                    revision_document=revision_document,
+                    visited_refs=visited_refs,
+                )
+            )
     return changes
 
 
@@ -663,9 +719,102 @@ def _http_request_restrictions(
                         boundary="http",
                         target=target,
                         pointer=new_pointer,
+                        base_document=base,
+                        revision_document=revision,
                     )
                 )
     return changes
+
+
+def _assign_pointer(document: dict[str, Any], pointer: str, value: Any) -> None:
+    if not pointer.startswith("#/"):
+        raise ValueError(f"schema pointer must be a local JSON pointer: {pointer}")
+    tokens = [
+        token.replace("~1", "/").replace("~0", "~") for token in pointer[2:].split("/")
+    ]
+    current: Any = document
+    for token in tokens[:-1]:
+        if isinstance(current, dict) and token in current:
+            current = current[token]
+        elif isinstance(current, list):
+            try:
+                current = current[int(token)]
+            except (IndexError, ValueError) as exc:
+                raise ValueError(
+                    f"schema pointer has an unknown parent: {pointer}"
+                ) from exc
+        else:
+            raise ValueError(f"schema pointer has an unknown parent: {pointer}")
+    leaf = tokens[-1]
+    if isinstance(current, dict):
+        current[leaf] = copy.deepcopy(value)
+        return
+    if isinstance(current, list):
+        try:
+            current[int(leaf)] = copy.deepcopy(value)
+            return
+        except (IndexError, ValueError) as exc:
+            raise ValueError(f"schema pointer has an unknown leaf: {pointer}") from exc
+    raise ValueError(f"schema pointer has an unknown parent: {pointer}")
+
+
+def prepare_schema_correction_bases(
+    *,
+    registry: dict[str, Any],
+    base_mcp: dict[str, Any],
+    revision_mcp: dict[str, Any],
+    base_http: dict[str, Any],
+    revision_http: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Project verified schema corrections onto temporary comparison bases."""
+
+    failures = correction_registry_failures(registry)
+    if failures:
+        raise ValueError("; ".join(failures))
+    revisions = {"mcp": revision_mcp, "http": revision_http}
+    prepared = {"mcp": copy.deepcopy(base_mcp), "http": copy.deepcopy(base_http)}
+    corrections = {
+        (
+            entry["boundary"],
+            entry["target"],
+            entry["schema_pointer"],
+            entry["change_kind"],
+        ): entry
+        for entry in registry["entries"]
+    }
+    active_changes = [
+        *_mcp_request_restrictions(base_mcp, revision_mcp),
+        *_http_request_restrictions(base_http, revision_http),
+    ]
+    assignments: dict[tuple[str, str], tuple[str, Any]] = {}
+    for change in active_changes:
+        entry = corrections.get(change.key)
+        label = (
+            f"{change.boundary} {change.target} {change.schema_pointer} "
+            f"({change.change_kind})"
+        )
+        if entry is None:
+            raise ValueError(f"unregistered restrictive request schema change: {label}")
+        if entry["base_value_sha256"] != change.base_value_sha256:
+            raise ValueError(f"schema correction base digest mismatch: {label}")
+        if entry["revision_value_sha256"] != change.revision_value_sha256:
+            raise ValueError(f"schema correction revision digest mismatch: {label}")
+        boundary = change.boundary
+        pointer = change.schema_pointer
+        revision_value = _resolve_pointer(revisions[boundary], pointer)
+        if revision_value is _MISSING:
+            raise ValueError(
+                f"schema correction revision pointer is missing: {boundary} {pointer}"
+            )
+        revision_digest = _canonical_sha256(revision_value)
+        key = (boundary, pointer)
+        prior = assignments.get(key)
+        if prior is not None and prior[0] != revision_digest:
+            raise ValueError(f"conflicting schema corrections: {boundary} {pointer}")
+        assignments[key] = (revision_digest, revision_value)
+    for (boundary, pointer), (_digest, value) in assignments.items():
+        _assign_pointer(prepared[boundary], pointer, value)
+    return prepared["mcp"], prepared["http"]
 
 
 _CORRECTION_FIELDS = {
@@ -774,10 +923,9 @@ def _runtime_evidence_exists(value: object) -> bool:
     if not isinstance(value, str) or value.count("::") != 1:
         return False
     relative_path, node = value.split("::", 1)
-    if (
-        not re.fullmatch(r"server/tests/[A-Za-z0-9_./-]+\.py", relative_path)
-        or not re.fullmatch(r"test_[A-Za-z0-9_]+", node)
-    ):
+    if not re.fullmatch(
+        r"server/tests/[A-Za-z0-9_./-]+\.py", relative_path
+    ) or not re.fullmatch(r"test_[A-Za-z0-9_]+", node):
         return False
     evidence_path = (ROOT / relative_path).resolve()
     tests_root = (ROOT / "server/tests").resolve()
@@ -883,6 +1031,14 @@ def _parser() -> argparse.ArgumentParser:
     corrections.add_argument("--revision-mcp", type=Path, required=True)
     corrections.add_argument("--base-http", type=Path, required=True)
     corrections.add_argument("--revision-http", type=Path, required=True)
+    prepare = subparsers.add_parser("prepare-schema-correction-bases")
+    prepare.add_argument("--registry", type=Path, required=True)
+    prepare.add_argument("--base-mcp", type=Path, required=True)
+    prepare.add_argument("--revision-mcp", type=Path, required=True)
+    prepare.add_argument("--base-http", type=Path, required=True)
+    prepare.add_argument("--revision-http", type=Path, required=True)
+    prepare.add_argument("--output-mcp", type=Path, required=True)
+    prepare.add_argument("--output-http", type=Path, required=True)
     return parser
 
 
@@ -906,7 +1062,7 @@ def main() -> int:
             if failures:
                 sys.stderr.write("\n".join(failures) + "\n")
                 return 1
-        else:
+        elif args.command == "check-schema-corrections":
             failures = schema_correction_failures(
                 base_registry=_load_document(args.base_registry),
                 registry=_load_document(args.registry),
@@ -918,6 +1074,28 @@ def main() -> int:
             if failures:
                 sys.stderr.write("\n".join(failures) + "\n")
                 return 1
+        else:
+            prepared_mcp, prepared_http = prepare_schema_correction_bases(
+                registry=_load_document(args.registry),
+                base_mcp=_load(args.base_mcp),
+                revision_mcp=_load(args.revision_mcp),
+                base_http=_load_document(args.base_http),
+                revision_http=_load_document(args.revision_http),
+            )
+            for path, document in (
+                (args.output_mcp, prepared_mcp),
+                (args.output_http, prepared_http),
+            ):
+                path.write_text(
+                    json.dumps(
+                        document,
+                        allow_nan=False,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         sys.stderr.write(f"MCP compatibility check failed: {exc}\n")
         return 1

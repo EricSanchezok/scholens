@@ -59,6 +59,10 @@ exact registry match. Correction entries are immutable tombstones, and a new
 entry is valid only in the transition that introduces its matching generated
 schema change. If the previous runtime accepted the request, the change is not
 a correction: retain the legacy behavior or publish a replacement boundary.
+After exact target, pointer, old-value, new-value digest, and evidence checks
+pass, CI applies only the active registered values to temporary HTTP/MCP
+comparison bases before invoking `oasdiff`; committed historical snapshots are
+never rewritten and unregistered restrictions still fail closed.
 
 ## Database lifecycle
 
