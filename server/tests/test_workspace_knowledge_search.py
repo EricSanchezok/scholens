@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+import json
 from typing import cast
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -50,14 +51,15 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
     RequestReference,
+    SignedCursorCodec,
 )
+from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import (
     AnnotationColor,
     AnnotationThreadMode,
     AnnotationThreadStatus,
     ResearchItemKind,
 )
-from app.shared.domain import AppError
 from app.tooling.contracts import DEFAULT_TOOL_OUTPUT_BYTES, ToolExecutionContext
 from app.tooling.knowledge_search_projection import (
     KNOWLEDGE_SEARCH_MAX_PAGE_ITEMS,
@@ -117,6 +119,37 @@ def test_search_scope_schema_includes_complete_object_examples() -> None:
         {"kind": "project", "project_id": "00000000-0000-0000-0000-000000000000"},
         {"kind": "paper", "document_id": "00000000-0000-0000-0000-000000000000"},
     ]
+
+
+def test_knowledge_search_rejects_previous_paper_ranking_cursor_revision() -> None:
+    request = SearchKnowledgeInput(
+        query="compression",
+        scope=LibraryKnowledgeScope(),
+    )
+    fingerprint = json.dumps(
+        request.model_dump(mode="json", exclude={"cursor"}),
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    legacy = SignedCursorCodec(
+        "test-secret",
+        revision="scholens-knowledge:1",
+        error_code="knowledge_search_cursor_invalid",
+        error_kind=FailureKind.INVALID_ARGUMENT,
+    )
+    stale_request = request.model_copy(
+        update={"cursor": legacy.encode(fingerprint=fingerprint, offset=10)}
+    )
+
+    with pytest.raises(AppError) as error:
+        _handler().search_knowledge(
+            _capabilities([]),
+            _context(),
+            stale_request,
+        )
+
+    assert error.value.code == "knowledge_search_cursor_invalid"
+    assert error.value.kind is FailureKind.INVALID_ARGUMENT
 
 
 def _thread(*, document_id: UUID, project_id: UUID | None) -> ResearchSearchResult:

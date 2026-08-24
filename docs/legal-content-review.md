@@ -10,11 +10,16 @@ Before publishing replacement text, confirm and record:
 
 - the legal identity and contact details of the service operator;
 - the production domains and countries in which the service is offered;
-- account, research-content, telemetry, billing, support, and security data
-  actually collected by the deployed product;
+- account, research-content, first-party reading-session/page activity,
+  anonymous Project contribution, telemetry, billing, support, and security
+  data actually collected by the deployed product;
 - each processor and provider that can receive personal data or user content;
 - retention, export, account deletion, backup, and incident-response behavior;
 - cookie, analytics, email, and consent behavior in each supported region;
+- the default-on controls, estimate limitations, three-contributor team
+  threshold, 90-day fine-detail ceiling, longer coarse rollups, and scoped
+  deletion/export behavior established by
+  [ADR 0039](./decisions/0039-first-party-research-activity-ledger.md);
 - subscription, cancellation, refund, warranty, and service-availability terms;
 - intellectual-property terms for uploaded papers, annotations, prompts, and
   generated outputs;

@@ -203,6 +203,80 @@ def _deliver_webhook(
             response.close()
 
 
+def _deliver_pdf_webhook(
+    webhook_url: str,
+    payload: dict[str, Any],
+    *,
+    task_id: str,
+    timeout: float = 60,
+) -> bool:
+    """Deliver the additive PDF result with a narrowly classified old-API retry."""
+
+    response: requests.Response | None = None
+    try:
+        response = post_signed_json(webhook_url, payload, timeout=timeout)
+        if _rejects_additive_pdf_page_count(response):
+            response.close()
+            response = None
+            compatible_payload = _without_pdf_page_count(payload)
+            logger.warning(
+                "job.pdf_callback.page_count_compatibility_retry",
+                extra={"compatibility_contract": "pdf_result_page_count"},
+            )
+            response = post_signed_json(
+                webhook_url,
+                compatible_payload,
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        logger.info("job.webhook.delivered", extra={"job_id": task_id})
+        return True
+    except requests.RequestException:
+        logger.exception("job.webhook.delivery_failed", extra={"job_id": task_id})
+        return False
+    finally:
+        if response is not None:
+            response.close()
+
+
+def _rejects_additive_pdf_page_count(response: requests.Response) -> bool:
+    if response.status_code != 422:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict) or body.get("code") != "request_validation_failed":
+        return False
+    details = body.get("details")
+    if not isinstance(details, dict):
+        return False
+    errors = details.get("errors")
+    if not isinstance(errors, list) or not errors:
+        return False
+    for error in errors:
+        if not isinstance(error, dict):
+            return False
+        location = error.get("location")
+        if not isinstance(location, (list, tuple)):
+            return False
+        if tuple(location) != ("body", "result", "page_count"):
+            return False
+        if error.get("type") not in {"extra_forbidden", "value_error.extra"}:
+            return False
+    return True
+
+
+def _without_pdf_page_count(payload: dict[str, Any]) -> dict[str, Any]:
+    compatible = dict(payload)
+    result = payload.get("result")
+    if isinstance(result, dict):
+        compatible["result"] = {
+            key: value for key, value in result.items() if key != "page_count"
+        }
+    return compatible
+
+
 def _deliver_zotero_webhook(
     webhook_url: str,
     payload: dict[str, Any],
@@ -471,7 +545,7 @@ def _process_pdf_task(
                 "integration_events": mineru.events(),
             }
 
-            webhook_delivered = _deliver_webhook(
+            webhook_delivered = _deliver_pdf_webhook(
                 webhook_url,
                 webhook_payload,
                 task_id=task_id,

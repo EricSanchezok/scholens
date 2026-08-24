@@ -115,6 +115,21 @@ const dark = flattenTokens(
   await readJson(path.join(tokenRoot, "semantic", "dark.json")),
 );
 
+for (const [source, tokens] of [
+  ["dimensions.json", dimensions],
+  ["semantic/light.json", light],
+  ["semantic/dark.json", dark],
+  ...[...themeTokens].map(([name, tokens]) => [`themes/${name}.json`, tokens]),
+]) {
+  for (const retiredPath of ["color.focus.ring", "color.border.focus"]) {
+    if (tokens.has(retiredPath)) {
+      report(
+        `src/design-system/tokens/${source}: retired ${retiredPath} token must not be restored`,
+      );
+    }
+  }
+}
+
 const defaultThemePaths = [...defaultThemeTokens.keys()].sort();
 const themeableTokenPaths = [
   /^primitive\./,
@@ -478,6 +493,43 @@ const scanRoots = [sourceRoot, path.join(webRoot, ".storybook")];
 const scannedFiles = (
   await Promise.all(scanRoots.map((root) => collectFiles(root)))
 ).flat();
+
+const retiredFocusReferences = [
+  {
+    pattern: /\bkeyboardFocusRing\b/g,
+    symbol: "keyboardFocusRing",
+  },
+  {
+    pattern: /--color-focus-ring\b/g,
+    symbol: "--color-focus-ring",
+  },
+  {
+    pattern: /--color-border-focus\b/g,
+    symbol: "--color-border-focus",
+  },
+  {
+    pattern: /\bcolor\.focus\.ring\b/g,
+    symbol: "color.focus.ring",
+  },
+  {
+    pattern: /\bcolor\.border\.focus\b/g,
+    symbol: "color.border.focus",
+  },
+];
+for (const filePath of scannedFiles) {
+  if (!new Set([".json", ".ts", ".tsx", ".css"]).has(path.extname(filePath))) {
+    continue;
+  }
+  const contents = await readFile(filePath, "utf8");
+  for (const { pattern, symbol } of retiredFocusReferences) {
+    for (const match of contents.matchAll(pattern)) {
+      report(
+        `${path.relative(webRoot, filePath)}:${lineNumber(contents, match.index)}: retired focus contract ${symbol} must not be restored; consume focusSurfaceVariants({ intent })`,
+      );
+    }
+  }
+}
+
 const excludedRoots = [generatedRoot, tokenRoot];
 const motionRoot = path.join(sourceRoot, "design-system", "motion");
 const runtimeFreeFeatureRoots = [
@@ -535,6 +587,437 @@ for (const fixture of motionBoundaryFixtures) {
     );
   }
 }
+
+function splitTailwindSegments(token) {
+  const segments = [];
+  let current = "";
+  let bracketDepth = 0;
+  for (const character of token) {
+    if (character === "[") bracketDepth += 1;
+    if (character === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    if (character === ":" && bracketDepth === 0) {
+      segments.push(current);
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  segments.push(current);
+  return segments;
+}
+
+function isTransientVariant(variant) {
+  return (
+    /(?:^|[-_:])(?:hover|focus(?:-visible|-within)?)(?:\/[\w-]+)?(?:\]|$)/.test(
+      variant,
+    ) || /:(?:hover|focus(?:-visible|-within)?)\b/.test(variant)
+  );
+}
+
+function isPerimeterUtility(utility) {
+  const normalized = utility.replace(/^[({]+|[)},;]+$/g, "");
+  return (
+    /^(?:-?border|ring|outline|shadow)(?:$|-)/.test(normalized) ||
+    /^\[(?:box-shadow|border(?:-[\w-]+)?|outline(?:-[\w-]+)?):/.test(normalized)
+  );
+}
+
+function transientPerimeterUtilities(contents) {
+  const violations = [];
+  for (const match of contents.matchAll(/[^\s"'`]+/g)) {
+    const segments = splitTailwindSegments(match[0]);
+    if (
+      segments.length > 1 &&
+      segments.slice(0, -1).some(isTransientVariant) &&
+      isPerimeterUtility(segments.at(-1))
+    ) {
+      violations.push({ index: match.index, utility: match[0] });
+    }
+  }
+  return violations;
+}
+
+const transientPerimeterFixtures = [
+  ["hover:border-line-strong", true],
+  ["focus:ring-1", true],
+  ["focus-visible:outline-none", true],
+  ["focus-within:shadow-raised", true],
+  ["group-hover/item:border-control", true],
+  ["peer-focus-visible:ring-2", true],
+  ["lg:[&:focus-visible]:[box-shadow:0_0_0_1px_black]", true],
+  ["hover:bg-hover focus-visible:text-foreground", false],
+  ["aria-invalid:border-danger shadow-raised", false],
+];
+for (const [source, forbidden] of transientPerimeterFixtures) {
+  if (transientPerimeterUtilities(source).length > 0 !== forbidden) {
+    report(
+      `scripts/check-design-system.mjs: transient perimeter self-test failed for ${source}`,
+    );
+  }
+}
+
+function maskForcedColorsBlocks(contents) {
+  const ranges = [];
+  for (const match of contents.matchAll(
+    /@media\s*\(\s*forced-colors\s*:\s*active\s*\)/g,
+  )) {
+    const openingBrace = contents.indexOf("{", match.index);
+    if (openingBrace === -1) continue;
+    let depth = 0;
+    let closingBrace = -1;
+    for (let index = openingBrace; index < contents.length; index += 1) {
+      if (contents[index] === "{") depth += 1;
+      if (contents[index] === "}") depth -= 1;
+      if (depth === 0) {
+        closingBrace = index;
+        break;
+      }
+    }
+    if (closingBrace !== -1) ranges.push([match.index, closingBrace + 1]);
+  }
+  if (ranges.length === 0) return contents;
+  const characters = [...contents];
+  for (const [start, end] of ranges) {
+    for (let index = start; index < end; index += 1) {
+      if (characters[index] !== "\n") characters[index] = " ";
+    }
+  }
+  return characters.join("");
+}
+
+function splitTopLevelSelectors(selectorList) {
+  const selectors = [];
+  let current = "";
+  let escaped = false;
+  let quote = null;
+  let parenthesisDepth = 0;
+  let bracketDepth = 0;
+  for (const character of selectorList) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      current += character;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      current += character;
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      current += character;
+      quote = character;
+      continue;
+    }
+    if (character === "(") parenthesisDepth += 1;
+    if (character === ")") {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+    }
+    if (character === "[") bracketDepth += 1;
+    if (character === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    if (character === "," && parenthesisDepth === 0 && bracketDepth === 0) {
+      if (current.trim()) selectors.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  if (current.trim()) selectors.push(current.trim());
+  return selectors;
+}
+
+function isAllowedSharedFocusDeclaration({
+  property,
+  relativePath,
+  selector,
+  value,
+}) {
+  if (
+    relativePath === `src${path.sep}app${path.sep}global-error.tsx` &&
+    selector === ".global-error-retry:focus-visible" &&
+    property === "outline" &&
+    value.trim() === "none"
+  ) {
+    return true;
+  }
+  if (relativePath !== `src${path.sep}styles${path.sep}globals.css`) {
+    return false;
+  }
+  const sharedSelector =
+    selector.includes(".focus-recipe") ||
+    selector.includes("[data-focus-delegate]");
+  if (sharedSelector && property === "outline" && value.trim() === "none") {
+    return true;
+  }
+  if (sharedSelector && property === "outline-offset" && value.trim() === "0") {
+    return true;
+  }
+  if (
+    property === "box-shadow" &&
+    value.trim() === "var(--shadow-raised)" &&
+    /\.focus-recipe-(?:primary|danger|status)\b/.test(selector) &&
+    !/\.focus-recipe-(?:neutral|selection|inline|scroll)\b/.test(selector)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function transientCssPerimeterDeclarations(contents, relativePath) {
+  const unforced = maskForcedColorsBlocks(contents);
+  const violations = [];
+  for (const block of unforced.matchAll(/([^{}]+)\{([^{}]*)\}/gs)) {
+    for (const selector of splitTopLevelSelectors(block[1])) {
+      if (!/:(?:hover|focus(?:-visible|-within)?)\b/.test(selector)) continue;
+      for (const declaration of block[2].matchAll(
+        /\b(border(?:-[\w-]+)?|outline(?:-[\w-]+)?|box-shadow)\s*:\s*([^;}]+)/g,
+      )) {
+        const candidate = {
+          property: declaration[1],
+          relativePath,
+          selector,
+          value: declaration[2],
+        };
+        if (!isAllowedSharedFocusDeclaration(candidate)) {
+          violations.push({
+            index: block.index + block[0].indexOf(declaration[0]),
+            ...candidate,
+          });
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+function staticStyleBlocks(contents) {
+  const blocks = [];
+  const pattern =
+    /<style(?:\s[^>]*)?>\s*\{\s*`([\s\S]*?)`\s*\}\s*<\/style\s*>/g;
+  for (const match of contents.matchAll(pattern)) {
+    if (match[1].includes("${")) continue;
+    blocks.push({
+      contents: match[1],
+      index: match.index + match[0].indexOf("`") + 1,
+    });
+  }
+  return blocks;
+}
+
+function staticStylePerimeterDeclarations(contents, relativePath) {
+  return staticStyleBlocks(contents).flatMap((block) =>
+    transientCssPerimeterDeclarations(block.contents, relativePath).map(
+      (violation) => ({
+        ...violation,
+        index: block.index + violation.index,
+      }),
+    ),
+  );
+}
+
+function jsxOpeningTags(contents) {
+  const tags = [];
+  for (let start = 0; start < contents.length; start += 1) {
+    if (
+      contents[start] !== "<" ||
+      !/[A-Za-z]/.test(contents[start + 1] ?? "")
+    ) {
+      continue;
+    }
+    let braceDepth = 0;
+    let escaped = false;
+    let quote = null;
+    for (let end = start + 1; end < contents.length; end += 1) {
+      const character = contents[end];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'" || character === "`") {
+        quote = character;
+        continue;
+      }
+      if (character === "{") braceDepth += 1;
+      if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
+      if (character === ">" && braceDepth === 0) {
+        tags.push({ contents: contents.slice(start, end + 1), index: start });
+        start = end;
+        break;
+      }
+    }
+  }
+  return tags;
+}
+
+function focusDelegationViolations(contents) {
+  const surfaceDelegatePattern = /\bdata-focus-delegate\s*=\s*["']surface["']/;
+  const surfaceOwnerPattern = /\bdata-focus-surface(?:\s|=|\/>|>)/;
+  const neutralRecipePattern =
+    /focusSurfaceVariants\s*\(\s*\{\s*intent\s*:\s*["']neutral["']\s*,?\s*\}\s*\)/;
+  const tags = jsxOpeningTags(contents);
+  const delegates = tags.filter((tag) =>
+    surfaceDelegatePattern.test(tag.contents),
+  );
+  const owners = tags.filter((tag) => surfaceOwnerPattern.test(tag.contents));
+  const violations = owners
+    .filter((owner) => !neutralRecipePattern.test(owner.contents))
+    .map((owner) => ({
+      index: owner.index,
+      message:
+        'data-focus-surface owners must consume focusSurfaceVariants({ intent: "neutral" }) on the same element',
+    }));
+
+  if (delegates.length > owners.length) {
+    for (const delegate of delegates.slice(owners.length)) {
+      violations.push({
+        index: delegate.index,
+        message:
+          'data-focus-delegate="surface" requires a paired data-focus-surface owner',
+      });
+    }
+  } else if (owners.length > delegates.length) {
+    for (const owner of owners.slice(delegates.length)) {
+      violations.push({
+        index: owner.index,
+        message:
+          'data-focus-surface requires a paired data-focus-delegate="surface" child',
+      });
+    }
+  }
+  return violations;
+}
+
+const transientCssFixtures = [
+  [".field:hover { border-color: currentColor; }", "fixture.css", true],
+  [
+    ".group:focus-within .child { box-shadow: 0 0 0 1px currentColor; }",
+    "fixture.css",
+    true,
+  ],
+  [".field:focus-visible { outline: none; }", "fixture.css", true],
+  [
+    "@media (forced-colors: active) { .field:focus-visible { outline: 2px solid Highlight; } }",
+    "fixture.css",
+    false,
+  ],
+  [
+    ".focus-recipe-primary:focus-visible { box-shadow: var(--shadow-raised); }",
+    `src${path.sep}styles${path.sep}globals.css`,
+    false,
+  ],
+  [
+    ".focus-recipe-neutral:focus-visible { box-shadow: var(--shadow-raised); }",
+    `src${path.sep}styles${path.sep}globals.css`,
+    true,
+  ],
+  [
+    ".focus-recipe:focus-visible, .field:focus-visible { outline: none; }",
+    `src${path.sep}styles${path.sep}globals.css`,
+    true,
+  ],
+  [
+    ":is(.focus-recipe-primary:focus-visible, .focus-recipe-danger:focus-visible) { box-shadow: var(--shadow-raised); }",
+    `src${path.sep}styles${path.sep}globals.css`,
+    false,
+  ],
+  [
+    ".focus-recipe-primary:focus-visible, .field:focus-visible { box-shadow: var(--shadow-raised); }",
+    `src${path.sep}styles${path.sep}globals.css`,
+    true,
+  ],
+  [".field:hover { background: Canvas; }", "fixture.css", false],
+];
+for (const [source, relativePath, forbidden] of transientCssFixtures) {
+  if (
+    transientCssPerimeterDeclarations(source, relativePath).length > 0 !==
+    forbidden
+  ) {
+    report(
+      `scripts/check-design-system.mjs: transient CSS perimeter self-test failed for ${source}`,
+    );
+  }
+}
+
+const staticStyleFixtures = [
+  {
+    forbidden: 1,
+    relativePath: `src${path.sep}features${path.sep}fixture.tsx`,
+    source: "<style>{`.field:focus-visible { outline: none; }`}</style>",
+  },
+  {
+    forbidden: 0,
+    relativePath: `src${path.sep}features${path.sep}fixture.tsx`,
+    source:
+      "<style>{`@media (forced-colors: active) { .field:focus-visible { outline: 2px solid Highlight; } }`}</style>",
+  },
+  {
+    forbidden: 0,
+    relativePath: `src${path.sep}app${path.sep}global-error.tsx`,
+    source:
+      "<style>{`.global-error-retry:focus-visible { outline: none; } @media (forced-colors: active) { .global-error-retry:focus-visible { outline: 2px solid Highlight; } }`}</style>",
+  },
+  {
+    forbidden: 1,
+    relativePath: `src${path.sep}app${path.sep}global-error.tsx`,
+    source: "<style>{`.global-error-retry:hover { outline: none; }`}</style>",
+  },
+];
+for (const { forbidden, relativePath, source } of staticStyleFixtures) {
+  if (
+    staticStylePerimeterDeclarations(source, relativePath).length !== forbidden
+  ) {
+    report(
+      `scripts/check-design-system.mjs: static style focus self-test failed for ${source}`,
+    );
+  }
+}
+
+const focusDelegationFixtures = [
+  {
+    source:
+      '<div className={focusSurfaceVariants({ intent: "neutral" })} data-focus-surface><input data-focus-delegate="surface" /></div>',
+    violations: 0,
+  },
+  {
+    source: '<input data-focus-delegate="surface" />',
+    violations: 1,
+  },
+  {
+    source:
+      '<div className={focusSurfaceVariants({ intent: "neutral" })} data-focus-surface />',
+    violations: 1,
+  },
+  {
+    source:
+      '<div className="bg-surface" data-focus-surface><input data-focus-delegate="surface" /></div>',
+    violations: 1,
+  },
+  {
+    source:
+      'expect(field).toHaveAttribute("data-focus-delegate", "surface"); expect(owner).toHaveAttribute("data-focus-surface");',
+    violations: 0,
+  },
+];
+for (const { source, violations: expected } of focusDelegationFixtures) {
+  if (focusDelegationViolations(source).length !== expected) {
+    report(
+      `scripts/check-design-system.mjs: focus delegation self-test failed for ${source}`,
+    );
+  }
+}
+
 const checks = [
   {
     pattern:
@@ -631,11 +1114,36 @@ for (const filePath of scannedFiles) {
         `${relativePath}: product code must import a semantic icon from src/design-system/icons/semantic-icons.ts`,
       );
     }
-    const featureFocusPattern =
-      /focus(?:-visible)?:[^\s"'`]*(?:ring|border|shadow|outline-(?!none))/g;
-    for (const match of contents.matchAll(featureFocusPattern)) {
+  }
+  if (new Set([".ts", ".tsx"]).has(path.extname(filePath))) {
+    for (const match of transientPerimeterUtilities(contents)) {
       report(
-        `${relativePath}:${lineNumber(contents, match.index)}: focus visuals belong to components/ui; consume keyboardFocusRing or a delegated text-control surface`,
+        `${relativePath}:${lineNumber(contents, match.index)}: transient border/ring/outline/shadow utility ${match.utility} is forbidden; consume focusSurfaceVariants({ intent }) so the perimeter remains stable`,
+      );
+    }
+  }
+  if (path.extname(filePath) === ".tsx") {
+    for (const match of staticStylePerimeterDeclarations(
+      contents,
+      relativePath,
+    )) {
+      report(
+        `${relativePath}:${lineNumber(contents, match.index)}: ${match.property} in static style focus selector ${match.selector} is forbidden outside the exact global-error fallback or forced-colors override`,
+      );
+    }
+    for (const violation of focusDelegationViolations(contents)) {
+      report(
+        `${relativePath}:${lineNumber(contents, violation.index)}: ${violation.message}`,
+      );
+    }
+  }
+  if (path.extname(filePath) === ".css") {
+    for (const match of transientCssPerimeterDeclarations(
+      contents,
+      relativePath,
+    )) {
+      report(
+        `${relativePath}:${lineNumber(contents, match.index)}: ${match.property} in transient selector ${match.selector} is forbidden outside the shared focus recipe or forced-colors override`,
       );
     }
   }

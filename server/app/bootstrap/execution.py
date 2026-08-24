@@ -14,6 +14,7 @@ from app.llm.follow_up_suggestions import FollowUpSuggestionGenerator
 from app.database.database import SessionLocal
 from app.modules.access_keys.application.contracts import AuthenticatedAccessKey
 from app.modules.conversations.application.chat import ConversationChat
+from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
 from app.modules.identity.application.onboarding import FinishOnboarding
 from app.modules.billing.application.webhooks import ProcessStripeWebhook
 from app.bootstrap.workflows.billing import BillingUsageWorkflow, BillingWorkflow
@@ -116,6 +117,7 @@ def create_conversation_chat(
     operation_factory: OperationContextFactory,
     diagnostic_recorder: DiagnosticSnapshotRecorder,
     event_store_url: str | None = None,
+    dispatcher_wakeup: JobDispatcherWakeup | None = None,
 ) -> ConversationChat:
     from app.bootstrap.adapters.conversation_chat import (
         DefaultConversationChatGateway,
@@ -129,6 +131,7 @@ def create_conversation_chat(
             diagnostic_recorder,
             FollowUpSuggestionGenerator(),
             event_store_url,
+            dispatcher_wakeup,
         )
     )
 

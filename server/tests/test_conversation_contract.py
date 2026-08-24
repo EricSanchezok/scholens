@@ -490,6 +490,7 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     assert "/api/v1/conversations/{conversation_id}/scope" in paths
     assert "/api/v1/conversations/{conversation_id}/context" in paths
     assert "/api/v1/conversations/{conversation_id}/turns" in paths
+    assert "/api/v1/conversations/{conversation_id}/start" in paths
     assert "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses" in paths
     assert (
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response"
@@ -547,18 +548,17 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     )
 
 
-def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
-    response = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
-        "post"
-    ]["responses"]["200"]
+def test_conversation_turns_expose_compatible_and_candidate_stream_contracts() -> None:
+    contract = app.openapi()
+    schemas = contract["components"]["schemas"]
 
-    assert response["content"]["text/event-stream"]["schema"]["$ref"] == (
-        "#/components/schemas/ConversationStreamEventSchema"
-    )
-    event_schema = app.openapi()["components"]["schemas"][
-        "ConversationStreamEventSchema"
-    ]["oneOf"]
-    assert {item["$ref"].rsplit("/", maxsplit=1)[-1] for item in event_schema} == {
+    def variants(schema: str) -> set[str]:
+        return {
+            item["$ref"].rsplit("/", maxsplit=1)[-1]
+            for item in schemas[schema]["oneOf"]
+        }
+
+    legacy_events = {
         "ConversationStreamStartEvent",
         "ConversationStreamActivityEvent",
         "ConversationStreamAssistantItemStartEvent",
@@ -570,8 +570,19 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamCompleteEvent",
         "ConversationStreamErrorEvent",
     }
+    assert variants("ConversationStreamEventSchema") == legacy_events
+    assert variants("ConversationSubscriptionEventSchema") == {
+        *legacy_events,
+        "ConversationStreamCancelledEvent",
+    }
+    assert variants("ConversationCandidateSubscriptionEventSchema") == {
+        *legacy_events,
+        "ConversationStreamAssistantCandidateStartEvent",
+        "ConversationStreamAssistantCandidateDeltaEvent",
+        "ConversationStreamAssistantCandidateResetEvent",
+        "ConversationStreamCancelledEvent",
+    }
 
-    schemas = app.openapi()["components"]["schemas"]
     assert "ConversationSuggestionsResponse" not in schemas
     variant_properties = schemas["ConversationResponseVariantResponse"]["properties"]
     assert "suggestions" not in variant_properties
@@ -586,14 +597,14 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
     assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
     assert "duration_ms" in variant_properties
     assert "failure" in variant_properties
-    accepted = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
+    accepted = contract["paths"]["/api/v1/conversations/{conversation_id}/turns"][
         "post"
     ]["responses"]["202"]
     assert set(accepted["content"]) == {"application/json"}
     assert accepted["content"]["application/json"]["schema"]["$ref"] == (
         "#/components/schemas/ConversationGenerationAccepted"
     )
-    event_subscription = app.openapi()["paths"][
+    event_subscription = contract["paths"][
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/"
         "{response_id}/events"
     ]["get"]["responses"]
@@ -603,10 +614,6 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         event_subscription["200"]["content"]["text/event-stream"]["schema"]["$ref"]
         == "#/components/schemas/ConversationSubscriptionEventSchema"
     )
-    subscription_schema = schemas["ConversationSubscriptionEventSchema"]["oneOf"]
-    assert "ConversationStreamCancelledEvent" in {
-        item["$ref"].rsplit("/", maxsplit=1)[-1] for item in subscription_schema
-    }
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties
     assert "mentioned_thread_ids" not in create_properties
@@ -614,6 +621,83 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "generation_kind"
     ]
     assert "branch" in start_generation["enum"]
+
+    start_operation = contract["paths"][
+        "/api/v1/conversations/{conversation_id}/start"
+    ]["post"]
+    assert (
+        start_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ConversationStartRequest"
+    )
+    assert set(start_operation["responses"]) >= {"200", "202"}
+    assert (
+        start_operation["responses"]["200"]["content"]["text/event-stream"]["schema"][
+            "$ref"
+        ]
+        == "#/components/schemas/ConversationSubscriptionEventSchema"
+    )
+    assert {parameter["name"] for parameter in start_operation["parameters"]} >= {
+        "conversation_id",
+        "prefer",
+    }
+    start_schema = schemas["ConversationStartRequest"]
+    assert set(start_schema["properties"]) == {"conversation", "turn"}
+    assert "originally accepted scope" in start_schema["description"]
+    assert "current scope" in start_schema["description"]
+    assert "title" in start_schema["description"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/conversations/{conversation_id}/turns",
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses",
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches",
+    ],
+)
+def test_existing_generation_posts_retain_legacy_response_media_types(
+    path: str,
+) -> None:
+    responses = app.openapi()["paths"][path]["post"]["responses"]
+
+    content = responses["200"]["content"]
+    candidate_media_type = "application/vnd.scholens.conversation-events"
+    assert set(content) == {
+        "application/json",
+        "text/event-stream",
+        candidate_media_type,
+    }
+    for media_type in ("application/json", "text/event-stream"):
+        assert content[media_type]["schema"]["$ref"] == (
+            "#/components/schemas/ConversationStreamEventSchema"
+        )
+    assert content[candidate_media_type]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+    )
+    assert set(responses["202"]["content"]) == {"application/json"}
+    assert responses["202"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationGenerationAccepted"
+    )
+
+
+def test_atomic_start_documents_only_implemented_stream_media_types() -> None:
+    responses = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/start"][
+        "post"
+    ]["responses"]
+
+    content = responses["200"]["content"]
+    candidate_media_type = "application/vnd.scholens.conversation-events"
+    assert set(content) == {"text/event-stream", candidate_media_type}
+    assert content["text/event-stream"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationSubscriptionEventSchema"
+    )
+    assert content[candidate_media_type]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+    )
+    assert set(responses["202"]["content"]) == {"application/json"}
+    assert responses["202"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationGenerationAccepted"
+    )
 
 
 def test_turn_cursor_rejects_a_changed_branch_revision() -> None:
@@ -1407,8 +1491,10 @@ def test_paper_context_snapshot_only_loads_anchor_full_text(
         ),
     }
     monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat_data.document_repository.find_accessible",
-        lambda _db, *, document_id, **_kwargs: papers.get(document_id),
+        "app.bootstrap.adapters.conversation_chat_data.document_repository.find_accessible_many",
+        lambda _db, *, document_ids, user, **_kwargs: [
+            papers[document_id] for document_id in document_ids if document_id in papers
+        ],
     )
     db = MagicMock(spec=Session)
     db.execute.return_value.all.return_value = []

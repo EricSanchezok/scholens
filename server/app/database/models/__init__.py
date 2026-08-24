@@ -93,6 +93,18 @@ from app.modules.reflows.infrastructure.models import (
     DocumentReflow,
     DocumentReflowBlock,
 )
+from app.modules.reading_activity.infrastructure.models import (
+    ReadingActivityPreference,
+    ReadingMetricDefinition,
+    ReadingPersonalHourRollup,
+    ReadingPersonalPageRollup,
+    ReadingProjectHourRollup,
+    ReadingProjectPageRollup,
+    ReadingProjectPersonalPageRollup,
+    ReadingSession,
+    ReadingSessionHour,
+    ReadingSessionPage,
+)
 
 __all__ = [
     "AuthUser",
@@ -139,6 +151,16 @@ __all__ = [
     "ProjectInvitation",
     "ProjectPaper",
     "ReasoningLevel",
+    "ReadingActivityPreference",
+    "ReadingMetricDefinition",
+    "ReadingPersonalHourRollup",
+    "ReadingPersonalPageRollup",
+    "ReadingProjectHourRollup",
+    "ReadingProjectPageRollup",
+    "ReadingProjectPersonalPageRollup",
+    "ReadingSession",
+    "ReadingSessionHour",
+    "ReadingSessionPage",
     "ResearchAudioOverview",
     "ResearchDataTable",
     "ResearchItem",

@@ -155,8 +155,10 @@ the control ID and connects the label, optional description, error message,
 `aria-invalid`, and `aria-describedby`. `PasswordInput` owns only password
 visibility; the caller provides localized accessible labels and autocomplete.
 Pointer and touch focus do not alter a text field's resting border. Keyboard
-navigation retains the shared semantic focus indicator, so removing the noisy
-pointer ring does not remove accessible focus visibility.
+navigation uses the shared neutral focus surface: the complete field receives a
+soft surface tint and content emphasis while border color, width, radius, size,
+and shadow remain unchanged. Normal Light and Dark modes add no ring or
+outline; forced-colors mode exposes the shared 2 px system `Highlight` outline.
 The password-visibility control retains a 44 px interaction and focus target,
 while hover and pressed feedback use a centered 32 px visual surface so the
 control does not appear to divide the input into a second field.

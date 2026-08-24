@@ -354,7 +354,7 @@ class WorkspaceToolHandlers:
         )
         self._knowledge_cursors = SignedCursorCodec(
             cursor_secret,
-            revision="scholens-knowledge:3",
+            revision="scholens-knowledge:4",
             error_code="knowledge_search_cursor_invalid",
             error_kind=FailureKind.INVALID_ARGUMENT,
         )

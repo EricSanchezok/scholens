@@ -1,7 +1,7 @@
 import type { components } from "@/lib/api/generated/schema";
 
 export type ReaderContextPanel =
-  "ask" | "annotations" | "translation" | "details";
+  "ask" | "annotations" | "translation" | "insights" | "details";
 export type ReaderDocumentView = "pdf" | "reflow";
 export type ReaderDocument = components["schemas"]["DocumentResponse"];
 export type ReaderAnnotation = components["schemas"]["ResearchItemResponse"];

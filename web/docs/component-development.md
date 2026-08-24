@@ -38,6 +38,12 @@ actually shared.
   `src/design-system/icons/semantic-icons.ts`. Product code under `app/` and
   `features/` must not import `iconoir-react` directly, import another icon
   library, or manually redraw a glyph. `design:check` enforces this boundary.
+- Feature-owned data visualizations may use semantic SVG when CSS cannot express
+  the relationship. Mark the root `data-visualization`, expose `role="img"`
+  with `aria-label` or `aria-labelledby`, use semantic tokens, and provide a
+  keyboard-accessible table equivalent. This exception never applies to glyphs
+  or decorative illustrations; those still use the shared icon and media
+  systems. `architecture:check` enforces the marker and accessible-name pair.
 - Every product meaning has exactly one semantic icon name, and every Iconoir
   glyph in the registry belongs to exactly one meaning. The same meaning must
   reuse the same semantic export everywhere; a glyph must not be registered a
@@ -50,18 +56,39 @@ actually shared.
   establish alignment. Touch target size and glyph size are separate concerns.
 - Every interactive control must have default, hover, pressed, focus-visible,
   disabled, and loading behavior where applicable.
-- Keyboard focus visuals are a design-system primitive. Buttons, links, and
-  product disclosures consume `keyboardFocusRing` from `components/ui`; feature
-  code must not author its own focus border, outline, ring, or shadow. The
-  shared treatment is intentionally one semantic pixel and appears only for
-  `:focus-visible`, so pointer and touch activation never add a heavy black or
-  white rectangle. `design:check` enforces this boundary for `app/` and
-  `features/`.
-- Text controls distinguish input modality: pointer and touch focus keep the
-  resting border unchanged, while keyboard navigation receives the semantic
-  focus ring. Composite controls delegate that keyboard cue to their outer
-  interaction surface instead of drawing a second rectangle around the native
-  input.
+- Keyboard focus visuals are a design-system primitive. Interactive controls
+  consume `focusSurfaceVariants({ intent })` from `components/ui`; feature code
+  must not author transient border, ring, outline, or perimeter-shadow styles.
+  The supported intents are `neutral`, `primary`, `danger`, `status`,
+  `selection`, `inline`, and `scroll`. `design:check` enforces this ownership
+  across `components`, `app`, and `features`, including hover, focus-within,
+  group/peer variants, and raw CSS.
+- In normal color modes, pointer/touch focus adds no focus-only treatment.
+  Keyboard focus uses soft layering: a semantic surface tint plus local text or
+  icon emphasis; selected controls preserve their persistent fill. Primary,
+  danger, and status intents may also use the existing offset `shadow-raised`
+  through the shared recipe. Border color, width, style, radius, and
+  control size remain identical before and after focus. A ring, normal-mode
+  outline, or zero-offset perimeter shadow is never an approved substitute.
+- Text controls and Composers keep their resting border and shadow under every
+  focus modality. Composite controls mark the native child with
+  `data-focus-delegate="surface"` and the outer recipe owner with
+  `data-focus-surface`, so the soft keyboard cue appears once on the complete
+  interaction surface. `data-focus-delegate="self"` keeps a native control's
+  own geometry while using the same modality contract. The application-level
+  modality listener mounts before lazy dialogs and searches, so their first
+  auto-focused field cannot miss the keyboard interaction that opened them.
+- Forced-colors mode is the deliberate exception to the no-outline rule. A
+  keyboard-focused recipe owner receives a 2 px system `Highlight` outline;
+  scroll regions place it inside the viewport. Do not replace system colors or
+  reuse a retired product focus-color token for this fallback.
+- A native overflow region consumes the `scroll` intent only when it is itself
+  an intentional keyboard stop. Static code, tables, and independent panes are
+  explicitly focusable; lists whose descendants already own focus do not add a
+  redundant container stop. Content-dependent math enters the Tab order only
+  while it actually overflows. The normal cue uses small internal scrollbar
+  marks, so even a temporarily non-overflowing shared viewport remains visible
+  without changing its perimeter.
 - Every `SelectTrigger` uses one light-line, large-radius surface. Hover, pressed,
   and open state change only its quiet background; they never strengthen the
   border. The default density is 44 px, while `compact` preserves that touch
@@ -72,7 +99,7 @@ actually shared.
   desktop.
 - Dialog containers suppress the browser's native focus outline; keyboard focus
   remains visible on the first real interactive control through the shared
-  focus primitive.
+  focus-surface recipe (or the system outline in forced-colors mode).
 - Icon-only controls require an accessible label and usually a Tooltip.
 - Narrow containers and long English or Simplified Chinese content must not
   break layout.
@@ -101,8 +128,8 @@ They share this interaction contract instead:
 - Overflow entry points use `OverflowMenuButton`. `contextual` visibility is
   revealed by row hover, row focus-within, current state, or an open menu on a
   fine pointer; touch layouts always show it. The button owns a 36 px desktop
-  and 44 px touch target, `bg-pressed` hover/open feedback, the shared focus
-  ring, and its accessible label.
+  and 44 px touch target, `bg-pressed` hover/open feedback, the shared soft
+  focus surface, and its accessible label.
 - The row and its overflow button deliberately use different feedback colors;
   do not add scaling, glow, bounce, gradients, or a second page-local More
   button recipe.

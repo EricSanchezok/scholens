@@ -184,6 +184,16 @@ from app.bootstrap.adapters.billing_capacity import (
 from sqlalchemy.orm import Session
 from app.modules.action_confirmations.application import ActionConfirmations
 from app.modules.action_confirmations.infrastructure import ActionConfirmationRepository
+from app.modules.reading_activity.application import (
+    ReadingActivity,
+    ReadingActivityRetention,
+)
+from app.bootstrap.adapters.reading_activity_repository import (
+    SqlAlchemyReadingActivity,
+)
+from app.modules.reading_activity.infrastructure.retention import (
+    SqlReadingActivityRetention,
+)
 
 optional_identity_user_dependency = (
     sanchezcloud_identity_adapter.get_optional_identity_user
@@ -193,6 +203,40 @@ optional_identity_user_dependency = (
 def build_action_confirmations(*, db: Session) -> ActionConfirmations:
     return ActionConfirmations(
         repository=ActionConfirmationRepository(db),
+        clock=SystemClock(),
+    )
+
+
+def build_reading_activity(
+    *, db: Session, cursor_secret: str, journal: OperationJournal
+) -> ReadingActivity:
+    return ReadingActivity(
+        SqlAlchemyReadingActivity(
+            db,
+            clock=SystemClock(),
+            export_cursors=SignedCursorCodec(
+                cursor_secret,
+                revision="reading-activity-export-v1",
+                error_code="reading_activity_export_cursor_invalid",
+                error_kind=FailureKind.INVALID_ARGUMENT,
+            ),
+            activity_cursors=SignedCursorCodec(
+                cursor_secret,
+                revision="project-activity-v1",
+                error_code="project_activity_cursor_invalid",
+                error_kind=FailureKind.INVALID_ARGUMENT,
+            ),
+        ),
+        journal=journal,
+    )
+
+
+def build_reading_activity_retention(
+    *, db: Session, journal: OperationJournal
+) -> ReadingActivityRetention:
+    return ReadingActivityRetention(
+        SqlReadingActivityRetention(db),
+        journal=journal,
         clock=SystemClock(),
     )
 

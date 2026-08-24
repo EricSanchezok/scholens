@@ -7,7 +7,7 @@ import * as React from "react";
 import { Icon } from "@/design-system/icons/icon";
 import { motionDurations } from "@/design-system/generated/motion-metadata";
 import { cn } from "@/lib/utilities/cn";
-import { keyboardFocusRing } from "./focus";
+import { focusSurfaceVariants } from "./focus";
 
 type ToastNotice = {
   description?: string;
@@ -120,7 +120,11 @@ export const ToastViewport = (
   props: React.ComponentPropsWithoutRef<typeof ToastPrimitive.Viewport>,
 ) => (
   <ToastPrimitive.Viewport
-    className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[100] flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-2 outline-none"
+    className={cn(
+      "fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[100] flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-2",
+      focusSurfaceVariants({ intent: "status" }),
+    )}
+    data-toast-viewport=""
     {...props}
   />
 );
@@ -160,7 +164,7 @@ export const ToastClose = ({
     aria-label={label}
     className={cn(
       "motion-control hover:bg-hover absolute top-1 right-1 grid size-11 place-items-center rounded-[var(--radius-md)]",
-      keyboardFocusRing,
+      focusSurfaceVariants({ intent: "neutral" }),
     )}
     {...props}
   >

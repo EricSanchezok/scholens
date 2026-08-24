@@ -18,8 +18,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  focusSurfaceVariants,
   IconButton,
-  keyboardFocusRing,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -58,6 +58,7 @@ export type PaperCollectionTag = {
 export type PaperCollectionItem = {
   id: string;
   title: string;
+  activity?: React.ReactNode;
   authors: string[];
   publication?: string;
   lastOpened?: string;
@@ -223,8 +224,8 @@ function ResizeHandle({
       aria-valuemin={min}
       aria-valuenow={value}
       className={cn(
-        "group flex cursor-col-resize touch-none items-center justify-center outline-none select-none",
-        keyboardFocusRing,
+        "group flex cursor-col-resize touch-none items-center justify-center select-none",
+        focusSurfaceVariants({ intent: "neutral" }),
         className,
       )}
       data-paper-resize-handle=""
@@ -460,7 +461,7 @@ function TagButtons({
             })}
             className={cn(
               "bg-subtle hover:bg-hover max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             key={tag.id}
             onClick={() => onTagClick(tag)}
@@ -653,7 +654,10 @@ const previewMarkdownComponents: Components = {
   ),
   a: ({ children, href }) => (
     <a
-      className="decoration-line-strong hover:decoration-foreground underline underline-offset-2"
+      className={cn(
+        "decoration-line-strong hover:decoration-foreground rounded-[var(--radius-xs)] underline underline-offset-2",
+        focusSurfaceVariants({ intent: "inline" }),
+      )}
       href={href}
       rel="noreferrer"
       target="_blank"
@@ -683,8 +687,12 @@ function Preview({
   return (
     <aside
       aria-label={t("preview.label")}
-      className="border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5"
+      className={cn(
+        "border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
       data-paper-collection-preview=""
+      tabIndex={0}
     >
       <div className="flex h-10 items-center">
         <h2 className="text-sm font-semibold">{t("preview.label")}</h2>
@@ -749,27 +757,34 @@ function Preview({
   );
 }
 
-export function PaperCollectionWorkbench({
-  actions,
-  beforeTable,
-  items,
-  leading,
-  onStatusChange,
-  onTagClick,
-  personalLabels = false,
-  tableFooter,
-  toolbar,
-}: {
+export type PaperCollectionWorkbenchProps = {
   actions?: (item: PaperCollectionItem) => React.ReactNode;
   beforeTable?: React.ReactNode;
+  /** Replaces the table body while defined; null intentionally renders no body. */
+  contentState?: React.ReactNode;
   items: PaperCollectionItem[];
   leading?: (item: PaperCollectionItem) => React.ReactNode;
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels?: boolean;
+  scrollResetKey?: string;
   tableFooter?: React.ReactNode;
   toolbar?: React.ReactNode;
-}) {
+};
+
+export function PaperCollectionWorkbench({
+  actions,
+  beforeTable,
+  contentState,
+  items,
+  leading,
+  onStatusChange,
+  onTagClick,
+  personalLabels = false,
+  scrollResetKey,
+  tableFooter,
+  toolbar,
+}: PaperCollectionWorkbenchProps) {
   const t = useTranslations("PaperCollection");
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -884,6 +899,7 @@ export function PaperCollectionWorkbench({
     items.find((item) => item.id === previewId) ??
     items[0];
   const previewVisible = Boolean(
+    contentState === undefined &&
     preview &&
     preferences.preview_open &&
     measuredWidth > 0 &&
@@ -943,10 +959,16 @@ export function PaperCollectionWorkbench({
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: items.length,
+    enabled: contentState === undefined,
     estimateSize: () => 64,
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
+  React.useLayoutEffect(() => {
+    if (contentState === undefined && scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [contentState, scrollResetKey]);
   const orderedColumns = React.useMemo<PaperCollectionSizedColumn[]>(
     () => ["paper", ...effectiveColumns],
     [effectiveColumns],
@@ -1104,8 +1126,16 @@ export function PaperCollectionWorkbench({
         </div>
       </div>
       {beforeTable ? <div className="shrink-0">{beforeTable}</div> : null}
+      {contentState !== undefined ? (
+        <div className="border-line min-h-0 min-w-0 flex-1 overflow-auto border-t">
+          {contentState}
+        </div>
+      ) : null}
       <div
-        className="border-line grid min-h-0 min-w-0 flex-1 items-stretch overflow-hidden border-t"
+        className={cn(
+          "border-line min-h-0 min-w-0 flex-1 items-stretch overflow-hidden border-t",
+          contentState === undefined ? "grid" : "hidden",
+        )}
         data-paper-collection-split=""
         style={
           previewVisible && !sidePanelLayout
@@ -1274,8 +1304,11 @@ export function PaperCollectionWorkbench({
                           <Link
                             className={cn(
                               "min-w-0 rounded-[var(--radius-sm)]",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "selection" }),
                             )}
+                            data-state={
+                              preview?.id === item.id ? "active" : undefined
+                            }
                             href={item.href}
                           >
                             <span className="line-clamp-2 text-sm leading-5 font-semibold">
@@ -1285,6 +1318,11 @@ export function PaperCollectionWorkbench({
                               {item.authors.join(" · ") ||
                                 t("preview.unknownAuthors")}
                             </span>
+                            {item.activity ? (
+                              <span className="mt-2 block">
+                                {item.activity}
+                              </span>
+                            ) : null}
                           </Link>
                           <span className="mt-2 flex items-center gap-2">
                             <StatusControl
@@ -1313,22 +1351,40 @@ export function PaperCollectionWorkbench({
                         {leading ? (
                           <div role="cell">{leading(item)}</div>
                         ) : null}
-                        <div className="min-w-0" role="cell">
+                        <div className="min-w-0 overflow-hidden" role="cell">
                           <Link
                             className={cn(
-                              "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--radius-sm)]",
-                              keyboardFocusRing,
+                              "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 overflow-hidden rounded-[var(--radius-sm)]",
+                              focusSurfaceVariants({ intent: "selection" }),
                             )}
+                            data-state={
+                              preview?.id === item.id ? "active" : undefined
+                            }
                             href={item.href}
                           >
                             <PaperThumbnail item={item} />
-                            <span className="min-w-0">
-                              <span className="line-clamp-2 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
+                            <span
+                              className="max-h-[52px] min-w-0 overflow-hidden"
+                              data-paper-result-text=""
+                            >
+                              <span
+                                className={cn(
+                                  "text-xs leading-4 font-semibold [overflow-wrap:anywhere]",
+                                  item.activity
+                                    ? "line-clamp-1"
+                                    : "line-clamp-2",
+                                )}
+                              >
                                 {item.title}
                               </span>
                               {item.snippet ? (
-                                <span className="text-secondary mt-0.5 line-clamp-1 block text-[0.6875rem]">
+                                <span className="text-secondary mt-0.5 line-clamp-1 text-[0.6875rem]">
                                   {item.snippet}
+                                </span>
+                              ) : null}
+                              {item.activity ? (
+                                <span className="mt-1 block">
+                                  {item.activity}
                                 </span>
                               ) : null}
                             </span>

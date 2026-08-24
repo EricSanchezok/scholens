@@ -15,6 +15,25 @@ import {
 const api = "http://127.0.0.1:7301/api/v1";
 
 const populatedHandlers = [
+  http.post(
+    `${api}/me/reading-activity/paper-summaries`,
+    async ({ request }) => {
+      const body = (await request.json()) as { document_ids: string[] };
+      return HttpResponse.json({
+        items: body.document_ids.slice(0, 100).map((documentId, index) => ({
+          active_ms: (index + 1) * 24 * 60_000,
+          coverage_percent: 28 + index * 11,
+          document_id: documentId,
+          page_buckets: Array.from({ length: 8 }, (_, bucket) => ({
+            active_ms: bucket % 3 === 0 ? 0 : (index + bucket + 1) * 18_000,
+            end_page: (bucket + 1) * 3,
+            start_page: bucket * 3 + 1,
+          })),
+          visible_ms: (index + 1) * 31 * 60_000,
+        })),
+      });
+    },
+  ),
   http.get(`${api}/integrations/zotero/status`, () =>
     HttpResponse.json({
       active_operation_id: null,

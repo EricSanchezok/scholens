@@ -95,6 +95,45 @@ async function mockProjects(page: Page) {
       }),
     }),
   );
+  await page.route(`${apiPattern}/search/papers`, (route) => {
+    const paper = projectPaperFixtures[1]!;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            abstract: paper.abstract,
+            authors: paper.authors,
+            created_at: paper.added_at,
+            document_id: paper.document_id,
+            doi: paper.doi,
+            journal: paper.journal,
+            keywords: ["retrieval-augmented generation"],
+            last_accessed_at: paper.added_at,
+            matched_fields: ["title", "abstract"],
+            personal_last_accessed_at: paper.added_at,
+            personal_status: paper.status,
+            personal_tags: [],
+            preview_url: null,
+            publish_date: paper.publish_date,
+            retrieval_modes: ["full_text", "semantic"],
+            snippets: [
+              {
+                text: "Retrieval-augmented generation for knowledge-intensive tasks.",
+              },
+            ],
+            status: "completed",
+            summary: null,
+            title: paper.title,
+          },
+        ],
+        next_cursor: null,
+        search_mode: "hybrid",
+        semantic_index_coverage: 1,
+        total: 1,
+      }),
+    });
+  });
   await page.route(`${apiPattern}/project-invitations/**`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -105,6 +144,98 @@ async function mockProjects(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    const requestedProjectId =
+      path.match(/\/projects\/([^/]+)/)?.[1] ?? activeProject.id;
+    if (path.endsWith("/insights") && request.method() === "GET") {
+      const range = url.searchParams.get("range") ?? "30d";
+      const allTime = range === "all";
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          activity_history_complete_since: "2026-01-01T00:00:00Z",
+          metric_definition_version: "active-reading-v1",
+          mine: {
+            annotation_count: 7,
+            papers_with_activity: 2,
+            private_conversation_count: 3,
+            reading: {
+              active_days: 6,
+              active_ms: 5_400_000,
+              coverage_percent: allTime ? 48 : null,
+              session_count: 9,
+              substantive_pages: allTime ? 12 : null,
+              visible_ms: 6_300_000,
+            },
+          },
+          papers: projectPaperFixtures.slice(0, 3).map((paper, index) => ({
+            discussion_message_count: index + 1,
+            document_id: paper.document_id,
+            last_activity_at: `2026-08-${22 + index}T08:00:00Z`,
+            my_active_ms: (index + 1) * 1_200_000,
+            my_coverage_percent: allTime ? 25 + index * 15 : null,
+            shared_annotation_count: index + 2,
+            title: paper.title,
+          })),
+          papers_total_count: projectPaperFixtures.length,
+          project_id: requestedProjectId,
+          range,
+          reading_data_since: "2026-08-01T00:00:00Z",
+          team: {
+            active_collaborators: 4,
+            active_ms: 12_000_000,
+            anonymous_reading_available: true,
+            discussion_message_count: 11,
+            outputs: 3,
+            papers_added: 5,
+            papers_with_activity: 6,
+            resolved_discussions: 2,
+            shared_annotations: 9,
+            substantive_pages: allTime ? 31 : null,
+            visible_ms: 14_400_000,
+          },
+          time_zone: "UTC",
+          trend: [
+            {
+              date: "2026-08-23",
+              my_active_ms: 1_800_000,
+              shared_activity_count: 2,
+              team_active_ms: 3_000_000,
+            },
+            {
+              date: "2026-08-24",
+              my_active_ms: 2_400_000,
+              shared_activity_count: 3,
+              team_active_ms: 4_200_000,
+            },
+          ],
+        }),
+      });
+    }
+    if (path.endsWith("/activity") && request.method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [
+            {
+              actor_display_name: "Eric",
+              document_id: projectPaperFixtures[0]!.document_id,
+              document_title: projectPaperFixtures[0]!.title,
+              id: "project-activity-1",
+              kind: "annotation_created",
+              occurred_at: "2026-08-24T08:00:00Z",
+            },
+          ],
+          next_cursor: null,
+          project_id: requestedProjectId,
+        }),
+      });
+    }
+    if (
+      path.endsWith("/me/reading-activity") &&
+      request.method() === "DELETE"
+    ) {
+      return route.fulfill({ status: 204 });
+    }
     if (request.method() === "POST" && path.endsWith("/projects")) {
       const body = request.postDataJSON() as {
         title: string;
@@ -367,6 +498,73 @@ test("supports the Projects critical journey", async ({ page }) => {
   expect(accessibility.violations).toEqual([]);
 });
 
+test("commits Project paper search on Enter without replacing its input", async ({
+  page,
+}) => {
+  const project = projectFixtures[0]!;
+  await page.goto(`/projects/${project.id}?view=papers`);
+
+  const searchbox = page.getByRole("searchbox", {
+    name: "Search project papers",
+  });
+  await searchbox.evaluate((element) => {
+    element.setAttribute("data-e2e-owner", "project-paper-search");
+  });
+  await searchbox.fill("retrieval");
+  await expect(page).not.toHaveURL(/paper_q=/);
+
+  await page.getByRole("button", { exact: true, name: "Status" }).click();
+  await page.getByRole("checkbox", { exact: true, name: "Reading" }).click();
+  await expect(page).toHaveURL(/paper_status=reading/);
+  await expect(page).not.toHaveURL(/paper_q=/);
+  await expect(searchbox).toHaveValue("retrieval");
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "project-paper-search",
+  );
+
+  const searchRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/search/papers"),
+  );
+  await searchbox.click();
+  await searchbox.press("Enter");
+  expect((await searchRequest).postDataJSON()).toEqual({
+    collection: { kind: "selection", project_ids: [project.id] },
+    filters: {
+      personal_statuses: ["reading"],
+      personal_tag_ids: [],
+    },
+    limit: 50,
+    query: "retrieval",
+    sort: "relevance",
+  });
+  await expect(page).toHaveURL(/paper_q=retrieval/);
+  await expect(searchbox).toBeFocused();
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "project-paper-search",
+  );
+  await expect(page.getByText("Relevance", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Sort project papers" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", {
+      name: /Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks/,
+    }),
+  ).toBeVisible();
+
+  await searchbox.fill("");
+  await expect(page).toHaveURL(/paper_q=retrieval/);
+  await searchbox.press("Enter");
+  await expect(page).not.toHaveURL(/paper_q=/);
+  await expect(
+    page.getByRole("combobox", { name: "Sort project papers" }),
+  ).toBeVisible();
+});
+
 test("invites a collaborator and accepts the emailed link", async ({
   page,
 }) => {
@@ -523,13 +721,55 @@ test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Close project chat" }),
   ).toBeVisible();
-  const history = page
+  const chat = page.getByRole("region", { name: "Project chat" });
+  const switcher = chat.locator("[data-conversation-switcher]");
+  const history = switcher.locator("[data-conversation-switcher-history]");
+  const reasoning = switcher.getByRole("button", {
+    name: "Reasoning strength: Standard",
+  });
+  const create = switcher
     .getByRole("button", { name: "New conversation" })
-    .first();
-  const create = page.getByRole("button", { name: "New conversation" }).last();
-  expect((await history.boundingBox())!.x).toBeLessThan(
-    (await create.boundingBox())!.x,
+    .last();
+  const close = switcher.getByRole("button", { name: "Close project chat" });
+  const controlBoxes = await Promise.all(
+    [history, reasoning, create, close].map((control) => control.boundingBox()),
   );
+  expect(controlBoxes.every(Boolean)).toBe(true);
+  expect(controlBoxes.map((box) => Math.round(box!.x))).toEqual(
+    [...controlBoxes]
+      .sort((left, right) => left!.x - right!.x)
+      .map((box) => Math.round(box!.x)),
+  );
+  expect(controlBoxes[0]!.width).toBeGreaterThan(
+    Math.max(...controlBoxes.slice(1).map((box) => box!.width)),
+  );
+  expect(
+    controlBoxes
+      .slice(0, -1)
+      .every((box, index) => box!.x + box!.width <= controlBoxes[index + 1]!.x),
+  ).toBe(true);
+  expect(
+    await switcher.evaluate((element) => element.scrollWidth),
+  ).toBeLessThanOrEqual(
+    await switcher.evaluate((element) => element.clientWidth),
+  );
+
+  const conversation = projectConversationFixtures[0]!;
+  await history.click();
+  await page
+    .getByRole("button", { exact: true, name: conversation.title })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`conversation=${conversation.id}`));
+  await reasoning.click();
+  await page.getByRole("menuitemradio", { name: /Deep/ }).click();
+  await expect(
+    switcher.getByRole("button", { name: "Reasoning strength: Deep" }),
+  ).toBeVisible();
+  await create.click();
+  await expect(page).toHaveURL(/panel=chat/);
+  await expect(page).not.toHaveURL(/conversation=/);
+  await expect(history).toHaveText("New conversation");
+  await expect(chat).toBeVisible();
   const composer = page.getByPlaceholder("Ask a follow-up");
   const composerBox = await composer.boundingBox();
   expect(composerBox).not.toBeNull();

@@ -263,6 +263,7 @@ class Document(Base):
     page_offset_map: Mapped[dict[int, list[int]] | None] = mapped_column(
         JSONB, nullable=True
     )  # Maps page numbers to text offsets. Useful for re-annotation.
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("auth.users.id", ondelete="SET NULL"),

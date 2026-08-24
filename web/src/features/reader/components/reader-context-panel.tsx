@@ -32,10 +32,10 @@ import {
   DropdownMenuTrigger,
   Frame,
   FramePanel,
+  focusSurfaceVariants,
   IconButton,
   Input,
   isImeComposing,
-  keyboardFocusRing,
   OverflowMenuButton,
   Textarea,
 } from "@/components/ui";
@@ -48,6 +48,7 @@ import {
 import {
   ConversationSwitcher,
   ConversationView,
+  ReasoningMenu,
   useConversationSession,
   type ReasoningLevel,
   type ResearchContext,
@@ -75,6 +76,7 @@ import type {
   ReaderDocument,
   ReaderDocumentSource,
 } from "../reader-types";
+import { ReaderHighlightColorButton } from "./reader-highlight-color-button";
 
 export function formatReaderFileSize(size: number, locale: string) {
   if (!Number.isFinite(size) || size < 0) return "—";
@@ -319,7 +321,7 @@ export function ReaderAnnotationPanel({
                     "rounded-[calc(var(--radius-md)-2px)] px-2 py-1.5",
                     selectionAudience === audience &&
                       "bg-surface shadow-raised",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "selection" }),
                   )}
                   key={audience}
                   onClick={() => setSelectionAudience(audience)}
@@ -330,20 +332,17 @@ export function ReaderAnnotationPanel({
               ))}
             </div>
           ) : null}
-          <div className="mt-3 flex gap-1.5">
+          <div
+            className="mt-3 grid grid-cols-4 gap-2"
+            data-reader-highlight-palette=""
+          >
             {readerHighlightColors.map((color) => (
-              <button
-                aria-label={t(`colors.${color}`)}
-                className={cn(
-                  "border-control size-6 rounded-full border",
-                  selectionColor === color &&
-                    "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-surface)]",
-                  keyboardFocusRing,
-                )}
+              <ReaderHighlightColorButton
+                color={color}
                 key={color}
+                label={t(`colors.${color}`)}
                 onClick={() => setSelectionColor(color)}
-                style={{ backgroundColor: readerHighlightColorValue(color) }}
-                type="button"
+                selected={selectionColor === color}
               />
             ))}
           </div>
@@ -396,7 +395,7 @@ export function ReaderAnnotationPanel({
           return (
             <Frame
               className={cn(
-                "motion-control group/thread group/interactive-row hover:border-line-strong hover:bg-hover focus-within:border-line-strong focus-within:bg-hover active:bg-pressed max-w-full",
+                "motion-control group/thread group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed max-w-full",
                 active && "border-line-strong",
               )}
               data-reader-annotation-card={annotation.id}
@@ -417,7 +416,7 @@ export function ReaderAnnotationPanel({
                 <button
                   className={cn(
                     "min-w-0 flex-1 rounded-[var(--radius-sm)] text-left",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "neutral" }),
                   )}
                   onClick={() => onSelect(annotation.id)}
                   type="button"
@@ -785,6 +784,7 @@ export function ReaderAnnotationPanel({
                     <button
                       className="sr-only"
                       disabled={!replyDraft.trim() || Boolean(replyBusyId)}
+                      tabIndex={-1}
                       type="submit"
                     >
                       {annotation.mode === "highlight"
@@ -959,6 +959,7 @@ export type ReaderContextPanelProps = {
   onTurnContextClear: () => void;
   setReasoningLevel: (level: ReasoningLevel) => void;
   title: string;
+  insightsPanel?: React.ReactNode;
   translationPanel: React.ReactNode;
 };
 
@@ -1007,6 +1008,7 @@ export function ReaderContextPanel({
   onTurnContextClear,
   setReasoningLevel,
   title,
+  insightsPanel,
   translationPanel,
 }: ReaderContextPanelProps) {
   const t = useTranslations("Reader");
@@ -1031,11 +1033,19 @@ export function ReaderContextPanel({
       )}
     >
       <div className="border-line flex h-14 shrink-0 items-center gap-1 border-b px-3">
-        {(["ask", "annotations", "translation", "details"] as const).map(
-          (item) => (
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain">
+          {(
+            [
+              "ask",
+              "annotations",
+              "translation",
+              "insights",
+              "details",
+            ] as const
+          ).map((item) => (
             <Button
               className={cn(
-                "h-9 min-h-9 px-2",
+                "h-9 min-h-9 shrink-0 px-2",
                 activePanel === item && "bg-hover",
               )}
               key={item}
@@ -1047,11 +1057,11 @@ export function ReaderContextPanel({
             >
               {t(`panels.${item}`)}
             </Button>
-          ),
-        )}
+          ))}
+        </div>
         <IconButton
           autoFocus
-          className="ml-auto"
+          className="shrink-0"
           label={t("toolbar.closePanel")}
           onClick={onClose}
           variant="ghost"
@@ -1072,13 +1082,30 @@ export function ReaderContextPanel({
           >
             {activePanel === "translation" ? (
               translationPanel
+            ) : activePanel === "insights" ? (
+              (insightsPanel ?? (
+                <div className="grid h-full place-items-center p-5 text-center">
+                  <p className="text-secondary max-w-xs text-sm">
+                    {t("insights.unavailable")}
+                  </p>
+                </div>
+              ))
             ) : activePanel === "details" ? (
-              <div className="h-full overflow-y-auto" tabIndex={0}>
+              <div
+                className={cn(
+                  "h-full overflow-y-auto",
+                  focusSurfaceVariants({ intent: "scroll" }),
+                )}
+                tabIndex={0}
+              >
                 <ReaderDetailsPanel document={document} title={title} />
               </div>
             ) : activePanel === "annotations" ? (
               <div
-                className="h-full min-w-0 overflow-x-hidden overflow-y-auto"
+                className={cn(
+                  "h-full min-w-0 overflow-x-hidden overflow-y-auto",
+                  focusSurfaceVariants({ intent: "scroll" }),
+                )}
                 data-reader-annotations-scroll
                 tabIndex={0}
               >
@@ -1112,6 +1139,14 @@ export function ReaderContextPanel({
               <div className="flex h-full min-h-0 flex-col">
                 <ConversationSwitcher
                   activeId={conversationId}
+                  beforeNewAction={
+                    <ReasoningMenu
+                      className="lg:hidden"
+                      onChange={setReasoningLevel}
+                      value={reasoningLevel}
+                      variant="panelHeader"
+                    />
+                  }
                   conversations={conversations}
                   labels={{
                     empty: t("conversations.empty"),
@@ -1134,9 +1169,15 @@ export function ReaderContextPanel({
                 <ConversationView
                   layout="side-panel"
                   canSend={conversationSession.canSend}
+                  completionAnnouncementId={
+                    conversationSession.completionAnnouncementId
+                  }
                   composerForm={conversationSession.composerForm}
                   context={context}
-                  error={conversationSession.turnsQuery.isError}
+                  error={
+                    !conversationSession.submissionPending &&
+                    conversationSession.turnsQuery.isError
+                  }
                   emptyState={{
                     description: t("conversations.emptyDescription"),
                     title: t("conversations.emptyTitle"),
@@ -1144,7 +1185,8 @@ export function ReaderContextPanel({
                   liveTurn={conversationSession.liveTurn}
                   loading={
                     conversationSession.turnsQuery.isPending &&
-                    Boolean(conversationId)
+                    Boolean(conversationId) &&
+                    !conversationSession.submissionPending
                   }
                   onContextChange={onContextChange}
                   onDocumentSourceOpen={onSourceOpen}
@@ -1156,6 +1198,7 @@ export function ReaderContextPanel({
                   onEditMessage={(turn, message) =>
                     conversationSession.editMessage(turn, message)
                   }
+                  onLiveContentVisible={conversationSession.markContentVisible}
                   onSelectBranch={(turnId) =>
                     void conversationSession.selectBranch(turnId)
                   }
@@ -1172,6 +1215,7 @@ export function ReaderContextPanel({
                   readOnlyReason={
                     conversationSession.conversationQuery.data?.read_only_reason
                   }
+                  stopAvailable={conversationSession.stopAvailable}
                   submissionPending={conversationSession.submissionPending}
                   turnContextLabel={turnContextLabel}
                   turns={conversationSession.turnsQuery.data?.items ?? []}

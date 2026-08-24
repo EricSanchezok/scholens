@@ -61,7 +61,8 @@ Every release updates the runtime stack with digest-qualified images. It owns:
 - a private Cloud Map `A` record for worker callbacks, registered directly from each API
   task's `awsvpc` ENI; the ECS service registry therefore carries only the registry ARN,
   while `/internal/v1` is never on the ALB;
-- an EventBridge Scheduler one-shot task for daily Zotero orchestration;
+- an EventBridge Scheduler one-shot task for hourly Server maintenance,
+  including independent Zotero orchestration and reading-detail retention;
 - migration and scheduler task definitions, autoscaling policies, alarms, logs, and the
   `SanchezCloud-Scholens` dashboard.
 
@@ -71,11 +72,11 @@ or cluster.
 
 ## Runtime boundaries
 
-| Image | Workloads | Notes |
-| --- | --- | --- |
-| `sanchezcloud-scholens-web` | canonical `web/` Next.js standalone server | Public values are baked at build time; browser source maps are removed from the image and stored privately. |
-| `sanchezcloud-scholens-api` | API, dedicated Conversation worker, and one-off product migration | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process. |
-| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. |
+| Image                        | Workloads                                                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sanchezcloud-scholens-web`  | canonical `web/` Next.js standalone server                                 | Public values are baked at build time; browser source maps are removed from the image and stored privately.                                                                                                                                                                                                                                                                             |
+| `sanchezcloud-scholens-api`  | API, dedicated Conversation worker, and one-off product migration          | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process.                                                                                          |
+| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot hourly maintenance scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. The scheduler independently attempts Zotero orchestration and drains Server-owned reading-detail retention batches; either failure makes the task fail after both are attempted.                                                                                |
 
 The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its
 locked dependencies on the digest-pinned Debian Python image because PyMuPDF publishes
@@ -122,7 +123,8 @@ first occurrence because healthy ingestion does not use this recovery path.
 The Web service accepts bounded, same-origin anonymous performance events at
 `/__telemetry/web-performance`. It writes low-cardinality `web_performance` JSON to the
 Web log group without user IDs, content, query strings, raw URLs, or client IPs. The
-production dashboard owns Logs Insights views for navigation and Core Web Vitals p75/p95,
+production dashboard owns p75/p95 views for navigation, Core Web Vitals,
+Conversation feedback/stream milestones, durable acceptance, and worker claim age,
 split by route group, device class, and `CN`/`non-CN`; Cloudflare colo remains a diagnostic
 log field rather than a metric dimension.
 
@@ -154,7 +156,8 @@ CloudFormation from rolling back a failed resource create.
 KMS keys, buckets, secrets, repositories, queues, schedules, topics, log groups, alarms,
 dashboards, ALB/WAF resources, and runtime task families use Scholens ARNs or product/stack
 tags. The runtime role's EventBridge Scheduler lifecycle is bound to the single declared
-`sanchezcloud-scholens-zotero-sync` schedule. `Resource: "*"` remains only where the AWS
+`sanchezcloud-scholens-zotero-sync` schedule; its retained resource name is historical,
+while the task now runs both hourly Server-maintenance duties. `Resource: "*"` remains only where the AWS
 authorization model requires it or where a create operation has no resource ARN yet:
 service/resource discovery (`Describe*`, selected `List*`, Cloud Map reads), KMS `CreateKey`
 and `ListAliases`, Secrets Manager
@@ -217,6 +220,14 @@ and must be at or above `minimum_compatible_application_revision`. An additive m
 therefore preserves application rollback, while a reviewed contract migration deliberately
 advances that floor after old application revisions can no longer run safely.
 
+When both the current and selected releases are enabled, runtime changes use a mandatory
+compatibility phase before the final switch. A forward deploy runs the candidate API and
+workers behind the previous Web image, waits for every ECS service, and checks both public
+health endpoints before deploying the candidate Web. A rollback reverses the order: the
+selected older Web is verified against the current API and workers before those services
+move back. This requires adjacent public contracts to remain bidirectionally compatible
+during a rollout; the workflow does not rely on simultaneous task replacement.
+
 ECS stability and public `/healthz` checks are necessary transport checks, not functional
 proof of the Redis, versioned-S3, or asynchronous ingestion paths. After every runtime
 change affecting those dependencies, an authenticated operator must:
@@ -230,7 +241,7 @@ change affecting those dependencies, an authenticated operator must:
 5. confirm there are no new Redis, S3, target-5xx, or diagnostic-writer failures.
 
 If a candidate fails ECS stabilization or the public health checks, use the automated
-immutable recovery path. If functional verification exposes a data-integrity or security
+exact-runtime recovery path. If functional verification exposes a data-integrity or security
 regression, disable the application and patch forward; do not treat a known functionally
 broken prior release as the completed recovery.
 
@@ -473,12 +484,12 @@ allows only the `main` branch and must not allow tags, arbitrary branches, or an
 `infrastructure-production` require distinct reviewer rules; keep `image-publish`
 restricted to `main` even if it does not require a human approval.
 
-| Environment | Variables |
-| --- | --- |
-| `image-publish` | `AWS_REGION`, `AWS_PUBLISH_ROLE_ARN`, `IDENTITY_READER_APP_ID`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL` |
-| `database-production` | `AWS_REGION`, `AWS_DATABASE_ROLE_ARN` |
-| `production` | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID` |
-| `infrastructure-production` | `AWS_REGION`, `AWS_INFRASTRUCTURE_ROLE_ARN`, `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN`, `AWS_GITHUB_OIDC_PROVIDER_ARN`, `PRODUCTION_DOMAIN`, `ALERT_EMAIL` |
+| Environment                 | Variables                                                                                                                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image-publish`             | `AWS_REGION`, `AWS_PUBLISH_ROLE_ARN`, `IDENTITY_READER_APP_ID`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`                                                                                         |
+| `database-production`       | `AWS_REGION`, `AWS_DATABASE_ROLE_ARN`                                                                                                                                                              |
+| `production`                | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID` |
+| `infrastructure-production` | `AWS_REGION`, `AWS_INFRASTRUCTURE_ROLE_ARN`, `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN`, `AWS_GITHUB_OIDC_PROVIDER_ARN`, `PRODUCTION_DOMAIN`, `ALERT_EMAIL`                                          |
 
 `IDENTITY_READER_PRIVATE_KEY` is the only repository dependency-reader secret. AWS access
 uses OIDC; there are no long-lived AWS access keys in GitHub.
@@ -584,7 +595,8 @@ stack.
    billing usage, private entitlement grants, Zotero, source-map, alarm, and
    autoscaling paths. Checkout, subscription mutation, Stripe webhook, and
    PostHog remain intentionally absent from the current production release.
-9. Enable the scheduler only after the one-shot job and maintenance queue are verified.
+9. Enable the scheduler only after its independent Zotero and reading-detail-retention
+   calls and the maintenance queue are verified.
 
 ## Subsequent releases and migrations
 
@@ -630,11 +642,13 @@ repaired by a forward revision or an explicitly approved database recovery opera
   `sslmode=verify-full`. Before adopting a production SLA, the platform owner must review
   capacity and upgrade it to Multi-AZ; public accessibility must also receive a separate
   platform security review.
-- Workers scale on SQS backlog per running task. The on-demand Conversation service scales
-  1–6 with concurrency one, uses a 60-minute queue visibility timeout, and protects its ECS
-  task while generation is active so browser detachment and ordinary deployments do not
-  terminate accepted work. Jobs workers retain their 45-minute visibility and use
-  Fargate Spot only for scale-out. Scale-in is deliberately slower than scale-out.
+- Workers scale on SQS backlog per running task. The on-demand Conversation service keeps
+  two tasks warm, scales 2–6 with concurrency one, and targets no more than 0.25 visible
+  messages per running task. It uses a 60-minute queue visibility timeout and protects its
+  ECS task while generation is active so browser detachment and ordinary deployments do
+  not terminate accepted work. Scale-out has a 30-second cooldown; scale-in waits 15
+  minutes. Jobs workers retain their 45-minute visibility and use Fargate Spot only for
+  scale-out.
 - Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency
   failures, shared-avatar read failures, diagnostic snapshot write failures, and unhealthy
   target alarms publish to the Scholens SNS topic. The dependency and diagnostic alarms use the
@@ -642,9 +656,20 @@ repaired by a forward revision or an explicitly approved database recovery opera
   minutes; the API target alarm fires at five responses in five minutes. Production
   application exporters send Counter and Histogram instruments with delta temporality so
   CloudWatch `Sum` evaluates each window rather than a process-lifetime cumulative value.
+  The interactive Conversation queue alarm treats an oldest visible message of 15 seconds
+  as a latency incident and evaluates the next available one-minute SQS metric immediately;
+  the 60-second AWS/SQS publication period is the detection floor, not the tolerated queue
+  age. Server OpenTelemetry histograms and browser Conversation RUM provide the finer-grained
+  accept, publish, claim, and first-content phase breakdown; the deployment does not invent
+  a higher-resolution SQS metric contract.
 - ECS services use deployment circuit-breaker rollback. A failed database task does not
-  change application services. A candidate that fails ECS stabilization or an external
-  smoke check enters automatic recovery and remains a failed release after recovery.
+  change application services. A candidate that fails deployment, ECS stabilization, or an
+  external smoke check enters automatic recovery and remains a failed release after
+  recovery. If a forward release reached its final Web phase, recovery retains the already
+  compatibility-tested candidate API and workers while restoring the previous Web image;
+  this keeps already-loaded candidate browser tabs valid. A compatibility-phase failure or
+  rollback failure restores the exact previous template parameters and image set, including
+  a prior compatibility state that spans two immutable manifests.
 - If the first disabled runtime create leaves `CREATE_FAILED`, `ROLLBACK_COMPLETE`, or
   another incomplete-create status, the release workflow refuses to treat it as a prior
   deployment. An administrator must inspect the stack events and manually delete that

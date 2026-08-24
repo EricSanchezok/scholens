@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
+import { isSearchQuery, normalizeSearchQuery } from "@/lib/search/query";
 import { conversationKeys, type ConversationListFilters } from "./keys";
 
 export const conversationQueries = {
@@ -83,17 +84,18 @@ export const conversationQueries = {
       },
       getNextPageParam: (page) => page.next_cursor ?? undefined,
     }),
-  infiniteSearch: (query: string) =>
-    infiniteQueryOptions({
-      enabled: query.trim().length >= 2,
+  infiniteSearch: (query: string) => {
+    const normalizedQuery = normalizeSearchQuery(query);
+    return infiniteQueryOptions({
+      enabled: isSearchQuery(normalizedQuery),
       initialPageParam: undefined as string | undefined,
-      queryKey: conversationKeys.search(query),
+      queryKey: conversationKeys.search(normalizedQuery),
       queryFn: async ({ pageParam, signal }) => {
         const { data } = await apiClient.POST("/api/v1/search/conversations", {
           body: {
             cursor: pageParam,
             limit: 30,
-            query: query.trim(),
+            query: normalizedQuery,
           },
           signal,
         });
@@ -101,7 +103,8 @@ export const conversationQueries = {
         return data;
       },
       getNextPageParam: (page) => page.next_cursor ?? undefined,
-    }),
+    });
+  },
   detail: (conversationId: string) =>
     queryOptions({
       queryKey: conversationKeys.detail(conversationId),

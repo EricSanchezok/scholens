@@ -93,6 +93,7 @@ class DocumentUpdate(BaseModel):
     processing_job_id: UUID | None = None
     gc_after: datetime | None = None
     page_offset_map: dict[int, list[int]] | None = None
+    page_count: int | None = Field(default=None, ge=1, le=10_000)
     doi: str | None = None
     journal: str | None = None
     publisher: str | None = None

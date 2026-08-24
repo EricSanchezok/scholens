@@ -11,7 +11,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  keyboardFocusRing,
+  focusSurfaceVariants,
 } from "@/components/ui";
 import { useTheme } from "@/design-system/theme";
 import {
@@ -24,6 +24,7 @@ import {
   useMotionPreference,
 } from "@/design-system/motion/motion-provider";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
+import { ReadingActivityPreferencesSettings } from "@/features/research-activity";
 import { cn } from "@/lib/utilities/cn";
 import { SettingsPanelHeader } from "./settings-layout";
 
@@ -109,7 +110,7 @@ export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
                   aria-pressed={ready && theme === option}
                   className={cn(
                     "motion-control hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left sm:p-2",
-                    keyboardFocusRing,
+                    focusSurfaceVariants({ intent: "selection" }),
                     theme === option && "bg-pressed",
                   )}
                   key={option}
@@ -143,7 +144,7 @@ export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
                 aria-pressed={ready && colorSchemePreference === option}
                 className={cn(
                   "motion-control hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left sm:p-2",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "selection" }),
                   colorSchemePreference === option && "bg-pressed",
                 )}
                 key={option}
@@ -176,7 +177,7 @@ export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
                 aria-pressed={motionPreference === option}
                 className={cn(
                   "motion-control border-line-subtle hover:bg-hover rounded-[var(--radius-lg)] border px-3 py-3 text-left",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "selection" }),
                   motionPreference === option && "bg-pressed border-line",
                 )}
                 key={option}
@@ -214,6 +215,10 @@ export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
             </Select>
           </Field>
         </section>
+
+        <div className="border-line-subtle mt-8 border-t pt-7">
+          <ReadingActivityPreferencesSettings />
+        </div>
       </div>
     </div>
   );

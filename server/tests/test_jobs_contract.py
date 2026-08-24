@@ -43,6 +43,19 @@ def test_pdf_jobs_contract_accepts_complete_degraded_result() -> None:
     assert payload.result.parser_warning_code == "text_only_fallback"
 
 
+def test_pdf_jobs_contract_uses_authoritative_physical_page_count() -> None:
+    payload = _successful_result()
+    payload["page_offset_map"] = {1: [0, 5], 3: [5, 10]}
+    payload["page_count"] = 4
+
+    result = PDFProcessingResult.model_validate(payload)
+
+    assert result.page_count == 4
+    invalid = {**payload, "page_count": 2}
+    with pytest.raises(ValidationError, match="physical PDF page count"):
+        PDFProcessingResult.model_validate(invalid)
+
+
 def test_pdf_jobs_contract_defensively_downgrades_unicode_replacement() -> None:
     result = _successful_result()
     result.update(

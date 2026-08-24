@@ -10,6 +10,10 @@ import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { useInstallExperience } from "@/features/install-experience";
 import {
+  HomeActivitySnapshot,
+  researchActivityQueries,
+} from "@/features/research-activity";
+import {
   ConversationView,
   ReasoningMenu,
   ResearchComposer,
@@ -55,6 +59,10 @@ export function HomeWorkspace({
 
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
+  const activityQuery = useQuery(researchActivityQueries.personal("30d"));
+  const activityPreferencesQuery = useQuery(
+    researchActivityQueries.preferences(),
+  );
   usePrimaryContentReady(papersQuery.isSuccess && projectsQuery.isSuccess);
   const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
@@ -72,7 +80,7 @@ export function HomeWorkspace({
       }));
       router.replace(`/?conversation=${conversationId}`, { scroll: false });
     },
-    onCreateError: () =>
+    onSubmissionError: () =>
       toast.notify({
         title: t("conversation.error"),
         description: t("conversation.retryHint"),
@@ -113,11 +121,12 @@ export function HomeWorkspace({
       form={conversation.composerForm}
       onContextChange={handleContextChange}
       onReasoningLevelChange={setReasoningLevel}
-      onStop={conversation.activeConversationId ? conversation.stop : undefined}
+      onStop={conversation.stop}
       onSubmit={conversation.sendMessage}
       papers={papers}
       projects={projects}
       reasoningLevel={reasoningLevel}
+      stopAvailable={conversation.stopAvailable}
       intent={conversation.activeConversationId ? "follow-up" : "new"}
       surface="workspace"
       unavailable={
@@ -158,17 +167,21 @@ export function HomeWorkspace({
           <ConversationView
             layout="workspace"
             canSend={conversation.canSend}
+            completionAnnouncementId={conversation.completionAnnouncementId}
             composerForm={conversation.composerForm}
             context={context}
             error={
-              conversation.conversationQuery.isError ||
-              conversation.turnsQuery.isError
+              !conversation.submissionPending &&
+              (conversation.conversationQuery.isError ||
+                conversation.turnsQuery.isError)
             }
             liveTurn={conversation.liveTurn}
             loading={
-              conversation.conversationQuery.isPending ||
-              conversation.turnsQuery.isPending
+              !conversation.submissionPending &&
+              (conversation.conversationQuery.isPending ||
+                conversation.turnsQuery.isPending)
             }
+            stopAvailable={conversation.stopAvailable}
             submissionPending={conversation.submissionPending}
             turns={conversation.turnsQuery.data?.items ?? []}
             onContextChange={handleContextChange}
@@ -181,6 +194,7 @@ export function HomeWorkspace({
             onEditMessage={(turn, message) =>
               conversation.editMessage(turn, message)
             }
+            onLiveContentVisible={conversation.markContentVisible}
             onSelectBranch={(turnId) => void conversation.selectBranch(turnId)}
             onSelectResponse={(turnId, responseId) =>
               void conversation.selectResponse(turnId, responseId)
@@ -203,6 +217,17 @@ export function HomeWorkspace({
           data-home-surface="dashboard"
         >
           <HomeDashboard
+            activity={
+              <HomeActivitySnapshot
+                error={activityQuery.isError}
+                insights={activityQuery.data}
+                loading={activityQuery.isPending}
+                onRetry={() => void activityQuery.refetch()}
+                recordingEnabled={
+                  activityPreferencesQuery.data?.recordingEnabled
+                }
+              />
+            }
             composerForm={conversation.composerForm}
             context={context}
             onContextChange={handleContextChange}

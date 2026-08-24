@@ -371,6 +371,7 @@ async def process_pdf_file(
             job_id=job_id,
             raw_content=document.markdown,
             page_offset_map=document.page_offset_map,
+            page_count=analysis.page_count,
             duration=(datetime.now(timezone.utc) - start_time).total_seconds(),
         )
     except ParserContentError as exc:

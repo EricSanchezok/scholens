@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 
+import {
+  expectLayeredKeyboardFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import type { ReaderSelection } from "./pdf-page";
 import { ReaderSelectionToolbar } from "./reader-selection-toolbar";
 
@@ -262,19 +267,68 @@ export const HighlightPalette: Story = {
       .getByRole("group", {
         name: "Highlight selection",
       })
-      .querySelectorAll("button");
+      .querySelectorAll<HTMLButtonElement>("button");
     await expect(swatches).toHaveLength(8);
+    const colorDiscs = [...swatches].map((swatch) =>
+      swatch.querySelector<HTMLElement>(":scope > span"),
+    );
+    await expect(colorDiscs.every(Boolean)).toBe(true);
     await expect(
-      new Set(
-        [...swatches].map((swatch) => getComputedStyle(swatch).backgroundColor),
-      ).size,
+      new Set(colorDiscs.map((disc) => getComputedStyle(disc!).backgroundColor))
+        .size,
     ).toBe(8);
+
+    const yellow = swatches[0]!;
+    const yellowDisc = colorDiscs[0]!;
+    const restingButton = readFocusVisual(yellow);
+    const restingDisc = readFocusVisual(yellowDisc);
+    await focusWithKeyboard(yellow);
+    await expectLayeredKeyboardFocus({
+      element: yellow,
+      resting: restingButton,
+    });
+    await expect(readFocusVisual(yellowDisc).backgroundColor).toBe(
+      restingDisc.backgroundColor,
+    );
+    await expect(readFocusVisual(yellowDisc).boxShadow).toBe(
+      restingDisc.boxShadow,
+    );
   },
 };
 
 export const HighlightPaletteDark: Story = {
   globals: { appearance: "dark" },
   play: HighlightPalette.play,
+};
+
+export const HighlightPaletteSmallMobile: Story = {
+  globals: { viewport: { value: "smallMobile" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Highlight selection" }),
+    );
+    const palette = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-highlight-palette]",
+    );
+    const boundary = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-story-boundary]",
+    );
+    await expect(palette).not.toBeNull();
+    await expect(boundary).not.toBeNull();
+    await waitFor(() => {
+      const boundaryRect = boundary!.getBoundingClientRect();
+      const paletteRect = palette!.getBoundingClientRect();
+      expect(paletteRect.left).toBeGreaterThanOrEqual(boundaryRect.left);
+      expect(paletteRect.right).toBeLessThanOrEqual(boundaryRect.right);
+      expect(palette!.querySelectorAll("button")).toHaveLength(8);
+      for (const swatch of palette!.querySelectorAll("button")) {
+        const rect = swatch.getBoundingClientRect();
+        expect(rect.left).toBeGreaterThanOrEqual(boundaryRect.left);
+        expect(rect.right).toBeLessThanOrEqual(boundaryRect.right);
+      }
+    });
+  },
 };
 
 export const ProjectAudience: Story = {

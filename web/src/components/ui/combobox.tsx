@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
 import { Button } from "./button";
+import { focusSurfaceVariants } from "./focus";
 import { Input } from "./input";
 import { Popover, PopoverContent, PopoverTrigger } from "./tooltip-popover";
 
@@ -67,8 +68,11 @@ export function Combobox({
               <button
                 className={cn(
                   "hover:bg-hover flex min-h-9 w-full items-center rounded-[var(--radius-md)] px-2 text-left text-sm",
+                  focusSurfaceVariants({ intent: "selection" }),
                   option.value === value && "bg-subtle",
                 )}
+                aria-pressed={option.value === value}
+                data-state={option.value === value ? "active" : undefined}
                 key={option.value}
                 onClick={() => onValueChange?.(option.value)}
                 type="button"

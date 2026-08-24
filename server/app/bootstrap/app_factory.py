@@ -65,6 +65,13 @@ from app.transport.http.public_v1.paper_list_preferences import (
     paper_list_preferences_router,
 )
 from app.transport.http.public_v1.reflows import paper_reflows_router
+from app.transport.http.public_v1.reading_activity import (
+    reading_activity_me_router,
+    reading_activity_papers_router,
+    reading_activity_preferences_router,
+    reading_activity_projects_router,
+    reading_activity_sessions_router,
+)
 from app.modules.identity.infrastructure.sanchezcloud_identity import (
     sanchezcloud_identity_router,
     identity_user_router,
@@ -109,6 +116,7 @@ from app.shared.domain import AppError
 from app.shared.application import OperationContextFactory
 from app.tooling.paper_content_paging import PaperContentSnapshotCache
 from app.shared.infrastructure.email_settings import email_settings
+from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
 from app.transport.http.errors import (
     app_error_handler,
     http_error_handler,
@@ -148,11 +156,13 @@ def _public_router() -> APIRouter:
     router.include_router(library_project_papers_router, prefix="/library")
     router.include_router(library_tags_router, prefix="/library")
     router.include_router(document_router, prefix="/papers")
+    router.include_router(reading_activity_papers_router, prefix="/papers")
     router.include_router(paper_translations_router, prefix="/papers")
     router.include_router(paper_reflows_router, prefix="/papers")
     router.include_router(paper_projects_router, prefix="/papers")
     router.include_router(public_document_router, prefix="/shares")
     router.include_router(projects_router, prefix="/projects")
+    router.include_router(reading_activity_projects_router, prefix="/projects")
     router.include_router(project_papers_router, prefix="/projects")
     router.include_router(projects_invitation_router)
     router.include_router(paper_search_router, prefix="/discovery/papers")
@@ -174,6 +184,9 @@ def _public_router() -> APIRouter:
     router.include_router(onboarding_router, prefix="/me/onboarding")
     router.include_router(translation_preferences_router, prefix="/me")
     router.include_router(paper_list_preferences_router, prefix="/me")
+    router.include_router(reading_activity_preferences_router, prefix="/me")
+    router.include_router(reading_activity_me_router, prefix="/me")
+    router.include_router(reading_activity_sessions_router, prefix="/reading-sessions")
     router.include_router(
         access_keys_router,
         prefix="/me/access-keys",
@@ -227,6 +240,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     )
     operation_context_factory = OperationContextFactory()
     application.state.operation_context_factory = operation_context_factory
+    application.state.job_dispatcher_wakeup = JobDispatcherWakeup()
     executor = create_application_executor(runtime_settings)
     application.state.application_executor = executor
     connector_tool_resolver = create_connector_tool_resolver(
@@ -287,6 +301,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         operation_context_factory,
         application.state.diagnostic_snapshot_recorder,
         runtime_settings.resolved_cache_url,
+        application.state.job_dispatcher_wakeup,
     )
     application.state.onboarding_finisher = create_onboarding_finisher()
     application.state.billing_usage_workflow = create_billing_usage_workflow(
@@ -330,6 +345,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             "X-Correlation-ID",
             "X-Request-ID",
             "Preference-Applied",
+            "X-Next-Cursor",
         ],
         allow_credentials=True,
         max_age=600,

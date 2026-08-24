@@ -1,4 +1,4 @@
-# 0040 — Versioned migration for bounded MCP reads
+# 0042 — Versioned migration for bounded MCP reads
 
 Status: Accepted
 Date: 2026-08-24
@@ -6,7 +6,7 @@ Owners: Scholens
 
 ## Problem
 
-ADR 0038 requires bounded public projections, but applying those projections by
+ADR 0040 requires bounded public projections, but applying those projections by
 changing an existing tool's input or output schema would break deployed MCP
 clients. Six established reads already have public contracts: `get_paper`,
 `get_library_paper`, `get_annotation_thread`, `get_research_output`,

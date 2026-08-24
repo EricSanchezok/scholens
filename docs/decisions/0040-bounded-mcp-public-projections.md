@@ -1,4 +1,4 @@
-# 0038 — Bounded MCP public projections and lossless continuation
+# 0040 — Bounded MCP public projections and lossless continuation
 
 Status: Accepted
 Date: 2026-08-24

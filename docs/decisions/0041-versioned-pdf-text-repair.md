@@ -1,4 +1,4 @@
-# 0039 — Versioned PDF text repair without destructive re-ingestion
+# 0041 — Versioned PDF text repair without destructive re-ingestion
 
 Status: Accepted
 Date: 2026-08-24

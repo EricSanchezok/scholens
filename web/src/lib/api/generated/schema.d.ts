@@ -367,6 +367,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Conversation */
+        post: operations["start_conversation_api_v1_conversations__conversation_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
         parameters: {
             query?: never;
@@ -1114,6 +1131,92 @@ export interface paths {
         patch: operations["_update_profile_api_v1_me_profile_patch"];
         trace?: never;
     };
+    "/api/v1/me/reading-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete All Reading Activity */
+        delete: operations["delete_all_reading_activity_api_v1_me_reading_activity_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reading-activity-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reading Activity Preferences */
+        get: operations["get_reading_activity_preferences_api_v1_me_reading_activity_preferences_get"];
+        /** Update Reading Activity Preferences */
+        put: operations["update_reading_activity_preferences_api_v1_me_reading_activity_preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reading-activity/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Reading Activity */
+        get: operations["export_reading_activity_api_v1_me_reading_activity_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reading-activity/paper-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get Reading Paper Summaries */
+        post: operations["get_reading_paper_summaries_api_v1_me_reading_activity_paper_summaries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/research-insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Research Insights */
+        get: operations["get_research_insights_api_v1_me_research_insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/translation-preferences": {
         parameters: {
             query?: never;
@@ -1303,6 +1406,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Paper Insights */
+        get: operations["get_paper_insights_api_v1_papers__document_id__insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/projects": {
         parameters: {
             query?: never;
@@ -1314,6 +1434,40 @@ export interface paths {
         get: operations["get_projects_from_document_id_api_v1_papers__document_id__projects_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reading-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Paper Reading Activity */
+        delete: operations["delete_paper_reading_activity_api_v1_papers__document_id__reading_activity_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reading-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Reading Session */
+        post: operations["start_reading_session_api_v1_papers__document_id__reading_sessions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1476,6 +1630,23 @@ export interface paths {
         patch: operations["update_project_api_v1_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Activity */
+        get: operations["get_project_activity_api_v1_projects__project_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/audio-overviews": {
         parameters: {
             query?: never;
@@ -1504,6 +1675,23 @@ export interface paths {
         put?: never;
         /** Create Project Data Table */
         post: operations["create_project_data_table_api_v1_projects__project_id__data_tables_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Insights */
+        get: operations["get_project_insights_api_v1_projects__project_id__insights_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1574,6 +1762,23 @@ export interface paths {
         /** Leave Project */
         post: operations["leave_project_api_v1_projects__project_id__leave_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/me/reading-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Project Reading Contribution */
+        delete: operations["delete_project_reading_contribution_api_v1_projects__project_id__me_reading_activity_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1729,6 +1934,24 @@ export interface paths {
         /** Transfer Project */
         post: operations["transfer_project_api_v1_projects__project_id__transfer_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reading-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Reading Session */
+        put: operations["update_reading_session_api_v1_reading_sessions__session_id__put"];
+        post?: never;
+        /** Delete Reading Session */
+        delete: operations["delete_reading_session_api_v1_reading_sessions__session_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2826,6 +3049,19 @@ export interface components {
             /** Snippet */
             snippet?: string | null;
         };
+        /**
+         * ConversationStartRequest
+         * @description Atomically create a Conversation and accept its first turn.
+         *
+         *     Replay identity uses the client IDs, owner, originally accepted scope,
+         *     immutable Turn fields, and the Turn's paper-context snapshot. Mutable Conversation
+         *     title, current scope, current context, and tool permissions are not replay-identity
+         *     fields.
+         */
+        ConversationStartRequest: {
+            conversation: components["schemas"]["ConversationCreateRequest"];
+            turn: components["schemas"]["ConversationTurnCreateRequest"];
+        };
         /** ConversationStreamActivityEvent */
         ConversationStreamActivityEvent: {
             activity: components["schemas"]["ConversationActivity"];
@@ -2992,7 +3228,7 @@ export interface components {
         };
         /**
          * ConversationStreamEventSchema
-         * @description Compatible schema for the existing inline SSE response.
+         * @description Compatible schema for the original direct generation response.
          */
         ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
@@ -4165,6 +4401,33 @@ export interface components {
              */
             source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"] | components["schemas"]["UploadPaperSource"];
         };
+        /** PaperInsightsResponse */
+        PaperInsightsResponse: {
+            /** Activity History Complete Since */
+            activity_history_complete_since: string | null;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Metric Definition Version
+             * @default active-reading-v1
+             */
+            metric_definition_version: string;
+            /** Page Count */
+            page_count?: number | null;
+            /** Pages */
+            pages: components["schemas"]["ReadingPageInsightResponse"][];
+            range: components["schemas"]["ReadingInsightsRange"];
+            /** Reading Data Since */
+            reading_data_since: string | null;
+            summary: components["schemas"]["ReadingSummaryResponse"];
+            /** Time Zone */
+            time_zone: string;
+            /** Trend */
+            trend: components["schemas"]["ReadingTrendPointResponse"][];
+        };
         /**
          * PaperListColumn
          * @enum {string}
@@ -4585,6 +4848,40 @@ export interface components {
             /** Type */
             type?: string | null;
         };
+        /** ProjectActivityItemResponse */
+        ProjectActivityItemResponse: {
+            /** Actor Display Name */
+            actor_display_name?: string | null;
+            /** Document Id */
+            document_id?: string | null;
+            /** Document Title */
+            document_title?: string | null;
+            /** Id */
+            id: string;
+            kind: components["schemas"]["ProjectActivityKind"];
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /**
+         * ProjectActivityKind
+         * @enum {string}
+         */
+        ProjectActivityKind: "paper_added" | "member_joined" | "annotation_created" | "output_created" | "discussion_message_posted" | "discussion_resolved";
+        /** ProjectActivityResponse */
+        ProjectActivityResponse: {
+            /** Items */
+            items: components["schemas"]["ProjectActivityItemResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectCapabilitiesResponse */
         ProjectCapabilitiesResponse: {
             /**
@@ -4656,6 +4953,34 @@ export interface components {
             description?: string | null;
             /** Title */
             title: string;
+        };
+        /** ProjectInsightsResponse */
+        ProjectInsightsResponse: {
+            /** Activity History Complete Since */
+            activity_history_complete_since: string | null;
+            /**
+             * Metric Definition Version
+             * @default active-reading-v1
+             */
+            metric_definition_version: string;
+            mine: components["schemas"]["ProjectMineInsightsResponse"];
+            /** Papers */
+            papers: components["schemas"]["ProjectPaperInsightResponse"][];
+            /** Papers Total Count */
+            papers_total_count: number;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            range: components["schemas"]["ReadingInsightsRange"];
+            /** Reading Data Since */
+            reading_data_since: string | null;
+            team: components["schemas"]["ProjectTeamInsightsResponse"];
+            /** Time Zone */
+            time_zone: string;
+            /** Trend */
+            trend: components["schemas"]["ProjectReadingTrendPointResponse"][];
         };
         /** ProjectInvitationAcceptedResponse */
         ProjectInvitationAcceptedResponse: {
@@ -4756,6 +5081,16 @@ export interface components {
             kind: string;
             permissions: components["schemas"]["ProjectPermissionSet"];
         };
+        /** ProjectMineInsightsResponse */
+        ProjectMineInsightsResponse: {
+            /** Annotation Count */
+            annotation_count: number;
+            /** Papers With Activity */
+            papers_with_activity: number;
+            /** Private Conversation Count */
+            private_conversation_count: number;
+            reading: components["schemas"]["ReadingSummaryResponse"];
+        };
         /** ProjectOutputListResponse */
         ProjectOutputListResponse: {
             /** Items */
@@ -4794,6 +5129,26 @@ export interface components {
         ProjectPaperFileUrlResponse: {
             /** File Url */
             file_url: string;
+        };
+        /** ProjectPaperInsightResponse */
+        ProjectPaperInsightResponse: {
+            /** Discussion Message Count */
+            discussion_message_count: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Last Activity At */
+            last_activity_at: string | null;
+            /** My Active Ms */
+            my_active_ms: number;
+            /** My Coverage Percent */
+            my_coverage_percent?: number | null;
+            /** Shared Annotation Count */
+            shared_annotation_count: number;
+            /** Title */
+            title: string | null;
         };
         /** ProjectPaperListResponse */
         ProjectPaperListResponse: {
@@ -4911,6 +5266,20 @@ export interface components {
              */
             manage_papers: boolean;
         };
+        /** ProjectReadingTrendPointResponse */
+        ProjectReadingTrendPointResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** My Active Ms */
+            my_active_ms: number;
+            /** Shared Activity Count */
+            shared_activity_count: number;
+            /** Team Active Ms */
+            team_active_ms?: number | null;
+        };
         /** ProjectResearchAudience */
         ProjectResearchAudience: {
             /**
@@ -4980,6 +5349,31 @@ export interface components {
          * @enum {string}
          */
         ProjectSort: "activity_desc" | "title_asc" | "papers_desc";
+        /** ProjectTeamInsightsResponse */
+        ProjectTeamInsightsResponse: {
+            /** Active Collaborators */
+            active_collaborators: number;
+            /** Active Ms */
+            active_ms?: number | null;
+            /** Anonymous Reading Available */
+            anonymous_reading_available: boolean;
+            /** Discussion Message Count */
+            discussion_message_count: number;
+            /** Outputs */
+            outputs: number;
+            /** Papers Added */
+            papers_added: number;
+            /** Papers With Activity */
+            papers_with_activity?: number | null;
+            /** Resolved Discussions */
+            resolved_discussions: number;
+            /** Shared Annotations */
+            shared_annotations: number;
+            /** Substantive Pages */
+            substantive_pages?: number | null;
+            /** Visible Ms */
+            visible_ms?: number | null;
+        };
         /** ProjectTransferRequest */
         ProjectTransferRequest: {
             /** New Owner Id */
@@ -5006,6 +5400,254 @@ export interface components {
             file_url: string;
             owner: components["schemas"]["PublicPaperOwnerResponse"];
         };
+        /** ReadingActivityExportRecordResponse */
+        ReadingActivityExportRecordResponse: {
+            /** Payload */
+            payload: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Record Type */
+            record_type: string;
+        };
+        /** ReadingActivityExportResponse */
+        ReadingActivityExportResponse: {
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Records */
+            records: components["schemas"]["ReadingActivityExportRecordResponse"][];
+        };
+        /** ReadingActivityPreferencesResponse */
+        ReadingActivityPreferencesResponse: {
+            /**
+             * Contribute Anonymous Project Aggregates
+             * @default true
+             */
+            contribute_anonymous_project_aggregates: boolean;
+            /**
+             * Recording Enabled
+             * @default true
+             */
+            recording_enabled: boolean;
+        };
+        /** ReadingActivityPreferencesUpdateRequest */
+        ReadingActivityPreferencesUpdateRequest: {
+            /** Contribute Anonymous Project Aggregates */
+            contribute_anonymous_project_aggregates: boolean;
+            /** Recording Enabled */
+            recording_enabled: boolean;
+        };
+        /**
+         * ReadingExportFormat
+         * @enum {string}
+         */
+        ReadingExportFormat: "json" | "csv";
+        /** ReadingHourSnapshotRequest */
+        ReadingHourSnapshotRequest: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Bucket Start
+             * Format: date-time
+             */
+            bucket_start: string;
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /**
+         * ReadingInsightsRange
+         * @enum {string}
+         */
+        ReadingInsightsRange: "7d" | "30d" | "90d" | "365d" | "all";
+        /** ReadingPageBucketResponse */
+        ReadingPageBucketResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /** End Page */
+            end_page: number;
+            /** Start Page */
+            start_page: number;
+        };
+        /** ReadingPageInsightResponse */
+        ReadingPageInsightResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Annotation Count
+             * @default 0
+             */
+            annotation_count: number;
+            /** Page Number */
+            page_number: number;
+            /** Vertical Segments Ms */
+            vertical_segments_ms: number[];
+            /** Visible Ms */
+            visible_ms: number;
+            /** Visit Count */
+            visit_count: number;
+        };
+        /** ReadingPageSnapshotRequest */
+        ReadingPageSnapshotRequest: {
+            /** Active Ms */
+            active_ms: number;
+            /** Page Number */
+            page_number: number;
+            /** Vertical Segments Ms */
+            vertical_segments_ms: number[];
+            /** Visible Ms */
+            visible_ms: number;
+            /** Visit Count */
+            visit_count: number;
+        };
+        /** ReadingPaperSummariesResponse */
+        ReadingPaperSummariesResponse: {
+            /** Items */
+            items: components["schemas"]["ReadingPaperSummaryItemResponse"][];
+        };
+        /** ReadingPaperSummaryItemResponse */
+        ReadingPaperSummaryItemResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /** Coverage Percent */
+            coverage_percent?: number | null;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Page Buckets */
+            page_buckets: components["schemas"]["ReadingPageBucketResponse"][];
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /** ReadingPaperSummaryRequest */
+        ReadingPaperSummaryRequest: {
+            /** Document Ids */
+            document_ids: string[];
+        };
+        /** ReadingSessionResponse */
+        ReadingSessionResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Ended At */
+            ended_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Metric Definition Version */
+            metric_definition_version: string;
+            /** Page Detail Available */
+            page_detail_available: boolean;
+            /** Project Contribution Enabled */
+            project_contribution_enabled: boolean;
+            /** Project Id */
+            project_id: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Time Zone */
+            time_zone: string;
+            view_mode: components["schemas"]["ReadingViewMode"];
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /** ReadingSessionSnapshotRequest */
+        ReadingSessionSnapshotRequest: {
+            /** Active Ms */
+            active_ms: number;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Hours */
+            hours: components["schemas"]["ReadingHourSnapshotRequest"][];
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Pages */
+            pages?: components["schemas"]["ReadingPageSnapshotRequest"][];
+            /** Revision */
+            revision: number;
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /** ReadingSessionStartRequest */
+        ReadingSessionStartRequest: {
+            /**
+             * Metric Definition Version
+             * @default active-reading-v1
+             */
+            metric_definition_version: string;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Time Zone */
+            time_zone: string;
+            view_mode: components["schemas"]["ReadingViewMode"];
+        };
+        /** ReadingSummaryResponse */
+        ReadingSummaryResponse: {
+            /** Active Days */
+            active_days: number;
+            /** Active Ms */
+            active_ms: number;
+            /** Coverage Percent */
+            coverage_percent?: number | null;
+            /** Session Count */
+            session_count: number;
+            /** Substantive Pages */
+            substantive_pages?: number | null;
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /** ReadingTrendPointResponse */
+        ReadingTrendPointResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Session Count */
+            session_count: number;
+            /** Visible Ms */
+            visible_ms: number;
+        };
+        /**
+         * ReadingViewMode
+         * @enum {string}
+         */
+        ReadingViewMode: "pdf" | "reflow";
         /**
          * ReasoningLevel
          * @enum {string}
@@ -5061,6 +5703,36 @@ export interface components {
             /** Id */
             id: number | null;
         };
+        /** ResearchInsightsResponse */
+        ResearchInsightsResponse: {
+            /** Activity History Complete Since */
+            activity_history_complete_since: string | null;
+            /** Annotation Count */
+            annotation_count: number;
+            /** Conversation Count */
+            conversation_count: number;
+            /**
+             * Metric Definition Version
+             * @default active-reading-v1
+             */
+            metric_definition_version: string;
+            /** Output Count */
+            output_count: number;
+            /** Papers With Activity */
+            papers_with_activity: number;
+            /** Projects */
+            projects: components["schemas"]["ResearchProjectBreakdownResponse"][];
+            range: components["schemas"]["ReadingInsightsRange"];
+            /** Reading Data Since */
+            reading_data_since: string | null;
+            summary: components["schemas"]["ReadingSummaryResponse"];
+            /** Time Zone */
+            time_zone: string;
+            /** Top Papers */
+            top_papers: components["schemas"]["ResearchPaperBreakdownResponse"][];
+            /** Trend */
+            trend: components["schemas"]["ReadingTrendPointResponse"][];
+        };
         /** ResearchItemCapabilities */
         ResearchItemCapabilities: {
             /** Delete */
@@ -5108,6 +5780,36 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ResearchPaperBreakdownResponse */
+        ResearchPaperBreakdownResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Last Read At */
+            last_read_at: string | null;
+            /** Session Count */
+            session_count: number;
+            /** Title */
+            title: string | null;
+        };
+        /** ResearchProjectBreakdownResponse */
+        ResearchProjectBreakdownResponse: {
+            /** Active Ms */
+            active_ms: number;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Session Count */
+            session_count: number;
+            /** Title */
+            title: string;
         };
         /** ResearchSearchComment */
         ResearchSearchComment: {
@@ -6741,6 +7443,53 @@ export interface operations {
             };
         };
     };
+    start_conversation_api_v1_conversations__conversation_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                prefer?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationStartRequest"];
+            };
+        };
+        responses: {
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
+                    "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
+                };
+            };
+            /** @description Durable generation accepted for background delivery. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put: {
         parameters: {
             query?: never;
@@ -6827,17 +7576,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6875,17 +7625,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -6923,17 +7674,18 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "application/vnd.scholens.conversation-events": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
                 };
             };
-            /** @description Successful Response */
+            /** @description Durable generation accepted for background delivery. */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -8619,6 +9371,177 @@ export interface operations {
             };
         };
     };
+    delete_all_reading_activity_api_v1_me_reading_activity_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_reading_activity_preferences_api_v1_me_reading_activity_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingActivityPreferencesResponse"];
+                };
+            };
+        };
+    };
+    update_reading_activity_preferences_api_v1_me_reading_activity_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingActivityPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingActivityPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_reading_activity_api_v1_me_reading_activity_export_get: {
+        parameters: {
+            query?: {
+                format?: components["schemas"]["ReadingExportFormat"];
+                cursor?: string | null;
+                limit?: number;
+                include_header?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JSON or CSV reading activity export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingActivityExportResponse"];
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reading_paper_summaries_api_v1_me_reading_activity_paper_summaries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingPaperSummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingPaperSummariesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_research_insights_api_v1_me_research_insights_get: {
+        parameters: {
+            query?: {
+                range?: components["schemas"]["ReadingInsightsRange"];
+                time_zone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchInsightsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_translation_preferences_api_v1_me_translation_preferences_get: {
         parameters: {
             query?: never;
@@ -9043,6 +9966,41 @@ export interface operations {
             };
         };
     };
+    get_paper_insights_api_v1_papers__document_id__insights_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                range?: components["schemas"]["ReadingInsightsRange"];
+                time_zone?: string;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperInsightsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_projects_from_document_id_api_v1_papers__document_id__projects_get: {
         parameters: {
             query?: never;
@@ -9061,6 +10019,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_paper_reading_activity_api_v1_papers__document_id__reading_activity_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_reading_session_api_v1_papers__document_id__reading_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingSessionStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingSessionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9461,6 +10483,40 @@ export interface operations {
             };
         };
     };
+    get_project_activity_api_v1_projects__project_id__activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_project_audio_overview_api_v1_projects__project_id__audio_overviews_post: {
         parameters: {
             query?: never;
@@ -9522,6 +10578,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_insights_api_v1_projects__project_id__insights_get: {
+        parameters: {
+            query?: {
+                range?: components["schemas"]["ReadingInsightsRange"];
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInsightsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9664,6 +10753,35 @@ export interface operations {
         };
     };
     leave_project_api_v1_projects__project_id__leave_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_reading_contribution_api_v1_projects__project_id__me_reading_activity_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -10051,6 +11169,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_reading_session_api_v1_reading_sessions__session_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingSessionSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_reading_session_api_v1_reading_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

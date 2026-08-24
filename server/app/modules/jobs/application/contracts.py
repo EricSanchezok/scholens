@@ -333,6 +333,7 @@ class PDFProcessingResult(BaseModel):
     job_id: str = Field(min_length=1, max_length=128)
     raw_content: str | None = None
     page_offset_map: dict[int, list[int]] | None = None
+    page_count: int | None = Field(default=None, ge=1, le=10_000)
     metadata: PaperMetadataExtraction | None = None
     s3_object_key: str | None = Field(default=None, max_length=1_024)
     preview_s3_key: str | None = Field(default=None, max_length=1_024)
@@ -383,6 +384,12 @@ class PDFProcessingResult(BaseModel):
                 self.parser_warning_code = UNICODE_REPLACEMENT_WARNING_CODE
         elif not self.error:
             raise ValueError("failed PDF result requires an error code")
+        if (
+            self.page_count is not None
+            and self.page_offset_map
+            and max(self.page_offset_map) > self.page_count
+        ):
+            raise ValueError("page offsets exceed the physical PDF page count")
         return self
 
 

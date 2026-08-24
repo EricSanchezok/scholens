@@ -5,23 +5,33 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { cn } from "@/lib/utilities/cn";
-import { keyboardFocusRing } from "./focus";
+import { focusSurfaceVariants } from "./focus";
 
 export const buttonVariants = cva(
-  `motion-control inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium ${keyboardFocusRing} disabled:pointer-events-none disabled:border-transparent disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait`,
+  "motion-control inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium disabled:pointer-events-none disabled:border-transparent disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait",
   {
     variants: {
       variant: {
-        primary:
+        primary: cn(
           "border-primary bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-hover disabled:bg-[var(--color-action-disabled-bg)]",
-        secondary:
+          focusSurfaceVariants({ intent: "primary" }),
+        ),
+        secondary: cn(
           "border-line bg-surface text-foreground hover:bg-hover active:bg-pressed disabled:bg-[var(--color-action-disabled-bg)]",
-        ghost:
+          focusSurfaceVariants({ intent: "neutral" }),
+        ),
+        ghost: cn(
           "border-transparent bg-transparent text-foreground hover:bg-hover active:bg-pressed disabled:bg-transparent",
-        overflow:
+          focusSurfaceVariants({ intent: "neutral" }),
+        ),
+        overflow: cn(
           "border-transparent bg-transparent text-foreground hover:bg-pressed active:bg-pressed data-[state=open]:bg-pressed disabled:bg-transparent",
-        danger:
-          "border-[var(--color-danger-border)] bg-state-danger-bg text-danger hover:brightness-95 disabled:bg-[var(--color-action-disabled-bg)]",
+          focusSurfaceVariants({ intent: "neutral" }),
+        ),
+        danger: cn(
+          "border-[var(--color-danger-border)] bg-state-danger-bg text-danger disabled:bg-[var(--color-action-disabled-bg)]",
+          focusSurfaceVariants({ intent: "danger" }),
+        ),
       },
       size: {
         sm: "h-11 px-3 sm:h-9",

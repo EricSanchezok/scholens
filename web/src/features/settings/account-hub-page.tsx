@@ -7,7 +7,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
-import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants, IconButton } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import {
   AppearanceIcon,
@@ -21,6 +21,7 @@ import {
   NextIcon,
   RepositoryIcon,
   SettingsIcon,
+  UsageIcon,
 } from "@/design-system/icons/semantic-icons";
 import {
   CurrentUserAvatar,
@@ -68,7 +69,7 @@ function AccountHubRow({
 }) {
   const classes = cn(
     "hover:bg-hover active:bg-pressed flex min-h-16 w-full min-w-0 items-center gap-3 px-4 py-3 text-left",
-    keyboardFocusRing,
+    focusSurfaceVariants({ intent: "neutral" }),
   );
   const content = (
     <>
@@ -152,7 +153,7 @@ function BillingSummary() {
       aria-label={t("usage.open")}
       className={cn(
         "bg-subtle hover:bg-hover active:bg-pressed flex min-h-24 items-center gap-4 rounded-[var(--radius-xl)] px-4 py-4",
-        keyboardFocusRing,
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       href={accountHubPaths.usage as Route}
     >
@@ -203,7 +204,7 @@ function AccountHubHome({ actor }: { actor: Actor }) {
         aria-label={t("account.open")}
         className={cn(
           "hover:bg-hover active:bg-pressed -mx-2 flex min-h-20 items-center gap-4 rounded-[var(--radius-xl)] px-2 py-2",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
         href={accountHubPaths.account as Route}
       >
@@ -235,6 +236,12 @@ function AccountHubHome({ actor }: { actor: Actor }) {
           {t("groups.account")}
         </h2>
         <AccountHubGroup>
+          <AccountHubRow
+            description={t("activity.description")}
+            glyph={UsageIcon}
+            href="/me/activity"
+            label={t("activity.title")}
+          />
           <AccountHubRow
             description={t("settings.description")}
             glyph={SettingsIcon}

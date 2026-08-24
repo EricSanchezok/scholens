@@ -39,6 +39,8 @@ from app.bootstrap.container import (
     build_research_items,
     build_research_output_catalog,
     build_research_search,
+    build_reading_activity,
+    build_reading_activity_retention,
     build_save_onboarding,
     build_translations,
     build_zotero,
@@ -91,6 +93,10 @@ from app.modules.research.application.generation import ResearchGeneration
 from app.modules.research.application.items import ResearchItems
 from app.modules.research.application.catalog import ResearchOutputCatalog
 from app.modules.research.application.search import SearchResearch
+from app.modules.reading_activity.application import (
+    ReadingActivity,
+    ReadingActivityRetention,
+)
 from sqlalchemy.orm import Session
 from app.tooling.invocations import ToolInvocationGateway
 from app.modules.operation_journal.application import OperationJournal
@@ -272,6 +278,21 @@ class ApplicationCapabilities:
     @cached_property
     def research_items(self) -> ResearchItems:
         return build_research_items(db=self._session, journal=self._journal)
+
+    @cached_property
+    def reading_activity(self) -> ReadingActivity:
+        return build_reading_activity(
+            db=self._session,
+            cursor_secret=self._settings.paper_search_cursor_secret,
+            journal=self._journal,
+        )
+
+    @cached_property
+    def reading_activity_retention(self) -> ReadingActivityRetention:
+        return build_reading_activity_retention(
+            db=self._session,
+            journal=self._journal,
+        )
 
     @cached_property
     def research_output_catalog(self) -> ResearchOutputCatalog:

@@ -17,6 +17,10 @@ engine = create_engine(
     pool_timeout=60,
     pool_pre_ping=True,  # Validate connections before use (guards stale RDS conns)
     pool_recycle=3600,
+    # Defense in depth for SQL logs/traces. Passive reading routes additionally
+    # suppress dependency instrumentation because driver constraint details may
+    # still echo a failing row even when bound parameters are hidden.
+    hide_parameters=True,
 )
 
 SessionLocal: sessionmaker[Session] = sessionmaker(

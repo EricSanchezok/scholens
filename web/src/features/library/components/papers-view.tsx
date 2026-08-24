@@ -53,13 +53,19 @@ import {
   CollectionToolbar,
   CollectionToolbarButton,
   CollectionToolbarSelectTrigger,
+  CollectionToolbarStaticValue,
   PaperCollectionWorkbench,
   type PaperCollectionItem,
+  type PaperCollectionWorkbenchProps,
   type PaperStatus,
 } from "@/features/paper-collection";
-import { cn } from "@/lib/utilities/cn";
+import type { PaperSearchWorkbenchProps } from "@/features/paper-search";
 import type { PaperSort, PaperStatus as FilterStatus } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
+import {
+  CompactPaperActivity,
+  type PaperActivitySummary,
+} from "@/features/research-activity";
 import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
 
 type Paper = components["schemas"]["LibraryPaperListPaperEntry"];
@@ -509,6 +515,7 @@ function MobileTagFilter({
 }
 
 export function PapersView({
+  activityByDocumentId,
   attentionCount,
   data,
   error,
@@ -533,7 +540,9 @@ export function PapersView({
   onStatusFilterChange = () => undefined,
   onTagFilterChange,
   search,
-  searchResults,
+  searchTotal,
+  searchWorkbench,
+  resultSetKey = "library-papers",
   sort,
   paperCount,
   tagIds,
@@ -541,6 +550,7 @@ export function PapersView({
   tags,
   tagsLoading = false,
 }: {
+  activityByDocumentId?: ReadonlyMap<string, PaperActivitySummary>;
   attentionCount: number;
   data?: PaperList;
   error?: unknown;
@@ -565,7 +575,9 @@ export function PapersView({
   onStatusFilterChange?: (statuses: FilterStatus[]) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   search: React.ReactNode;
-  searchResults?: (toolbar: React.ReactNode) => React.ReactNode;
+  searchTotal?: number;
+  searchWorkbench?: PaperSearchWorkbenchProps | null;
+  resultSetKey?: string;
   sort: PaperSort;
   paperCount: number;
   tagIds: string[];
@@ -574,7 +586,9 @@ export function PapersView({
   tagsLoading?: boolean;
 }) {
   const t = useTranslations("Library.papers");
+  const paperSearchT = useTranslations("PaperSearch");
   const format = useFormatter();
+  const searchActive = searchWorkbench != null;
   const [selected, setSelected] = React.useState<string[]>([]);
   const [actionIds, setActionIds] = React.useState<string[]>([]);
   const [initialTagIds, setInitialTagIds] = React.useState<string[]>([]);
@@ -582,10 +596,17 @@ export function PapersView({
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [actionPending, setActionPending] = React.useState(false);
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
+  const previousResultSetKey = React.useRef(resultSetKey);
+
+  React.useEffect(() => {
+    if (previousResultSetKey.current === resultSetKey) return;
+    previousResultSetKey.current = resultSetKey;
+    setSelected([]);
+  }, [resultSetKey]);
 
   React.useEffect(() => {
     const target = loadMoreRef.current;
-    if (!target || !hasMore || loadingMore) return;
+    if (searchActive || !target || !hasMore || loadingMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void onLoadMore();
@@ -594,7 +615,7 @@ export function PapersView({
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, onLoadMore]);
+  }, [hasMore, loadingMore, onLoadMore, searchActive]);
 
   const papers = (data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
@@ -605,6 +626,9 @@ export function PapersView({
   );
   const workbenchItems: PaperCollectionItem[] = papers.map((paper) => {
     const metadata = paperMetadata(paper);
+    const activitySummary = activityByDocumentId?.get(
+      paper.document.document_id,
+    );
     const publication = [
       paper.metadata_overrides.journal ?? paper.document.journal,
       paper.metadata_overrides.publisher ?? paper.document.publisher,
@@ -623,6 +647,9 @@ export function PapersView({
         dateStyle: "medium",
       }),
       authors: metadata.authors,
+      activity: activitySummary ? (
+        <CompactPaperActivity summary={activitySummary} />
+      ) : undefined,
       doi: paper.metadata_overrides.doi ?? paper.document.doi ?? undefined,
       href: `/reader/${paper.document.document_id}` as Route,
       id: paper.document.document_id,
@@ -691,7 +718,7 @@ export function PapersView({
 
   const collectionToolbar = (
     <AnimatePresence initial={false} mode="popLayout">
-      {selected.length > 0 ? (
+      {selected.length > 0 && !searchActive ? (
         <MotionPresence
           animate="animate"
           aria-label={t("selectionToolbar")}
@@ -789,23 +816,31 @@ export function PapersView({
                   tags={tags}
                   tagsLoading={tagsLoading}
                 />
-                <Select
-                  onValueChange={(value) => onSortChange(value as PaperSort)}
-                  value={sort}
-                >
-                  <CollectionToolbarSelectTrigger label={t("sort.label")} />
-                  <SelectContent>
-                    {PAPER_SORTS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {t(`sort.${option}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {searchActive ? (
+                  <CollectionToolbarStaticValue
+                    label={paperSearchT("form.relevanceSort")}
+                  />
+                ) : (
+                  <Select
+                    onValueChange={(value) => onSortChange(value as PaperSort)}
+                    value={sort}
+                  >
+                    <CollectionToolbarSelectTrigger label={t("sort.label")} />
+                    <SelectContent>
+                      {PAPER_SORTS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {t(`sort.${option}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </>
             }
             meta={
-              data && !searchResults ? (
+              searchActive && typeof searchTotal === "number" ? (
+                paperSearchT("results.count", { count: searchTotal })
+              ) : data && !searchActive ? (
                 <span className="grid justify-items-end text-right">
                   <span className="whitespace-nowrap">
                     {t("count", { count: paperCount })}
@@ -846,10 +881,8 @@ export function PapersView({
       ))}
     </div>
   ) : null;
-  const workbenchVisible =
-    !loading && !error && hasRows && workbenchItems.length > 0;
   const paginationControl =
-    data && hasMore ? (
+    data && hasMore && !searchActive ? (
       <div className="flex justify-center py-6" ref={loadMoreRef}>
         <Button
           loading={loadingMore}
@@ -861,91 +894,77 @@ export function PapersView({
         </Button>
       </div>
     ) : null;
+  let browseContentState: React.ReactNode;
+  if (loading) {
+    browseContentState = (
+      <div className="p-4">
+        <LoadingState label={t("loading")} />
+      </div>
+    );
+  } else if (error) {
+    browseContentState = (
+      <div className="p-4">
+        <AsyncFeedback
+          action={{ label: t("tryAgain"), onClick: onRetryLoad }}
+          description={t("errorDescription")}
+          state="error"
+          title={t("errorTitle")}
+        />
+      </div>
+    );
+  } else if (data && !hasRows) {
+    browseContentState = (
+      <div className="p-4">
+        <AsyncFeedback
+          description={t("emptyDescription")}
+          icon={LibraryIcon}
+          state="empty"
+          title={t("emptyTitle")}
+        />
+      </div>
+    );
+  } else if (hasRows && workbenchItems.length === 0) {
+    browseContentState = null;
+  }
+  const browseWorkbenchProps: PaperCollectionWorkbenchProps = {
+    actions: (item) => {
+      const paper = paperById.get(item.id);
+      return paper ? (
+        <PaperActions
+          onDownload={() => onDownload(item.id)}
+          onRemove={() => beginRemoval([item.id])}
+          onSelect={() => toggleOne(item.id, !selected.includes(item.id))}
+          onTags={() => beginTagEditing([item.id])}
+          paper={paper}
+          selected={selected.includes(item.id)}
+        />
+      ) : null;
+    },
+    beforeTable: !loading && !error ? ingestionList : undefined,
+    contentState: browseContentState,
+    items: browseContentState === undefined ? workbenchItems : [],
+    leading: (item) => (
+      <SelectionCheckbox
+        checked={selected.includes(item.id)}
+        label={t("select", { title: item.title })}
+        onCheckedChange={(checked) => toggleOne(item.id, checked)}
+      />
+    ),
+    onStatusChange: (item, status) => onStatusChange(item.id, status),
+    onTagClick: (tag) =>
+      onTagFilterChange(tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id]),
+    tableFooter: paginationControl,
+  };
+  const workbenchProps: PaperCollectionWorkbenchProps =
+    searchWorkbench ?? browseWorkbenchProps;
 
   return (
-    <div
-      className={cn(
-        "min-w-0",
-        (searchResults || workbenchVisible) && "h-full min-h-0 overflow-hidden",
-      )}
-    >
-      {searchResults ? (
-        searchResults(collectionToolbar)
-      ) : (
-        <>
-          {!workbenchVisible ? collectionToolbar : null}
-          <div
-            className={
-              workbenchVisible ? "h-full min-h-0 overflow-hidden" : "mt-4"
-            }
-          >
-            {loading && <LoadingState label={t("loading")} />}
-            {Boolean(error) && !loading && (
-              <AsyncFeedback
-                action={{ label: t("tryAgain"), onClick: onRetryLoad }}
-                description={t("errorDescription")}
-                state="error"
-                title={t("errorTitle")}
-              />
-            )}
-            {!loading && !error && data && !hasRows && (
-              <AsyncFeedback
-                description={t("emptyDescription")}
-                icon={LibraryIcon}
-                state="empty"
-                title={t("emptyTitle")}
-              />
-            )}
-            {!loading && !error && hasRows && (
-              <>
-                {!workbenchItems.length ? ingestionList : null}
-                {workbenchItems.length ? (
-                  <PaperCollectionWorkbench
-                    actions={(item) => {
-                      const paper = paperById.get(item.id);
-                      return paper ? (
-                        <PaperActions
-                          onDownload={() => onDownload(item.id)}
-                          onRemove={() => beginRemoval([item.id])}
-                          onSelect={() =>
-                            toggleOne(item.id, !selected.includes(item.id))
-                          }
-                          onTags={() => beginTagEditing([item.id])}
-                          paper={paper}
-                          selected={selected.includes(item.id)}
-                        />
-                      ) : null;
-                    }}
-                    beforeTable={ingestionList}
-                    items={workbenchItems}
-                    leading={(item) => (
-                      <SelectionCheckbox
-                        checked={selected.includes(item.id)}
-                        label={t("select", { title: item.title })}
-                        onCheckedChange={(checked) =>
-                          toggleOne(item.id, checked)
-                        }
-                      />
-                    )}
-                    onStatusChange={(item, status) =>
-                      onStatusChange(item.id, status)
-                    }
-                    onTagClick={(tag) =>
-                      onTagFilterChange(
-                        tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id],
-                      )
-                    }
-                    tableFooter={paginationControl}
-                    toolbar={collectionToolbar}
-                  />
-                ) : null}
-              </>
-            )}
-          </div>
-
-          {!workbenchVisible ? paginationControl : null}
-        </>
-      )}
+    <div className="h-full min-h-0 min-w-0 overflow-hidden">
+      <PaperCollectionWorkbench
+        {...workbenchProps}
+        scrollResetKey={resultSetKey}
+        toolbar={collectionToolbar}
+      />
 
       <TagManagerDialog
         documentIds={actionIds}

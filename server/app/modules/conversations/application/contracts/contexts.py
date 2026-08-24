@@ -6,7 +6,7 @@ import uuid
 from typing import Annotated, Literal
 
 from app.modules.research.application.positions import PdfTextPosition
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PaperSelectionTurnContext(BaseModel):
@@ -17,6 +17,13 @@ class PaperSelectionTurnContext(BaseModel):
     page_number: int = Field(ge=1)
     selected_text: str = Field(min_length=1, max_length=20_000)
     anchor: PdfTextPosition
+
+    @field_validator("selected_text", mode="before")
+    @classmethod
+    def normalize_postgres_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.replace("\x00", "")
+        return value
 
     @model_validator(mode="after")
     def anchor_matches_page(self) -> PaperSelectionTurnContext:

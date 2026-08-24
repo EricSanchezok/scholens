@@ -21,6 +21,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "./focus-contract.story-test";
 import { ScrollArea, VisuallyHidden } from "./scroll-area";
 import {
   Sheet,
@@ -306,6 +312,20 @@ export const PaginationAndToast: Story = {
     await expect(canvas.getByText("Page 3 of 8")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Show toast" }));
     await expect(within(document.body).getByText("Saved")).toBeVisible();
+    const viewport = document.querySelector<HTMLElement>(
+      "[data-toast-viewport]",
+    );
+    await expect(viewport).not.toBeNull();
+    const restingViewport = readFocusVisual(viewport!);
+    fireEvent.keyDown(document, { code: "F8", key: "F8" });
+    viewport!.focus();
+    await expect(viewport).toHaveFocus();
+    await expectStableFocusPerimeter({
+      element: viewport!,
+      resting: restingViewport,
+      shadow: "raised",
+    });
+    await expect(readFocusVisual(viewport!).filter).toBe("brightness(0.94)");
   },
 };
 
@@ -360,6 +380,38 @@ export const ScrollAndHiddenContent: Story = {
     await waitFor(
       () => expect(viewport!).not.toHaveAttribute("data-scrollbar-active"),
       { timeout: 1_200 },
+    );
+
+    const restingViewport = readFocusVisual(viewport!);
+    const restingThumb = readFocusVisual(thumb);
+    await focusWithKeyboard(viewport!);
+    await expectLayeredKeyboardFocus({
+      cue: { element: thumb, resting: restingThumb },
+      element: viewport!,
+      resting: restingViewport,
+    });
+  },
+};
+
+export const ShortScrollAreaFocus: Story = {
+  render: () => (
+    <ScrollArea className="border-line h-40 max-w-sm rounded-[var(--radius-lg)] border p-4">
+      <p className="text-sm">Short content without a visible scrollbar.</p>
+    </ScrollArea>
+  ),
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]",
+    );
+    await expect(viewport).not.toBeNull();
+    await expect(viewport!.scrollHeight).toBeLessThanOrEqual(
+      viewport!.clientHeight,
+    );
+    const resting = readFocusVisual(viewport!);
+    await focusWithKeyboard(viewport!);
+    await expectLayeredKeyboardFocus({ element: viewport!, resting });
+    await expect(readFocusVisual(viewport!).backgroundImage).not.toBe(
+      resting.backgroundImage,
     );
   },
 };

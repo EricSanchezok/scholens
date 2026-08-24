@@ -59,6 +59,15 @@ const integrations = [
 const accountHubHandlers = [
   ...billingHandlers.success,
   ...authHandlers.success,
+  http.get(`${api}/me/reading-activity-preferences`, () =>
+    HttpResponse.json({
+      contribute_anonymous_project_aggregates: true,
+      recording_enabled: true,
+    }),
+  ),
+  http.put(`${api}/me/reading-activity-preferences`, async ({ request }) =>
+    HttpResponse.json((await request.json()) as object),
+  ),
   http.get(`${api}/conversations`, () =>
     HttpResponse.json({ items: [], next_cursor: null }),
   ),

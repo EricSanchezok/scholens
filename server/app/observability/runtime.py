@@ -8,9 +8,15 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.bootstrap.settings import AppSettings
 from app.database.database import engine
+from app.transport.http.observability import (
+    is_reading_activity_request,
+    safe_http_route_template,
+)
 from fastapi import FastAPI
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.fastapi import (
+    FastAPIInstrumentor,
+)
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -47,8 +53,34 @@ async def _httpx_async_request_hook(span: Any, request: Any) -> None:
 
 
 def _fastapi_request_hook(span: Any, scope: dict[str, Any]) -> None:
-    span.set_attribute("url.full", str(scope.get("path", "/")))
+    route = getattr(scope.get("route"), "path", None)
+    sanitized_path = str(route or safe_http_route_template(scope))
+    scheme = str(scope.get("scheme", "http"))
+    server = scope.get("server")
+    authority = ""
+    if isinstance(server, (list, tuple)) and server:
+        authority = str(server[0])
+        if len(server) > 1 and server[1] is not None:
+            authority = f"{authority}:{int(server[1])}"
+    sanitized_url = urlunsplit((scheme, authority, sanitized_path, "", ""))
+    span.set_attribute("url.full", sanitized_url)
+    span.set_attribute("http.url", sanitized_url)
+    span.set_attribute("url.path", sanitized_path)
+    span.set_attribute("http.target", sanitized_path)
+    span.set_attribute("http.route", sanitized_path)
     span.set_attribute("url.query", "")
+    method = str(scope.get("method", "HTTP")).upper()
+    span.update_name(f"{method} {sanitized_path}")
+    if is_reading_activity_request(scope):
+        for attribute in (
+            "client.address",
+            "net.peer.ip",
+            "http.client_ip",
+            "user_agent.original",
+            "enduser.id",
+            "user.id",
+        ):
+            span.set_attribute(attribute, "")
 
 
 def configure_application_observability(

@@ -8,6 +8,12 @@ import {
   FieldLabel,
   FieldMessage,
 } from "./field";
+import {
+  expectLayeredKeyboardFocus,
+  expectQuietPointerFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "./focus-contract.story-test";
 import { Input, PasswordInput } from "./input";
 import { Checkbox, Switch } from "./selection-controls";
 import {
@@ -131,17 +137,19 @@ export const QuietPointerFocus: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const input = canvas.getByRole("textbox", { name: "Email" });
-    const restingBorder = getComputedStyle(input).borderColor;
 
+    await userEvent.hover(input);
+    const hovered = readFocusVisual(input);
     await userEvent.click(input);
     await expect(input).toHaveAttribute("data-focus-origin", "pointer");
-    await expect(input).toHaveStyle({ outlineStyle: "none" });
-    await expect(getComputedStyle(input).borderColor).toBe(restingBorder);
+    await expectQuietPointerFocus({ element: input, resting: hovered });
 
+    await userEvent.unhover(input);
     await userEvent.click(canvas.getByRole("button", { name: "Before field" }));
-    await userEvent.tab();
-    await expect(input).toHaveFocus();
+    const resting = readFocusVisual(input);
+    await focusWithKeyboard(input);
     await expect(input).toHaveAttribute("data-focus-origin", "keyboard");
+    await expectLayeredKeyboardFocus({ element: input, resting });
   },
 };
 

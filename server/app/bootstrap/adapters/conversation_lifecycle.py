@@ -114,6 +114,24 @@ class SqlAlchemyConversationGateway:
         )
         return self._detail(conversation=conversation, user_id=user_id)
 
+    def create_with_id(
+        self,
+        *,
+        user_id: int,
+        conversation_id: UUID,
+        request: ConversationCreateRequest,
+    ) -> ConversationChange[ConversationDetailResponse]:
+        result = conversation_repository.create_with_id(
+            self._db,
+            conversation_id=conversation_id,
+            request=request,
+            user_id=user_id,
+        )
+        return ConversationChange(
+            value=self._detail(conversation=result.value, user_id=user_id),
+            changed=result.changed,
+        )
+
     def get(
         self,
         *,

@@ -122,29 +122,26 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         )
         if scope.document_id is not None:
             document_ids.add(scope.document_id)
-        papers: list[ChatPaperSnapshot] = []
-        for document_id in sorted(document_ids, key=str):
-            paper = document_repository.find_accessible(
-                self._session,
-                document_id=document_id,
-                user=actor,
-                document_columns=DOCUMENT_CHAT_CONTEXT_COLUMNS,
+        accessible_papers = document_repository.find_accessible_many(
+            self._session,
+            document_ids=sorted(document_ids, key=str),
+            user=actor,
+            document_columns=DOCUMENT_CHAT_CONTEXT_COLUMNS,
+        )
+        papers = [
+            ChatPaperSnapshot(
+                document_id=paper.id,
+                title=paper.title,
+                abstract=paper.abstract if paper.id == scope.document_id else None,
+                raw_content=(
+                    paper.raw_content if paper.id == scope.document_id else None
+                ),
+                keywords=paper.keywords,
+                authors=paper.authors,
+                publish_date=paper.publish_date,
             )
-            if paper is None:
-                continue
-            papers.append(
-                ChatPaperSnapshot(
-                    document_id=paper.id,
-                    title=paper.title,
-                    abstract=paper.abstract if paper.id == scope.document_id else None,
-                    raw_content=(
-                        paper.raw_content if paper.id == scope.document_id else None
-                    ),
-                    keywords=paper.keywords,
-                    authors=paper.authors,
-                    publish_date=paper.publish_date,
-                )
-            )
+            for paper in accessible_papers
+        ]
 
         project_ids = context.project_ids if context.kind == "selection" else []
         project_rows = self._session.execute(
@@ -200,14 +197,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             user_id=actor.id,
             turn_id=before_turn_id,
         ):
-            selected = next(
-                (
-                    response
-                    for response in turn.responses
-                    if response.id == turn.selected_response_id
-                ),
-                None,
-            )
+            selected = turn.selected_response
             if selected is None or selected.content is None:
                 continue
             history.append(ChatHistoryMessage(role="user", content=turn.user_query))
@@ -230,16 +220,30 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         if not annotation_contexts:
             return MentionScope(None, None)
 
+        items = research_repository.get_annotation_threads_visible(
+            self._session,
+            thread_ids=(context.thread_id for context in annotation_contexts),
+            user_id=actor.id,
+        )
+        items_by_id = {item.id: item for item in items}
+        document_ids = {
+            item.target_document_id
+            for item in items
+            if item.annotation_thread is not None
+            and item.target_document_id is not None
+        }
+        papers = document_repository.find_accessible_many(
+            self._session,
+            document_ids=sorted(document_ids, key=str),
+            user=actor,
+        )
+        papers_by_id = {paper.id: paper for paper in papers}
+
         snapshot: list[dict[str, JsonValue]] = []
         annotations_by_paper: dict[str, dict[str, JsonValue]] = {}
         for context in annotation_contexts:
-            try:
-                item = research_repository.get_annotation_thread_visible(
-                    self._session,
-                    thread_id=context.thread_id,
-                    user_id=actor.id,
-                )
-            except AppError:
+            item = items_by_id.get(context.thread_id)
+            if item is None:
                 continue
             thread = item.annotation_thread
             if thread is None or item.target_document_id is None:
@@ -247,11 +251,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             document_id = str(item.target_document_id)
             group = annotations_by_paper.get(document_id)
             if group is None:
-                paper = document_repository.find_accessible(
-                    self._session,
-                    document_id=document_id,
-                    user=actor,
-                )
+                paper = papers_by_id.get(item.target_document_id)
                 group = {
                     "document_id": document_id,
                     "paper_title": paper.title if paper else None,

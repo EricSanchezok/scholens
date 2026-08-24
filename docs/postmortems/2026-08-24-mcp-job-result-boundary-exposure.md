@@ -76,9 +76,9 @@ required.
 | Action | Owner | Status | Tracking link |
 | --- | --- | --- | --- |
 | Add status-only Job repository reads | Scholens | Complete | Current PR |
-| Project every MCP Job result to `result: null` | Scholens | Complete | ADR 0040 |
+| Project every MCP Job result to `result: null` | Scholens | Complete | ADR 0042 |
 | Sanitize legacy invocation replays before delivery | Scholens | Complete | Current PR |
-| Measure the complete MCP success envelope | Scholens | Complete | ADR 0038 |
+| Measure the complete MCP success envelope | Scholens | Complete | ADR 0040 |
 | Add worst-case Unicode and batch budget tests | Scholens | Complete | Current PR |
 | Monitor deprecated MCP reads and Job budget failures after release | Scholens | Open | Release follow-up |
 

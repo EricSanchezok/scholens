@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { Frame, FramePanel, keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants, Frame, FramePanel } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
   DocumentationIcon,
@@ -36,7 +36,7 @@ export function AuthenticationShell({
           <Link
             className={cn(
               "hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] sm:min-h-9",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             href={DOCUMENTATION_PATH}
             rel="noopener noreferrer"
@@ -49,7 +49,7 @@ export function AuthenticationShell({
           <a
             className={cn(
               "hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] sm:min-h-9",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             href={SOURCE_REPOSITORY_URL}
             rel="noopener noreferrer"

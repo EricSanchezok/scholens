@@ -1,10 +1,10 @@
 # Reader experience
 
 Reader is the document-focused surface for one accessible paper. It owns PDF
-navigation, selection, annotation threads, document details, and the
-contextual conversation entry point. A paper may be opened for personal reading
-or inside one Project without creating another Document record. Reader does not
-own a second conversation protocol or a second Workspace shell.
+navigation, selection, annotation threads, private paper insights, document
+details, and the contextual conversation entry point. A paper may be opened for
+personal reading or inside one Project without creating another Document record.
+Reader does not own a second conversation protocol or a second Workspace shell.
 
 On a narrow mobile launch, the first successfully rendered PDF shows one quiet
 AI reflow suggestion below the toolbar. It never starts MinerU, changes the
@@ -55,7 +55,8 @@ owned, top-aligned work regions:
    paper identity, page controls, view controls, and document actions above the
    PDF thumbnail rail or the AI reflow outline and reading surface;
 2. the contextual region, whose equally tall toolbar contains Ask,
-   Annotations, Translate, Details, and Collapse above the active panel.
+   Annotations, Insights, Translate, Details, and Collapse above the active
+   panel.
 
 Reader must not add a full-width paper title row above these regions or a
 separate Ask button outside the contextual panel. The panel width is responsive
@@ -101,8 +102,8 @@ At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 - the top bar contains Back to Library, a truncated paper title, and document
   tools;
 - the PDF remains visible as the primary surface;
-- Ask, Annotations, Translate, and Details open as full-height bottom panels
-  with safe-area padding;
+- Ask, Annotations, Insights, Translate, and Details open as full-height bottom
+  panels with safe-area padding;
 - Search remains in the compact PDF toolbar. AI reflow exposes Outline as its
   own icon and opens the same semantic outline content in the shared responsive
   bottom-sheet pattern used by Sources;
@@ -121,7 +122,8 @@ The breakpoint changes the information architecture, not only widths.
 The URL is the shareable reading state:
 
 - `page`: one-based current PDF page;
-- `panel`: `ask`, `annotations`, `translation`, `details`, or omitted;
+- `panel`: `ask`, `annotations`, `insights`, `translation`, `details`, or
+  omitted;
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
   local blank state;
 - `project`: an accessible Project that contains the Document, or omitted for
@@ -179,6 +181,86 @@ navigable. All results use the translucent document-search match role; the
 current result uses the stronger current role and scrolls into view inside the
 document container when the search cursor moves. Search styling never reuses
 neutral selection or warning feedback colors.
+
+## Reading activity and paper insights
+
+The research-activity slice ships together with
+[ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md);
+these are runtime states, not speculative Figma-only analytics. Reader records
+one private, owner-scoped session only while the account preference is enabled.
+The shared tracker admits at most five seconds at a time, counts visible dwell
+only while the document is foreground-visible and focused, and counts the
+active estimate only while qualifying interaction is no more than 120 seconds
+old. Normal delivery runs at most every 30 seconds, with an initial flush after
+the first eligible evidence, exact-payload retry after a lost acknowledgement,
+lifecycle flush when the document becomes hidden or leaves the page, and final
+teardown when the Reader view changes or unmounts where the browser permits.
+Moving between page targets does not itself force a network write. Retried
+delivery remains cumulative and idempotent; the UI does not invent time after a
+failed update.
+
+PDF and AI reflow contribute to one Document timeline. PDF observation maps the
+visible page rectangle to one of 20 normalized vertical regions. Reflow maps
+visible blocks through their retained source spans to the same PDF page and
+source-rectangle regions. Switching views therefore never starts a competing
+heatmap or counts one interval twice. Selection text, pointer coordinates,
+viewport captures, search queries, and document content are not activity
+payloads. Optional Project context adds a removable Project attribution without
+changing the personal owner of the session.
+
+The private Insights panel has four ordered regions:
+
+1. an all-time summary for active-reading estimate, visible time, sessions,
+   active days, and substantive page coverage;
+2. an ordered page-grid heatmap that can switch between an absolute duration
+   scale and a within-this-paper relative scale;
+3. an unsmoothed daily line trend, defaulting to the most recent 30 days;
+4. a Top pages table with page, active estimate, session/revisit context, and
+   coverage.
+
+The primary duration label is always “Active reading estimate”; visible time is
+supporting evidence and never silently replaces it. A page counts toward
+substantive coverage only after 15 active-estimate seconds. The heatmap pairs a
+single sequential intensity ramp with page number, numeric duration, a legend,
+and distinct unvisited/no-data treatments. Each page cell is a real keyboard-
+operable button whose accessible name includes page, estimated duration, and
+coverage state. Activating it updates `page` and moves the document scroller to
+that PDF source location, including when Insights was opened from reflow. Color,
+relative intensity, and hover alone never carry the value.
+
+The line chart keeps real zeroes, missing history, and the collection boundary
+distinct and has a keyboard-accessible tabular equivalent. Neither the chart
+nor heatmap claims gaze, attention, comprehension, or completion. An in-
+progress local session may update its visible summary without changing the
+settled server history until acknowledgement.
+
+`GET /api/v1/papers/{document_id}/insights` supplies the authorized projection.
+Reader requests `range=all` for the summary and pages and `range=30d` for the
+trend, then combines those two generated responses in the paper adapter; it
+does not make one ambiguous range serve two visual meanings.
+`reading_data_since`, `activity_history_complete_since`, and the metric-
+definition version control the disclosure above the visualization. The first
+anchors known evidence and trend densification; the second is the metric's
+collection boundary. A finite window that starts before that boundary is
+partial, while `all` means all history collected under this definition. A paper with
+no post-launch activity receives an honest first-reading state rather than a
+zero-filled historical year. When recording is off, existing private history
+remains readable and the panel offers a direct Settings action for future
+recording; it never describes retained history as deleted.
+Finite trends retain response-time-zone calendar dates but aggregate whole
+UTC-hour ledger buckets. When a local calendar boundary falls inside a UTC
+hour, that incomplete first bucket is excluded rather than implying a
+millisecond-exact period boundary.
+
+The panel's Data control deletes this paper's reading history through
+`DELETE /api/v1/papers/{document_id}/reading-activity` only after confirmation.
+It names what is preserved: the paper, Library/Project membership,
+annotations, conversations, outputs, and every other member's data. Reader
+invalidates personal and Project insight queries after success. If the Reader
+remains open, the tracker retires the deleted server session when its next
+update receives the canonical not-found/ended response; later eligible reading
+then starts a new session boundary. The UI does not claim to settle the tracker
+before deletion, and deletion does not turn off future recording.
 
 ## AI reflow and full translation
 
@@ -439,6 +521,13 @@ local draft until the first send. Scope filtering and authorization happen on
 the Server; the Web must not fetch global conversations and filter them
 locally.
 
+On phones, Reader preserves two distinct headers rather than compressing their
+jobs into one row. The outer header retains Ask, Annotations, Translate,
+Details, and the panel-close action. The inner Ask header runs from conversation
+history, as its only flexible and widest item, to the compact label-only
+reasoning-strength selector and New chat. Desktop retains the same outer panel
+header and keeps reasoning in the Composer.
+
 The open paper (and the active Project when reading inside one) is the default
 research context of a new draft, not a locked boundary. The shared `@` context
 trigger on the Ask Composer opens the same picker as Home, so the user may
@@ -457,17 +546,19 @@ through the sidebar.
 
 The Ask message viewport and Composer are two siblings inside the contextual
 panel. Messages own the panel's vertical scroll, while the `context-panel`
-Composer remains docked at the bottom. Its resting state is one compact row:
-context, input, reasoning, and send controls share the same pill. It expands to
-a second control row only for multiline input, long input, or an attached
-passage. The switcher, message viewport, and Composer are separated by spacing
-rather than stacked card borders; the Composer uses the same `border-line`
-resting boundary and desktop raised elevation as Home at the narrower panel
-measure. The transcript and Composer share 20 px horizontal panel insets, so
-user messages align to the Composer's right edge and assistant content aligns
-to its left edge. Its outer surface alone owns keyboard focus. The Jump to latest action
-is anchored to the message-viewport/Composer boundary so it remains fully above
-the Composer at every expanded height.
+Composer remains docked at the bottom. On desktop, context, input, the shared
+reasoning trigger, and send controls share that surface; on phones, reasoning
+moves to the inner Ask header. The Composer follows the
+[shared shape and reasoning contract](./visual-language.md#shape-and-density)
+for visual wrapping, height limits, and open-menu treatment. The switcher,
+message viewport, and Composer are separated by spacing rather than stacked
+card borders; the Composer uses the same `border-line` resting boundary and
+desktop raised elevation as Home at the narrower panel measure. The transcript
+and Composer share 20 px horizontal panel insets, so user messages align to the
+Composer's right edge and assistant content aligns to its left edge. Its outer
+surface alone owns keyboard focus. The Jump to latest action is anchored to the
+message-viewport/Composer boundary so it remains fully above the Composer at
+every expanded height.
 An empty paper conversation uses a quiet title and supporting description with
 no decorative icon or suggestion shortcuts; Home retains its existing empty
 behavior through the optional structured-empty-state interface.
@@ -526,21 +617,24 @@ Playwright coverage for the following matrix:
 | Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                                                                                                         |
 | Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                                                                                                        |
 | Search and outline | closed, query with no result, one result, multiple results, desktop reflow rail, mobile reflow sheet                                                                                      |
+| Insights           | recording on/off, first reading, all-time summary, absolute/relative heatmap, 30-day trend, top pages, partial history, expired fine detail, keyboard page jump                           |
 | Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled                                                                                    |
 | Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                                                                                                      |
 | AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link                                                                                         |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                                                                                                          |
 | Ask                | local new chat, streaming, response ready, suggestions delayed, historical, prompt edit retained on early failure, branch pager, failed leaf after refresh, retried variants, source open |
-| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                                                                                                            |
+| Composer           | compact full pill, visual wrap or explicit newline, fixed 24 px expanded corners, maximum-height internal scroll, desktop reasoning closed/open                                           |
+| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat, mobile dual headers and ordered inner controls                                                            |
 | Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                                                                                                          |
 | Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                                                                                                      |
 
 ### Figma and Storybook acceptance mapping
 
 The active Figma Reader page above remains the visual-intent source. The
-collaboration contract is executable in Storybook with these state mappings;
-until dedicated collaboration frames receive stable node IDs, reviewers use
-the named `50 — Reader` states rather than inventing links:
+collaboration contract is executable in Storybook, plus route Playwright where
+the full Reader composition is required. Until dedicated collaboration frames
+receive stable node IDs, reviewers use the named `50 — Reader` states rather
+than inventing links:
 
 | Figma `50 — Reader` state     | Executable acceptance evidence                            |
 | ----------------------------- | --------------------------------------------------------- |
@@ -560,6 +654,8 @@ the named `50 — Reader` states rather than inventing links:
 | AI reflow translation error   | `TranslationError`, `PartialFailure`                      |
 | AI reflow toolbar settings    | `DesktopPopover`                                          |
 | AI reflow mobile/Dark         | `SmallMobile`, `LargeMobile`, `MobileBottomSheet`, `Dark` |
+| Shared mobile Ask Composer    | `ContextPanelMobileVisualWrapExpansion`                   |
+| Mobile Ask dual headers       | Reader Playwright `keeps Reader Ask controls…`            |
 
 The Project discussion stories deliberately show flat replies from two
 authors, immutable audience badges, root-only color, and resolve/reopen
@@ -582,7 +678,12 @@ Reader remains a vertical feature rather than a second application shell:
 - `reader-toolbar.tsx` owns the compact, non-modal PDF search experience;
 - `reader-document-navigation.tsx` owns the desktop PDF thumbnail rail;
 - `reader-context-panel.tsx` owns contextual navigation and composes Ask,
-  Annotations, Translate, Details, and the paper-conversation switcher;
+  Annotations, Insights, Translate, Details, and the paper-conversation
+  switcher;
+- the shared research-activity feature owns preference, session, cumulative
+  tracker, insight-query, completeness, and estimate-formatting contracts;
+  Reader adapts PDF and reflow visibility into that feature and owns the
+  paper-specific heatmap, trend, Top pages table, and page navigation;
 - `translation/` owns translation preferences, the standard SSE adapter, the
   selection lifecycle controller, and translation panel states;
 - `reflow/` owns the typed artifact query, semantic Outline shared by the

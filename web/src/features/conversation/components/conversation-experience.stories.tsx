@@ -9,6 +9,12 @@ import {
   within,
 } from "storybook/test";
 
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import { ResearchComposer } from "./research-composer";
 
 const api = "http://127.0.0.1:7301/api/v1";
@@ -79,7 +85,11 @@ export const Mobile: Story = {
 };
 
 export const Streaming: Story = {
-  args: { busy: true },
+  args: { busy: true, stopAvailable: true },
+};
+
+export const Submitting: Story = {
+  args: { busy: true, stopAvailable: false },
 };
 
 export const ContextPanelSelection: Story = {
@@ -110,9 +120,18 @@ export const ContextPanelSelection: Story = {
     await expect(composer).toHaveAttribute("data-expanded", "true");
     const restingBorder = getComputedStyle(composer!).borderTopColor;
     await expect(restingBorder).not.toBe("transparent");
-    await userEvent.tab();
-    await expect(textbox).toHaveFocus();
+    const restingTextbox = readFocusVisual(textbox);
+    const restingComposer = readFocusVisual(composer!);
+    await focusWithKeyboard(textbox);
     await expect(composer).toHaveAttribute("data-focus-surface");
+    await expectStableFocusPerimeter({
+      element: textbox,
+      resting: restingTextbox,
+    });
+    await expectLayeredKeyboardFocus({
+      element: composer!,
+      resting: restingComposer,
+    });
   },
 };
 
@@ -134,8 +153,10 @@ export const ContextPanelCompact: Story = {
       </div>
     ),
   ],
+  globals: { viewport: { value: "desktop" } },
   play: async ({ canvasElement }) => {
-    const textbox = within(canvasElement).getByRole("textbox");
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox");
     const composer = textbox.closest("form");
     await expect(composer).not.toBeNull();
     if (!composer) return;
@@ -144,6 +165,164 @@ export const ContextPanelCompact: Story = {
     await expect(
       Number.parseFloat(getComputedStyle(composer).borderRadius),
     ).toBeGreaterThanOrEqual(999);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Reasoning strength: Standard" }),
+    );
+    const page = within(canvasElement.ownerDocument.body);
+    await expect(page.getByText("Fast, balanced reasoning")).toBeVisible();
+    await expect(page.getByText("More thorough reasoning")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+  },
+};
+
+export const ContextPanelVisualWrapExpansion: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: ["paper-1"],
+      project_ids: [],
+    },
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div
+          className="w-[23rem] max-w-full"
+          data-composer-story-width="compact"
+        >
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  globals: { viewport: { value: "desktop" } },
+  play: async ({ canvasElement }) => {
+    const textbox = within(canvasElement).getByRole("textbox");
+    const composer = textbox.closest("form");
+    await expect(composer).not.toBeNull();
+    if (!composer) return;
+
+    const restingBounds = composer.getBoundingClientRect();
+    const frame = composer.closest<HTMLElement>("[data-composer-story-width]");
+    await expect(frame).not.toBeNull();
+    if (!frame) return;
+
+    const wrappedWithoutLineBreak = "这是一段测试文字".repeat(3);
+    await expect(wrappedWithoutLineBreak.length).toBeLessThan(88);
+    await fireEvent.change(textbox, {
+      target: { value: wrappedWithoutLineBreak },
+    });
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "true"),
+    );
+    await waitFor(() =>
+      expect(
+        Number.parseFloat(getComputedStyle(composer).borderRadius),
+      ).toBeCloseTo(24, 0),
+    );
+    const expandedBounds = composer.getBoundingClientRect();
+    await expect(Math.round(expandedBounds.bottom)).toBe(
+      Math.round(restingBounds.bottom),
+    );
+    await expect(expandedBounds.top).toBeLessThan(restingBounds.top);
+
+    frame.style.width = "48rem";
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "false"),
+    );
+    frame.style.width = "23rem";
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "true"),
+    );
+
+    await fireEvent.change(textbox, { target: { value: "短问题" } });
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "false"),
+    );
+    await waitFor(() =>
+      expect(
+        Number.parseFloat(getComputedStyle(composer).borderRadius),
+      ).toBeGreaterThanOrEqual(999),
+    );
+    const collapsedBounds = composer.getBoundingClientRect();
+    await expect(Math.round(collapsedBounds.bottom)).toBe(
+      Math.round(restingBounds.bottom),
+    );
+    await expect(collapsedBounds.height).toBeLessThan(expandedBounds.height);
+  },
+};
+
+export const ContextPanelMobileVisualWrapExpansion: Story = {
+  ...ContextPanelVisualWrapExpansion,
+  globals: { viewport: { value: "mobile" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox") as HTMLTextAreaElement;
+    const composer = textbox.closest("form");
+    await expect(composer).not.toBeNull();
+    if (!composer) return;
+
+    const restingBounds = composer.getBoundingClientRect();
+    await fireEvent.change(textbox, {
+      target: { value: "这是一段测试文字".repeat(6) },
+    });
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "true"),
+    );
+    await expect(
+      Number.parseFloat(getComputedStyle(composer).borderRadius),
+    ).toBeCloseTo(24, 0);
+    await expect(Math.round(composer.getBoundingClientRect().bottom)).toBe(
+      Math.round(restingBounds.bottom),
+    );
+    await expect(
+      canvas.queryByRole("button", {
+        name: "Reasoning strength: Standard",
+      }),
+    ).toBeNull();
+
+    await fireEvent.change(textbox, {
+      target: {
+        value: "这是用于验证输入框达到最大高度后只在内部滚动的长文本。".repeat(
+          30,
+        ),
+      },
+    });
+    await waitFor(() =>
+      expect(textbox.scrollHeight).toBeGreaterThan(textbox.clientHeight),
+    );
+    await expect(getComputedStyle(textbox).overflowY).toBe("auto");
+    await expect(Math.round(composer.getBoundingClientRect().bottom)).toBe(
+      Math.round(restingBounds.bottom),
+    );
+
+    await fireEvent.change(textbox, { target: { value: "Short question" } });
+    await waitFor(() =>
+      expect(composer).toHaveAttribute("data-expanded", "false"),
+    );
+    await expect(
+      Number.parseFloat(getComputedStyle(composer).borderRadius),
+    ).toBeGreaterThanOrEqual(999);
+  },
+};
+
+export const ContextPanelMobileHidesReasoningMenu: Story = {
+  args: { surface: "context-panel" },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end p-3">
+        <Story />
+      </div>
+    ),
+  ],
+  globals: { viewport: { value: "mobile" } },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).queryByRole("button", {
+        name: "Reasoning strength: Standard",
+      }),
+    ).toBeNull();
   },
 };
 

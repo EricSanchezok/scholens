@@ -6,6 +6,7 @@ import {
   SendIcon,
   MentionIcon,
   ExpandIcon,
+  ConfirmIcon,
   DocumentIcon,
   StopIcon,
   DismissIcon,
@@ -24,7 +25,7 @@ import {
   DropdownMenuTrigger,
   IconButton,
   isImeComposing,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -120,6 +121,119 @@ export function useResearchComposerForm() {
     mode: "onChange",
     resolver: zodResolver(composerSchema),
   });
+}
+
+function cssPixelValue(value: string) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function textareaContentInlineSize(textarea: HTMLTextAreaElement) {
+  const styles = window.getComputedStyle(textarea);
+  return Math.max(
+    0,
+    textarea.clientWidth -
+      cssPixelValue(styles.paddingLeft) -
+      cssPixelValue(styles.paddingRight),
+  );
+}
+
+function textareaWrapsAtInlineSize(
+  textarea: HTMLTextAreaElement,
+  contentInlineSize: number,
+) {
+  if (!textarea.value || contentInlineSize <= 0) return false;
+
+  const styles = window.getComputedStyle(textarea);
+  const paddingInline =
+    cssPixelValue(styles.paddingLeft) + cssPixelValue(styles.paddingRight);
+  const borderInline =
+    cssPixelValue(styles.borderLeftWidth) +
+    cssPixelValue(styles.borderRightWidth);
+  const measuredInlineSize =
+    styles.boxSizing === "border-box"
+      ? contentInlineSize + paddingInline + borderInline
+      : contentInlineSize;
+  const currentContentInlineSize = textarea.clientWidth - paddingInline;
+  const shouldConstrain =
+    Math.abs(currentContentInlineSize - contentInlineSize) > 0.5;
+  const previousInlineSize = textarea.style.inlineSize;
+  const paddingBlock =
+    cssPixelValue(styles.paddingTop) + cssPixelValue(styles.paddingBottom);
+  const fontSize = cssPixelValue(styles.fontSize);
+  const lineHeight =
+    cssPixelValue(styles.lineHeight) || Math.max(fontSize * 1.5, 1);
+
+  // Measure the real textarea at its last compact content width. The expanded
+  // layout may be wider, so measuring at that width would make the state flap.
+  if (shouldConstrain) {
+    textarea.style.inlineSize = `${measuredInlineSize}px`;
+  }
+  try {
+    const textBlockSize = textarea.scrollHeight - paddingBlock;
+
+    return textBlockSize > lineHeight * 1.5;
+  } finally {
+    if (shouldConstrain) {
+      textarea.style.inlineSize = previousInlineSize;
+    }
+  }
+}
+
+function useVisualComposerExpansion(value: string, forceExpanded = false) {
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const compactChromeInlineSizeRef = React.useRef<number | null>(null);
+  const [visuallyWrapped, setVisuallyWrapped] = React.useState(false);
+  const hasExplicitLineBreak = /[\r\n]/.test(value);
+  const expanded = forceExpanded || hasExplicitLineBreak || visuallyWrapped;
+
+  React.useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    const form = textarea?.form;
+    if (!form || !textarea) return;
+
+    const measure = () => {
+      const currentContentInlineSize = textareaContentInlineSize(textarea);
+      if (!expanded) {
+        const nextChromeInlineSize =
+          form.clientWidth - currentContentInlineSize;
+        if (currentContentInlineSize > 0 && nextChromeInlineSize >= 0) {
+          compactChromeInlineSizeRef.current = nextChromeInlineSize;
+        }
+      }
+
+      const stableInlineSize =
+        compactChromeInlineSizeRef.current === null
+          ? currentContentInlineSize
+          : Math.max(0, form.clientWidth - compactChromeInlineSizeRef.current);
+      // Once wrapped, require a small amount of spare inline room before
+      // collapsing so sub-pixel grid rounding cannot flap the layout state.
+      const measuredInlineSize = visuallyWrapped
+        ? Math.max(0, stableInlineSize - 1)
+        : stableInlineSize;
+      const nextVisuallyWrapped =
+        !hasExplicitLineBreak &&
+        textareaWrapsAtInlineSize(textarea, measuredInlineSize);
+      setVisuallyWrapped((current) =>
+        current === nextVisuallyWrapped ? current : nextVisuallyWrapped,
+      );
+    };
+
+    measure();
+    let observedFormInlineSize = form.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const nextFormInlineSize = form.clientWidth;
+      const formInlineSizeChanged =
+        Math.abs(nextFormInlineSize - observedFormInlineSize) > 0.5;
+      observedFormInlineSize = nextFormInlineSize;
+      if (!expanded || formInlineSizeChanged) measure();
+    });
+    observer.observe(form);
+    if (!expanded) observer.observe(textarea);
+    return () => observer.disconnect();
+  }, [expanded, hasExplicitLineBreak, value, visuallyWrapped]);
+
+  return { expanded, textareaRef };
 }
 
 function mergeContextOptions<T>(
@@ -252,7 +366,7 @@ function ContextPicker({
           aria-label={accessibleLabel}
           className={cn(
             "hover:bg-hover active:bg-pressed grid size-12 shrink-0 place-items-center rounded-full lg:size-11",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
             triggerClassName,
           )}
           disabled={disabled}
@@ -474,11 +588,11 @@ export function ReasoningMenu({
   className?: string;
   disabled?: boolean;
   onChange: (level: ReasoningLevel) => void;
-  variant?: "composer" | "mobileHeader" | "contextPanel";
+  variant?: "composer" | "mobileHeader" | "contextPanel" | "panelHeader";
   value: ReasoningLevel;
 }) {
   const t = useTranslations("Home");
-  const compactMenu = variant === "mobileHeader" || variant === "contextPanel";
+  const labelOnly = variant === "mobileHeader" || variant === "panelHeader";
 
   return (
     <DropdownMenu modal={false}>
@@ -488,18 +602,24 @@ export function ReasoningMenu({
             value: t(`composer.${value}`),
           })}
           className={cn(
-            "hover:bg-hover active:bg-pressed flex min-w-0 items-center gap-1.5 text-sm font-medium",
-            compactMenu
-              ? "h-11 shrink-0 rounded-[var(--radius-md)] px-3"
-              : "h-11 rounded-full px-3",
-            keyboardFocusRing,
+            "motion-control group/reasoning hover:bg-hover data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex min-w-0 shrink-0 items-center gap-1.5 bg-transparent text-sm font-medium disabled:pointer-events-none",
+            variant === "panelHeader" &&
+              "h-10 rounded-[var(--radius-md)] px-1.5",
+            variant === "mobileHeader" &&
+              "h-11 rounded-[var(--radius-md)] px-3",
+            variant === "contextPanel" && "h-9 rounded-[var(--radius-lg)] px-2",
+            variant === "composer" && "h-11 rounded-full px-3",
+            focusSurfaceVariants({ intent: "neutral" }),
             className,
           )}
           disabled={disabled}
           type="button"
         >
           <span className="truncate">{t(`composer.${value}`)}</span>
-          <span className="grid size-4 shrink-0 place-items-center">
+          <span
+            className="motion-icon grid size-4 shrink-0 place-items-center group-data-[state=open]/reasoning:rotate-180"
+            data-slot="reasoning-menu-chevron"
+          >
             <Icon glyph={ExpandIcon} size={16} tone="secondary" />
           </span>
         </button>
@@ -508,9 +628,9 @@ export function ReasoningMenu({
         align={variant === "mobileHeader" ? "start" : "end"}
         className={cn(
           "p-1.5",
-          compactMenu ? "w-32" : "w-[min(18rem,calc(100vw-1.5rem))]",
+          labelOnly ? "w-32" : "w-[min(18rem,calc(100vw-1.5rem))]",
         )}
-        sideOffset={compactMenu ? 4 : 8}
+        sideOffset={labelOnly ? 4 : 8}
       >
         <DropdownMenuRadioGroup
           onValueChange={(nextValue) => onChange(nextValue as ReasoningLevel)}
@@ -520,15 +640,17 @@ export function ReasoningMenu({
             return (
               <DropdownMenuRadioItem
                 className={cn(
-                  "pr-8 pl-3 [&>span:first-child]:right-3 [&>span:first-child]:left-auto",
-                  compactMenu
+                  "ps-3",
+                  labelOnly
                     ? "min-h-11 items-center py-2"
                     : "min-h-16 items-start py-2.5",
                 )}
+                indicator={<Icon glyph={ConfirmIcon} size={16} />}
+                indicatorPosition="end"
                 key={level}
                 value={level}
               >
-                {compactMenu ? (
+                {labelOnly ? (
                   <span className="text-foreground truncate font-medium">
                     {t(`composer.${level}`)}
                   </span>
@@ -564,6 +686,7 @@ export function ResearchComposer({
   onSubmit,
   onStop,
   onTurnContextClear,
+  stopAvailable = false,
   surface,
   unavailable,
   turnContextLabel,
@@ -582,6 +705,7 @@ export function ResearchComposer({
   onTurnContextClear?: () => void;
   surface: ResearchComposerSurface;
   unavailable?: boolean;
+  stopAvailable?: boolean;
   turnContextLabel?: string;
 }) {
   const t = useTranslations("Home");
@@ -592,7 +716,21 @@ export function ResearchComposer({
     control: composerForm.control,
     name: "message",
   });
-  const messageRegistration = composerForm.register("message");
+  const { ref: messageRegistrationRef, ...messageRegistration } =
+    composerForm.register("message");
+  const forceExpanded =
+    surface === "context-panel" && Boolean(turnContextLabel);
+  const { expanded, textareaRef } = useVisualComposerExpansion(
+    messageValue,
+    forceExpanded,
+  );
+  const setTextareaRef = React.useCallback(
+    (textarea: HTMLTextAreaElement | null) => {
+      textareaRef.current = textarea;
+      messageRegistrationRef(textarea);
+    },
+    [messageRegistrationRef, textareaRef],
+  );
   const { focusHandlers, focusOrigin } =
     useTextControlFocus<HTMLTextAreaElement>({
       onBlur: messageRegistration.onBlur,
@@ -602,10 +740,6 @@ export function ResearchComposer({
       ? (context.project_ids?.length ?? 0) + (context.document_ids?.length ?? 0)
       : 0;
   const hasContext = Boolean(turnContextLabel) || selectionCount > 0;
-  const expanded =
-    messageValue.includes("\n") || messageValue.trim().length > 88;
-  const contextPanelExpanded = expanded || Boolean(turnContextLabel);
-
   async function submit(values: ComposerValues) {
     await onSubmit(values.message.trim());
   }
@@ -620,37 +754,41 @@ export function ResearchComposer({
       <form
         className={cn(
           "motion-shape border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2",
-          contextPanelExpanded
+          expanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
-        data-expanded={contextPanelExpanded}
+        data-expanded={expanded}
         data-focus-surface
         onSubmit={composerForm.handleSubmit(submit)}
       >
         <textarea
           aria-label={placeholder}
           className={cn(
-            "placeholder:text-muted [field-sizing:content] max-h-28 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none focus-visible:outline-none",
-            contextPanelExpanded
+            "placeholder:text-muted [field-sizing:content] max-h-28 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6",
+            expanded
               ? "col-span-3 col-start-1 row-start-1 min-h-11 px-2 py-2"
               : "col-start-2 row-start-1 min-h-9 px-1 py-1.5",
           )}
           data-focus-delegate="surface"
           data-focus-origin={focusOrigin ?? undefined}
-          disabled={busy || unavailable}
+          aria-busy={busy || undefined}
+          disabled={unavailable}
+          readOnly={busy}
           onKeyDown={(event) => {
-            if (event.key === "@") setPickerOpen(true);
+            if (!busy && event.key === "@") setPickerOpen(true);
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
               !isImeComposing(event)
             ) {
               event.preventDefault();
-              void composerForm.handleSubmit(submit)();
+              if (!busy) void composerForm.handleSubmit(submit)();
             }
           }}
           placeholder={placeholder}
+          ref={setTextareaRef}
           rows={1}
           {...messageRegistration}
           {...focusHandlers}
@@ -658,7 +796,7 @@ export function ResearchComposer({
         <div
           className={cn(
             "col-start-1",
-            contextPanelExpanded ? "row-start-2" : "row-start-1",
+            expanded ? "row-start-2" : "row-start-1",
           )}
         >
           <ContextPicker
@@ -675,7 +813,7 @@ export function ResearchComposer({
         <div
           className={cn(
             "flex min-w-0 items-center gap-1",
-            contextPanelExpanded
+            expanded
               ? "col-span-2 col-start-2 row-start-2"
               : "col-start-3 row-start-1",
           )}
@@ -687,7 +825,10 @@ export function ResearchComposer({
               {onTurnContextClear ? (
                 <button
                   aria-label={t("composer.removeTurnContext")}
-                  className="hover:bg-hover grid size-6 shrink-0 place-items-center rounded-full"
+                  className={cn(
+                    "hover:bg-hover grid size-6 shrink-0 place-items-center rounded-full",
+                    focusSurfaceVariants({ intent: "neutral" }),
+                  )}
                   onClick={onTurnContextClear}
                   type="button"
                 >
@@ -697,7 +838,7 @@ export function ResearchComposer({
             </span>
           ) : null}
           <ReasoningMenu
-            className="border-line bg-subtle ml-auto h-9 shrink-0 rounded-[var(--radius-lg)] border px-2"
+            className="ml-auto hidden lg:flex"
             disabled={unavailable}
             onChange={onReasoningLevelChange}
             value={reasoningLevel}
@@ -705,12 +846,21 @@ export function ResearchComposer({
           />
           {busy && onStop ? (
             <IconButton
+              aria-busy={!stopAvailable || undefined}
+              aria-disabled={!stopAvailable || undefined}
               className="size-9 min-h-9 rounded-full"
-              label={t("composer.stop")}
-              onClick={onStop}
+              label={t(stopAvailable ? "composer.stop" : "composer.pending")}
+              onClick={stopAvailable ? onStop : undefined}
               type="button"
             >
-              <Icon glyph={StopIcon} size={16} tone="inverse" />
+              {stopAvailable ? (
+                <Icon glyph={StopIcon} size={16} tone="inverse" />
+              ) : (
+                <span
+                  aria-hidden
+                  className="motion-spinner size-4 rounded-full border-2 border-current border-r-transparent"
+                />
+              )}
             </IconButton>
           ) : (
             <IconButton
@@ -730,10 +880,11 @@ export function ResearchComposer({
   return (
     <form
       className={cn(
-        "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 rounded-full border p-2",
+        "motion-shape border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 border p-2",
         expanded
-          ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
-          : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-1.5",
+          ? "rounded-[var(--radius-2xl)] lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:p-3"
+          : "rounded-[var(--radius-full)] lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:p-1.5",
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       data-expanded={expanded}
       data-has-context={hasContext || undefined}
@@ -743,7 +894,7 @@ export function ResearchComposer({
       <textarea
         aria-label={placeholder}
         className={cn(
-          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
+          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 lg:max-h-36 lg:text-sm lg:leading-6",
           expanded
             ? "lg:col-span-4 lg:col-start-1 lg:min-h-14 lg:px-1"
             : "lg:col-span-1 lg:col-start-2 lg:min-h-11 lg:self-center lg:px-1 lg:py-2.5",
@@ -751,19 +902,22 @@ export function ResearchComposer({
         data-focus-delegate="surface"
         data-focus-origin={focusOrigin ?? undefined}
         data-mobile-composer-input
-        disabled={busy || unavailable}
+        aria-busy={busy || undefined}
+        disabled={unavailable}
+        readOnly={busy}
         onKeyDown={(event) => {
-          if (event.key === "@") setPickerOpen(true);
+          if (!busy && event.key === "@") setPickerOpen(true);
           if (
             event.key === "Enter" &&
             !event.shiftKey &&
             !isImeComposing(event)
           ) {
             event.preventDefault();
-            void composerForm.handleSubmit(submit)();
+            if (!busy) void composerForm.handleSubmit(submit)();
           }
         }}
         placeholder={placeholder}
+        ref={setTextareaRef}
         rows={1}
         {...messageRegistration}
         {...focusHandlers}
@@ -802,7 +956,7 @@ export function ResearchComposer({
       </div>
       <ReasoningMenu
         className={cn(
-          "border-line bg-subtle hidden justify-self-start border lg:flex",
+          "hidden justify-self-start lg:flex",
           expanded
             ? "lg:col-start-3 lg:row-start-3 lg:justify-self-end"
             : "lg:col-start-3 lg:row-start-1",
@@ -813,15 +967,24 @@ export function ResearchComposer({
       />
       {busy && onStop ? (
         <IconButton
+          aria-busy={!stopAvailable || undefined}
+          aria-disabled={!stopAvailable || undefined}
           className={cn(
             "col-start-3 row-start-1 size-12 rounded-full lg:col-start-4 lg:size-11",
             expanded ? "lg:row-start-3" : "lg:row-start-1",
           )}
-          label={t("composer.stop")}
-          onClick={onStop}
+          label={t(stopAvailable ? "composer.stop" : "composer.pending")}
+          onClick={stopAvailable ? onStop : undefined}
           type="button"
         >
-          <Icon glyph={StopIcon} size={20} tone="inverse" />
+          {stopAvailable ? (
+            <Icon glyph={StopIcon} size={20} tone="inverse" />
+          ) : (
+            <span
+              aria-hidden
+              className="motion-spinner size-5 rounded-full border-2 border-current border-r-transparent"
+            />
+          )}
         </IconButton>
       ) : (
         <IconButton

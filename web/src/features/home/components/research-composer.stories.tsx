@@ -163,6 +163,10 @@ export const MultilineInput: Story = {
     const composer = within(canvasElement).getByRole("textbox", {
       name: "问任何问题",
     });
+    const form = composer.closest("form");
+    await expect(form).not.toBeNull();
+    if (!form) return;
+    const restingBounds = form.getBoundingClientRect();
     await userEvent.type(
       composer,
       "比较论文方法{Shift>}{Enter}{/Shift}说明推理成本{Shift>}{Enter}{/Shift}列出关键差异",
@@ -170,6 +174,17 @@ export const MultilineInput: Story = {
     await expect(composer).toHaveValue(
       "比较论文方法\n说明推理成本\n列出关键差异",
     );
+    await expect(form).toHaveAttribute("data-expanded", "true");
+    await waitFor(() =>
+      expect(
+        Number.parseFloat(getComputedStyle(form).borderRadius),
+      ).toBeCloseTo(24, 0),
+    );
+    const expandedBounds = form.getBoundingClientRect();
+    await expect(Math.round(expandedBounds.bottom)).toBe(
+      Math.round(restingBounds.bottom),
+    );
+    await expect(expandedBounds.top).toBeLessThan(restingBounds.top);
   },
 };
 
@@ -208,23 +223,46 @@ export const DesktopReasoningMenuOpen: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      canvas.getByRole("button", { name: "思考强度：标准" }),
+    const trigger = canvas.getByRole("button", { name: "思考强度：标准" });
+    const chevron = trigger.querySelector<HTMLElement>(
+      '[data-slot="reasoning-menu-chevron"]',
     );
+    const restingBackground = getComputedStyle(trigger).backgroundColor;
+    await expect(chevron).not.toBeNull();
+    await userEvent.click(trigger);
     const page = within(canvasElement.ownerDocument.body);
     await expect(page.getByText("快速、均衡的推理")).toBeVisible();
     await expect(page.getByText("更充分地分析复杂问题")).toBeVisible();
+    await expect(trigger).toHaveAttribute("data-state", "open");
+    await expect(getComputedStyle(chevron!).transitionProperty).toContain(
+      "rotate",
+    );
+    await waitFor(() =>
+      expect(getComputedStyle(trigger).backgroundColor).not.toBe(
+        restingBackground,
+      ),
+    );
+    await waitFor(() =>
+      expect(getComputedStyle(chevron!).rotate).toBe("180deg"),
+    );
+    const standard = page.getByRole("menuitemradio", { name: /标准/ });
+    const deep = page.getByRole("menuitemradio", { name: /深入/ });
+    await expect(standard).toHaveAttribute("aria-checked", "true");
+    await expect(deep).toHaveAttribute("aria-checked", "false");
     await expect(
-      page.getByRole("menuitemradio", { name: /标准/ }).querySelector("svg"),
-    ).toBeNull();
+      standard.querySelector('[data-slot="dropdown-menu-radio-indicator"] svg'),
+    ).not.toBeNull();
     await expect(
-      page.getByRole("menuitemradio", { name: /深入/ }).querySelector("svg"),
+      deep.querySelector('[data-slot="dropdown-menu-radio-indicator"] svg'),
     ).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await expect(trigger).toHaveFocus();
+    await expect(trigger).toHaveAttribute("data-state", "closed");
   },
 };
 
 export const StreamingStop: Story = {
-  args: { busy: true },
+  args: { busy: true, stopAvailable: true },
   play: async ({ canvasElement }) => {
     await expect(
       within(canvasElement).getByRole("button", { name: "停止生成" }),

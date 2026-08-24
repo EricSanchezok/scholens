@@ -13,6 +13,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
 )
 from app.modules.conversations.application.contracts.conversations import (
+    ConversationCreateRequest,
     ConversationGenerationAccepted,
     ConversationGenerationCancellation,
 )
@@ -520,6 +521,17 @@ class ConversationChatData:
 
 
 class ConversationChatGateway(Protocol):
+    async def accept_start(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        conversation: ConversationCreateRequest,
+        request: ConversationTurnCreateRequest,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted: ...
+
     async def accept(
         self,
         *,
@@ -586,44 +598,29 @@ class ConversationChatGateway(Protocol):
         response_id: UUID,
     ) -> ConversationGenerationCancellation: ...
 
-    async def stream(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        request: ConversationTurnCreateRequest,
-        client_ip: str,
-        generation_kind: Literal["initial", "retry", "branch"] = "initial",
-        branch_from_turn_id: UUID | None = None,
-    ) -> AsyncIterator[str]: ...
-
-    async def retry(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        turn_id: UUID,
-        response_id: UUID,
-        client_ip: str,
-    ) -> AsyncIterator[str]: ...
-
-    async def branch(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        source_turn_id: UUID,
-        request: ConversationTurnBranchCreateRequest,
-        client_ip: str,
-    ) -> AsyncIterator[str]: ...
-
 
 class ConversationChat:
     def __init__(self, gateway: ConversationChatGateway) -> None:
         self._gateway = gateway
+
+    async def accept_start(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        conversation: ConversationCreateRequest,
+        request: ConversationTurnCreateRequest,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted:
+        return await self._gateway.accept_start(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            conversation=conversation,
+            request=request,
+            client_ip=client_ip,
+        )
 
     async def accept(
         self,
@@ -737,65 +734,6 @@ class ConversationChat:
             conversation_id=conversation_id,
             turn_id=turn_id,
             response_id=response_id,
-        )
-
-    async def stream(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        request: ConversationTurnCreateRequest,
-        client_ip: str,
-        generation_kind: Literal["initial", "retry", "branch"] = "initial",
-        branch_from_turn_id: UUID | None = None,
-    ) -> AsyncIterator[str]:
-        return await self._gateway.stream(
-            actor=actor,
-            operation=operation,
-            conversation_id=conversation_id,
-            request=request,
-            client_ip=client_ip,
-            generation_kind=generation_kind,
-            branch_from_turn_id=branch_from_turn_id,
-        )
-
-    async def retry(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        turn_id: UUID,
-        response_id: UUID,
-        client_ip: str,
-    ) -> AsyncIterator[str]:
-        return await self._gateway.retry(
-            actor=actor,
-            operation=operation,
-            conversation_id=conversation_id,
-            turn_id=turn_id,
-            response_id=response_id,
-            client_ip=client_ip,
-        )
-
-    async def branch(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        conversation_id: UUID,
-        source_turn_id: UUID,
-        request: ConversationTurnBranchCreateRequest,
-        client_ip: str,
-    ) -> AsyncIterator[str]:
-        return await self._gateway.branch(
-            actor=actor,
-            operation=operation,
-            conversation_id=conversation_id,
-            source_turn_id=source_turn_id,
-            request=request,
-            client_ip=client_ip,
         )
 
     @staticmethod

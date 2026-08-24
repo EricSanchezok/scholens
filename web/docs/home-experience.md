@@ -12,10 +12,11 @@ the deliberately deferred boundaries.
   `/login` with a safe return target.
 - The selected conversation is shareable navigation state and therefore lives
   in `?conversation=<uuid>`. A refresh restores that conversation.
-- Conversations, papers, projects, and message history are server state owned
-  by TanStack Query. Composer input uses React Hook Form and Zod; its form state
-  is owned by `HomeWorkspace` so responsive composition changes never discard
-  an unsent draft. Sidebar and picker state remain local. An in-progress
+- Conversations, papers, projects, personal research insight, and message
+  history are server state owned by TanStack Query. Composer input uses React
+  Hook Form and Zod; its form state is owned by `HomeWorkspace` so responsive
+  composition changes never discard an unsent draft. Sidebar and picker state
+  remain local. An in-progress
   subscriber is local, but accepted generation and its terminal state are
   Server-owned and survive route changes, backgrounding, reload, and offline
   intervals.
@@ -109,28 +110,36 @@ the deliberately deferred boundaries.
 
 ## Data and streaming
 
-Home consumes only the public conversation, project, library-paper, and actor
-contracts. It does not import from `client/` and does not define duplicate wire
-DTOs.
+Home consumes only the public conversation, project, library-paper,
+research-insight, and actor contracts. It does not import from `client/` and
+does not define duplicate wire DTOs.
 
-Conversation creation and continuation request `Prefer: respond-async`. A
-successful `202` receipt identifies the persisted Turn/Response, after which
-the Web app follows its detachable SSE endpoint with `Last-Event-ID`. A legacy
-inline `200` SSE response remains a compatible fallback. Both paths use one
-standard SSE decoder. The stream accepts `start`, the stable-ID
+Conversation continuation uses the direct durable SSE response, and a first
+prompt uses `POST /api/v1/conversations/{id}/start` to atomically create the
+client-identified Conversation, Turn, Response, job, and outbox dispatch. HTTP
+acceptance therefore makes generation durable and enables Stop without a
+separately committed empty Conversation or a second subscription round trip.
+The optimistic transcript and Composer clear happen immediately on local
+submission and are rolled back exactly if acceptance fails. Explicit
+`Prefer: respond-async` remains the compatible detachable `202` mode for other
+clients. If the direct subscription drops, the Web app follows the response
+event endpoint with `Last-Event-ID`; both paths use one standard SSE decoder.
+The stream accepts `start`, the stable-ID
 `assistant_item_start → delta → complete`
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`. The additive `/events/candidates` subscription
-returns sanitized partial `final_answer` arguments through
+arrive as bounded `progress`. Direct requests opt into candidates with the
+`application/vnd.scholens.conversation-events` representation, and the additive
+`/events/candidates` resume subscription returns sanitized partial `final_answer`
+arguments through
 `assistant_candidate_start`, `assistant_candidate_delta`, and
 `assistant_candidate_reset` while the structured answer is still arriving. A
 bounded suffix and all private citation markers stay server-side, and a model
 validation retry resets the candidate before replacement text appears. Clients
-fall back to the original `/events` route when the additive endpoint is absent;
-that route returns only the validated item lifecycle. A `final` item completes
-only after structured answer validation.
+do not fall back to the original `/events` route: an incompatible deployment is
+surfaced and retried instead of silently changing an active answer's event
+contract. A `final` item completes only after structured answer validation.
 `response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose. A
@@ -156,12 +165,13 @@ releases that conversation's local Composer state; its accepted generation
 continues on the Server, so a different conversation can generate independently
 while the original remains limited to one running response. Stop is a separate
 authorized Server cancellation and the UI discloses when that cancellation
-cannot yet be confirmed. Once
-a turn is accepted into the optimistic transcript, the Composer clears
-immediately and its send action becomes the standard stop-square action for
-the lifetime of that stream. A failure before optimistic acceptance preserves
-the draft; a later stream failure preserves the submitted user message in the
-transcript instead of restoring duplicate text to the Composer.
+cannot yet be confirmed. The submitted user message enters the optimistic
+transcript and the Composer clears immediately. Before HTTP acceptance the
+pending state does not expose an invalid Stop action; after acceptance the
+standard stop-square action remains for the lifetime of the durable generation.
+A pre-acceptance failure restores the exact draft and focus; a later stream
+failure preserves the submitted user message in the transcript instead of
+restoring duplicate text to the Composer.
 Capacity dependency outages are returned as `unavailable`, not as a user quota
 exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains stable failure code, retryability, correlation ID, and
@@ -169,9 +179,13 @@ public diagnostic ID across refresh without exposing provider bodies, raw
 exceptions, or Redis details. Provider timeouts, invalid output, filtering,
 operation limits, and configuration failures have distinct localized copy.
 
-Visible assistant deltas are coalesced to at most one browser animation-frame
-commit, so a fast provider cannot force repeated Markdown layout between
-paints. Conversation auto-follow observes real transcript size changes and
+Incoming events update one feature-private target state, while React can read
+only a separately published snapshot. Consecutive answer deltas are coalesced
+and published at most every 50 ms, aligned to an animation frame while visible;
+terminal, cancellation, error, and reset events publish immediately. Historical
+turns, Workspace navigation, and Reader pages do not subscribe to live content,
+and streaming Markdown consumes a deferred snapshot. Conversation auto-follow
+observes real transcript size changes and
 drives one retargetable animation toward the latest content; it never starts a
 new native smooth-scroll operation for each token. Wheel, touch, keyboard, or
 scrollbar movement away from the bottom cancels following immediately and
@@ -185,7 +199,7 @@ Editing saves a durable
 sibling prompt branch at the original depth, selects that branch, and generates
 its first response from the shared prefix. The selected branch replaces the
 entire visible suffix rather than splicing turns client-side. Save remains in
-the editor until a valid SSE `start` event accepts the request; an early HTTP,
+the editor until the durable POST is accepted; an early HTTP,
 network, abort, or malformed-stream failure keeps the exact draft, error state,
 and editor focus for correction or retry. Once accepted, the editor closes and
 the standard live-turn recovery contract takes over. A branch pager beside the
@@ -221,7 +235,8 @@ same leaf after refresh. Version navigation includes completed variants only
 and is shown only while that turn remains latest.
 Selecting a suggestion only fills and focuses the Composer so the user can edit
 it before sending. Suggestion generation is a non-critical sidecar that starts
-alongside answer generation. If it finishes later, its typed SSE event updates
+only after the main provider produces its first public stream event. If it
+finishes later, its typed SSE event updates
 both live state and the latest cached turn. There is no pending card, failure
 message, polling state, or automatic client retry; a failed or timed-out sidecar
 simply leaves suggestions absent without delaying answer actions.
@@ -246,11 +261,51 @@ fails or times out, the Server derives a cleaned title of at most 60 characters
 from the first user question. The administrator-only, idempotent maintenance
 command applies the same fallback to legacy default-titled conversations.
 
+## Personal research snapshot
+
+The dashboard adds one private 30-day research snapshot from
+`GET /api/v1/me/research-insights`; it does not derive a second analytics model
+from recent-paper cards. The snapshot appears only in the Home dashboard state,
+not above or inside an active conversation. Its complete surface links to
+`/me/activity`, which owns longer periods and data controls.
+
+The desktop snapshot is one quiet editorial group with an active-reading
+estimate, active days, substantively engaged papers, annotations, private
+questions, and durable output counts, followed by a compact unsmoothed daily
+trend. Effort, process, and outcomes remain separate values;
+they are not summed into a productivity score. Visible time may appear as
+supporting detail, but it never replaces the “Active reading estimate” label.
+The initial snapshot uses accumulated days, papers, annotations, questions, and
+outputs as its quiet accomplishment signal; it does not invent a personal-best
+claim or streak. Any later comparison would require a complete prior period. It
+never creates a member comparison, global rank, punitive streak, or reward for
+leaving Reader open.
+
+On phones the same response becomes a compact, touch-sized snapshot and one
+View activity action above the Composer. It does not shrink the annual calendar,
+Project bars, or Top papers table into the Home canvas. At 320 px, metric labels
+and values wrap within their own cells without making the page scroll
+horizontally.
+
+`reading_data_since`, `activity_history_complete_since`, and the metric-
+definition version are part of the visible state contract. A partial previous
+period omits percentage comparison instead of treating missing days as zero. A
+new account receives a first-research prompt; a recording-disabled account may
+still see retained history plus an honest disabled state. Home never turns the
+preference back on, deletes history, or exposes Project team aggregates.
+
+The personal snapshot is delivered with the research-activity slice described
+by [ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md).
+Until its canonical Home Figma frames are synchronized, Storybook and route E2E
+own the populated, first-use, partial-history, recording-disabled, loading,
+recoverable-error, mobile, localized, and Dark acceptance states; an unrelated
+historical dashboard frame is not substitute evidence.
+
 ## State coverage
 
 | Surface      | Deterministic coverage                                                                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                                                                                                   |
+| Home data    | populated, loading/slow, empty, recoverable error, 30-day insight, first-use insight, partial history, and recording disabled                                           |
 | Navigation   | 288 px desktop, 320 px ultrawide, collapsed, full paginated history, old active conversation, mobile full-screen hub, unified search, active conversation               |
 | Context      | entire library and selected project/paper sources, including search                                                                                                     |
 | Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, reconnecting, stop failure, refresh-safe retry, references, complete, cancelled, error |
@@ -357,25 +412,26 @@ are not implementation references.
 
 The mobile Dock acceptance inventory extends that mapping:
 
-| Figma `20 — Home / Mobile` target | Storybook acceptance state                          |
-| --------------------------------- | --------------------------------------------------- |
-| Empty + Dock / Ask selected       | `Workspace / Mobile Empty`                          |
-| Recent research launcher          | `Workspace / Mobile`                                |
-| Launcher loading                  | `Dashboard / Mobile Recents Loading`                |
-| Launcher error                    | `Dashboard / Mobile Recents Error`                  |
-| Launcher long titles at 320 px    | `Dashboard / Mobile Recents Long Titles`            |
-| Launcher removed after submit     | `Workspace / Mobile Recents Disappear After Submit` |
-| Conversation + Dock               | `Workspace / Mobile Conversation`                   |
-| Keyboard Open                     | `Workspace / Mobile Keyboard Open`                  |
-| Library scope                     | `Research Composer / Library Scope`                 |
-| Multiple-paper scope              | `Research Composer / Multiple Papers Scope`         |
-| Long project scope at 320 px      | `Research Composer / Long Project Scope`            |
-| Multiline input                   | `Research Composer / Multiline Input`               |
-| Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`            |
-| Mobile navigation panel           | `Workspace / Mobile Navigation Open`                |
-| Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`   |
-| Streaming / Stop                  | `Research Composer / Streaming Stop`                |
-| 430 px Dark English               | `Research Composer / Dark English Large`            |
+| Figma `20 — Home / Mobile` target | Storybook acceptance state                                  |
+| --------------------------------- | ----------------------------------------------------------- |
+| Empty + Dock / Ask selected       | `Workspace / Mobile Empty`                                  |
+| Recent research launcher          | `Workspace / Mobile`                                        |
+| Launcher loading                  | `Dashboard / Mobile Recents Loading`                        |
+| Launcher error                    | `Dashboard / Mobile Recents Error`                          |
+| Launcher long titles at 320 px    | `Dashboard / Mobile Recents Long Titles`                    |
+| Launcher removed after submit     | `Workspace / Mobile Recents Disappear After Submit`         |
+| Conversation + Dock               | `Workspace / Mobile Conversation`                           |
+| Keyboard Open                     | `Workspace / Mobile Keyboard Open`                          |
+| Library scope                     | `Research Composer / Library Scope`                         |
+| Multiple-paper scope              | `Research Composer / Multiple Papers Scope`                 |
+| Long project scope at 320 px      | `Research Composer / Long Project Scope`                    |
+| Explicit newline                  | `Research Composer / Multiline Input`                       |
+| Mobile visual wrap / input limit  | `Conversation / Context Panel Mobile Visual Wrap Expansion` |
+| Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`                    |
+| Mobile navigation panel           | `Workspace / Mobile Navigation Open`                        |
+| Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`           |
+| Streaming / Stop                  | `Research Composer / Streaming Stop`                        |
+| 430 px Dark English               | `Research Composer / Dark English Large`                    |
 
 The mobile acceptance set is synchronized to the active `20 — Home` Figma
 page. Its primary navigation state uses the shared action surface and inverse
@@ -438,11 +494,13 @@ separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces. The Composer retains its deliberate elevation; the navigation row is
 flat on the Dock canvas, and the non-layout 20 px fade is rendered only when a
 Composer needs a transition from scrolling content.
-Only one real Composer is mounted at a time. On desktop it rests as a rounded
-single-line bar and expands to a rounded panel only when the written prompt
-becomes multiline or long. Explicit project and paper selections never add a
-second row: the AtSign trigger carries a compact count badge, caps its visible
-value at `9+`, and opens the existing context picker for inspection or removal.
+Only one real Composer is mounted at a time. It follows the
+[shared Composer shape contract](./visual-language.md#shape-and-density): an
+explicit line break or visual text wrap expands the surface upward, and input
+beyond its height limit scrolls internally. Explicit project and paper
+selections never add a second row: the AtSign trigger carries a compact count
+badge, caps its visible value at `9+`, and opens the existing context picker for
+inspection or removal.
 Entire Library uses a quiet status dot because it is a scope rather than a
 countable selection; an empty explicit selection has no indicator. A temporary
 passage supplied to one turn may still use a compact, truncated context rail so
@@ -451,13 +509,12 @@ stays one compact row above primary navigation: the
 Iconoir AtSign context trigger anchors the left, the input owns the flexible
 middle slot, and the circular submit or stop action anchors the right. The
 context trigger's accessible name and native title carry the current library,
-project, paper, mixed-item, or empty-selection scope. Standard and Deep open
-one text-only radio menu from the phone header or desktop Composer instead of a
-segmented toggle. The phone menu is a compact two-label list; the desktop menu
-retains one supporting description per mode. Decorative mode icons do not
-repeat the labels. The trigger indicator is decorative because its accessible
-name already announces the complete current scope; it must not create a second
-focus target.
+project, paper, mixed-item, or empty-selection scope. Standard and Deep use the
+[shared reasoning-strength treatment](./visual-language.md#shape-and-density):
+desktop surfaces retain descriptions, while phone headers use the compact
+label-only menu. Decorative mode icons do not repeat the labels. The context
+trigger indicator is decorative because its accessible name already announces
+the complete current scope; it must not create a second focus target.
 Entire Library is mutually exclusive with selected projects and papers. While
 it is active, the context picker hides search and item selection rather than
 showing controls that cannot affect the scope; switching it off restores the
@@ -538,9 +595,11 @@ above primary navigation; the research prompt remains in the available reading
 area rather than pulling the input toward screen center. On desktop, the 760 px
 composer retains the centered Figma composition. Its textarea delegates focus
 presentation to the rounded composer boundary. Pointer and touch focus leave
-that boundary visually stable; keyboard navigation alone receives the shared
-semantic focus indicator, so a native rectangular outline never splits the
-composition.
+that boundary visually stable; keyboard navigation adds the shared neutral
+surface tint and local content emphasis without changing the Composer's border,
+radius, size, or existing elevation shadow. Normal Light and Dark modes draw no
+ring or outline, so a native rectangular frame never splits the composition;
+forced-colors mode uses the shared 2 px system `Highlight` outline.
 The account trigger sits against the sidebar's bottom safe-area inset without a
 redundant disclosure arrow. Its menu aligns to the expanded sidebar content
 edge and opens to the right of the collapsed rail.

@@ -9,6 +9,10 @@ from uuid import UUID, uuid4
 
 from app.shared.domain import AppError, FailureKind
 from app.observability.diagnostics import record_http_diagnostic
+from app.transport.http.observability import (
+    is_reading_activity_request,
+    safe_http_route_template,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -199,16 +203,25 @@ def _diagnostic_fields(
     status_code: int,
 ) -> _DiagnosticFields:
     context = current_context()
+    private_reading = is_reading_activity_request(request.scope)
     authenticated = bool(getattr(request.state, "authenticated", False))
     return _DiagnosticFields(
         stage=context.stage,
         request_id=getattr(request.state, "request_id", context.request_id),
-        correlation_id=getattr(
-            request.state,
-            "correlation_id",
-            context.correlation_id,
+        correlation_id=(
+            None
+            if private_reading
+            else getattr(
+                request.state,
+                "correlation_id",
+                context.correlation_id,
+            )
         ),
-        diagnostic_id=(str(uuid4()) if authenticated or status_code >= 500 else None),
+        diagnostic_id=(
+            None
+            if private_reading
+            else (str(uuid4()) if authenticated or status_code >= 500 else None)
+        ),
     )
 
 
@@ -429,30 +442,46 @@ async def validation_error_handler(
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     fields = _diagnostic_fields(request, status_code=500)
-    _record_diagnostic(
-        request,
-        fields=fields,
-        reason="http_unhandled_error",
-        error_code="internal_error",
-        error_kind=FailureKind.INTERNAL,
-        status_code=500,
-    )
+    private_reading = is_reading_activity_request(request.scope)
+    if not private_reading:
+        _record_diagnostic(
+            request,
+            fields=fields,
+            reason="http_unhandled_error",
+            error_code="internal_error",
+            error_kind=FailureKind.INTERNAL,
+            status_code=500,
+        )
     add_counter(
         "scholens.errors",
         attributes={"code": "internal_error", "kind": FailureKind.INTERNAL.value},
     )
-    log_event(
-        logger,
-        logging.ERROR,
-        "http.unhandled_error",
-        exc_info=exc,
-        method=request.method,
-        route=(str(getattr(request.scope.get("route"), "path", request.url.path))),
-        error_code="internal_error",
-        error_kind=FailureKind.INTERNAL.value,
-        retryable=False,
-        diagnostic_id=fields.diagnostic_id,
-    )
+    route = safe_http_route_template(request.scope)
+    if private_reading:
+        log_event(
+            logger,
+            logging.ERROR,
+            "http.unhandled_error",
+            method=request.method,
+            route=route,
+            error_code="internal_error",
+            error_kind=FailureKind.INTERNAL.value,
+            retryable=False,
+            diagnostic_id=None,
+        )
+    else:
+        log_event(
+            logger,
+            logging.ERROR,
+            "http.unhandled_error",
+            exc_info=exc,
+            method=request.method,
+            route=route,
+            error_code="internal_error",
+            error_kind=FailureKind.INTERNAL.value,
+            retryable=False,
+            diagnostic_id=fields.diagnostic_id,
+        )
     payload = ApiErrorResponse(
         code="internal_error",
         message="An internal error occurred",

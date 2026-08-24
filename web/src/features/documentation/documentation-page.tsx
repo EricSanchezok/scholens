@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { CopyActionButton } from "@/components/feedback";
-import { buttonVariants, keyboardFocusRing } from "@/components/ui";
+import { buttonVariants, focusSurfaceVariants } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
   BackIcon,
@@ -56,7 +56,7 @@ function LocaleControl() {
           aria-pressed={locale === option}
           className={cn(
             "motion-control min-h-11 rounded-[calc(var(--radius-md)-2px)] px-2.5 text-xs font-medium sm:min-h-9",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "selection" }),
             locale === option
               ? "bg-surface text-foreground"
               : "text-secondary hover:text-foreground",
@@ -82,7 +82,7 @@ function DocumentationHeader() {
         <Link
           className={cn(
             "flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] font-semibold sm:min-h-9",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
           )}
           href="/"
         >
@@ -97,7 +97,7 @@ function DocumentationHeader() {
           <Link
             className={cn(
               "text-secondary hover:text-foreground hidden min-h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 text-sm sm:inline-flex",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             href="/"
           >
@@ -107,7 +107,7 @@ function DocumentationHeader() {
           <a
             className={cn(
               "text-secondary hover:text-foreground hidden min-h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 text-sm md:inline-flex",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             href={SOURCE_REPOSITORY_URL}
             rel="noopener noreferrer"
@@ -132,7 +132,7 @@ function TableOfContents({ compact = false }: { compact?: boolean }) {
         <a
           className={cn(
             "text-secondary hover:bg-hover hover:text-foreground flex min-h-11 items-center rounded-[var(--radius-md)] px-3 text-sm sm:min-h-9",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
           )}
           href={`#${anchor}`}
           key={anchor}
@@ -149,7 +149,7 @@ function TableOfContents({ compact = false }: { compact?: boolean }) {
       <summary
         className={cn(
           "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 text-sm font-medium [&::-webkit-details-marker]:hidden",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
       >
         <span>{t("toc.open")}</span>
@@ -220,7 +220,10 @@ function CodeSample({
       </figcaption>
       <pre
         aria-label={title}
-        className="bg-surface overflow-x-auto p-4 text-[0.8125rem] leading-6"
+        className={cn(
+          "bg-surface overflow-x-auto p-4 text-[0.8125rem] leading-6",
+          focusSurfaceVariants({ intent: "scroll" }),
+        )}
         tabIndex={0}
       >
         <code>{code}</code>
@@ -285,7 +288,7 @@ export function DocumentationPage({
       <a
         className={cn(
           "bg-surface sr-only z-50 rounded-[var(--radius-md)] px-3 py-2 text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-3",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
         href="#documentation-content"
       >
@@ -420,7 +423,7 @@ export function DocumentationPage({
                     <a
                       className={cn(
                         "text-secondary hover:text-foreground mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] text-sm underline underline-offset-4 sm:min-h-9",
-                        keyboardFocusRing,
+                        focusSurfaceVariants({ intent: "inline" }),
                       )}
                       href={client.referenceUrl}
                       rel="noopener noreferrer"
@@ -457,7 +460,7 @@ export function DocumentationPage({
                   <summary
                     className={cn(
                       "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-sm)] text-sm font-medium underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden",
-                      keyboardFocusRing,
+                      focusSurfaceVariants({ intent: "neutral" }),
                     )}
                   >
                     <span>{t("setup.localUpload.showConfiguration")}</span>
@@ -615,7 +618,7 @@ export function DocumentationPage({
                     <summary
                       className={cn(
                         "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-sm)] font-medium [&::-webkit-details-marker]:hidden",
-                        keyboardFocusRing,
+                        focusSurfaceVariants({ intent: "neutral" }),
                       )}
                     >
                       <span>{t(`troubleshooting.items.${item}.title`)}</span>
@@ -640,7 +643,7 @@ export function DocumentationPage({
               <a
                 className={cn(
                   "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "inline" }),
                 )}
                 href="/docs.md"
               >
@@ -649,7 +652,7 @@ export function DocumentationPage({
               <a
                 className={cn(
                   "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "inline" }),
                 )}
                 href="/llms.txt"
               >
@@ -658,7 +661,7 @@ export function DocumentationPage({
               <a
                 className={cn(
                   "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
-                  keyboardFocusRing,
+                  focusSurfaceVariants({ intent: "inline" }),
                 )}
                 href={SOURCE_REPOSITORY_URL}
                 rel="noopener noreferrer"

@@ -13,6 +13,15 @@ Jobs runtime validates `WEBHOOK_BASE_URL` and pins every signed `/internal/v1/`
 request to that worker-owned authority; the path and query remain job-specific,
 but a stale producer-supplied host cannot redirect or strand a callback.
 
+The production EventBridge task is a one-shot hourly Server-maintenance
+orchestrator. It independently attempts Zotero scheduling and drains bounded
+Server transactions that purge expired reading-session page detail; failure of
+either duty is logged, the other duty is still attempted, and the task exits
+nonzero so EventBridge retry and alerting remain effective. Server owns the
+retention cutoff and database mutation. Jobs owns only the signed hourly trigger
+and repeats bounded batches until Server reports no remaining candidates.
+Zotero keeps its 24-hour due threshold even though the task runs hourly.
+
 Generated-object deletion is additionally fail-closed before a worker claims
 the job or opens S3. Server and Jobs share one `scholens_job_contracts`
 allowlist (`documents/` and `research/audio/`), a 1,024-byte ASCII-safe key
@@ -27,8 +36,10 @@ or an oversized batch before deleting any object.
 The PDF worker follows one explicit, local-first pipeline:
 
 1. Download the original PDF from private S3 storage.
-2. Analyze the PDF locally with PyMuPDF: per-page text statistics, preview,
-   and deterministic page offsets (milliseconds per page).
+2. Analyze the PDF locally with PyMuPDF: authoritative physical page count,
+   per-page text statistics, preview, and deterministic page offsets. Blank
+   pages may have no text offset, so callbacks never infer page count from the
+   offset map.
 3. Classify the document:
    - **Scanned PDF** (empty or near-empty text layer, or repeated boilerplate
      such as per-page watermarks) is submitted to MinerU, the only OCR-capable
@@ -57,6 +68,14 @@ The PDF worker follows one explicit, local-first pipeline:
    non-fatal and leaves lexical search available.
 7. Send the result, optional versioned embedding, and token usage to Server
    through an HMAC-signed webhook.
+
+The Jobs PDF callback transport temporarily owns one rolling-deploy
+compatibility retry for the additive `result.page_count` field. It retries
+exactly once without that field only when a Server 422 body identifies
+`result.page_count` as an extra/unknown input; every other validation or
+transport failure remains terminal. Remove this adapter after the accepting
+Server release is deployed to every callback consumer and callbacks queued
+against the older contract have drained.
 
 Jobs and Server consume one shared callback-size contract. The exact compact
 JSON body is rejected before HTTP above 64 MiB; PDF results separately cap

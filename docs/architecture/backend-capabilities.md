@@ -615,15 +615,25 @@ Conversation generation has one externally observable acceptance boundary.
 Quota, access, immutable context resolution, rate limiting, and concurrency
 acquisition run before product writes. The following short command atomically
 creates the Turn/Response, selected path, DurableJob, and outbox dispatch; for
-prompt branches it also restores the source turn's paper-context snapshot. A
-command conflict releases the lease. `Prefer: respond-async` returns a `202`
-receipt after commit, and subscribers consume `start` and later events from the
-response event endpoint. Disconnecting a subscriber never cancels generation;
+the first prompt it may also create the client-identified Conversation, and for
+prompt branches it restores the source turn's paper-context snapshot. A command
+conflict releases only a concurrency lease newly created by that acceptance
+attempt; conflicting reuse of an active Response ID preserves the existing
+generation's lease. `Prefer: respond-async` returns a `202` receipt after
+commit. Without that preference, the POST returns a direct subscription
+to the same durable generation, flushes a comment-only acceptance frame, and
+then consumes Redis-ID events. The candidate-aware
+`application/vnd.scholens.conversation-events` representation carries sanitized
+partial answers and explicit cancellation; the established media type retains
+its published event union. Neither path runs the agent inside the HTTP request.
+Disconnecting a subscriber never cancels generation;
 only the authorized cancellation command transitions the running Response and
 job. Event subscriptions may reconnect from `Last-Event-ID`, but generation is
 never automatically replayed. If a worker lease expires, the Response fails as
 `generation_interrupted` because replaying a partially executed model/tool
-sequence is not generally idempotent.
+sequence is not generally idempotent. A process-local notification wakes the
+accepting API process's outbox dispatcher after commit; the bounded poll remains
+the cross-process and recovery fallback.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Replay-safe command
@@ -755,6 +765,38 @@ embedding model and its tokenizer are pinned image artifacts; queries and paper
 text do not leave Scholens for semantic retrieval. `postgres_fts` remains an
 explicit lexical-only degradation backend, and semantic runtime failure falls
 back within the hybrid adapter without failing the search request.
+
+The query planner keeps numeric-only input and ambiguous short input below
+three compact characters out of fuzzy, full-text, passage, and semantic lanes;
+two CJK characters are sufficient to enable hybrid retrieval. Those strict
+queries match only complete title, author, or keyword tokens,
+normalized DOI equality, and an exact publication year for four digits. Hybrid
+trigram candidates require similarity `0.12`. If any exact metadata result
+exists, semantic retrieval may rerank only the lexical result set and cannot
+expand it. Otherwise, a semantic-only result must have cosine distance at most
+`0.20`, be within `0.04` of the best semantic candidate, and is capped with all
+other semantic-only results at 20. These are conservative acceptance guardrails
+bound to the pinned embedding-model revision, not a claim of completed relevance
+calibration. Loosening them requires the fixed evaluation set called for by ADR
+0030. The policy lives with the paper-search adapter rather than the
+provider-neutral embedding package. Response totals and `search_mode` describe
+the accepted result set, not every vector candidate considered. Result snippets
+come only from full-text-matching passages; the same PostgreSQL query produces a
+ranked headline before it is projected as bounded plain text, so stemming does
+not discard a valid passage. An unmatched paper never receives the beginning of
+raw parser Markdown as a fallback snippet.
+
+Query normalization applies NFKC to user input, but the current generated
+compact metadata projection is lowercased and punctuation-stripped without
+NFKC. Compatibility-form characters already stored in paper metadata are not
+therefore guaranteed to match their ASCII equivalents; repairing that side of
+the comparison requires an expand–backfill–switch projection migration.
+Metadata expressions and the explicit trigram similarity threshold can also
+require a scan at the current product scale. Before increasing the 5,000-paper
+account limit or applying this adapter to a materially larger corpus, the owner
+must add a production-shaped `EXPLAIN ANALYZE` latency gate and choose an
+index-backed candidate strategy; changing to PostgreSQL's `%` operator without
+controlling its session threshold would silently change recall.
 
 `Document.search_text_compact` and `DocumentSearchEmbedding` are derived search
 projections. The latter is keyed by document and model revision and carries a
@@ -906,6 +948,81 @@ Project's associations, storage keys, or audit entries.
 It does not synthesize a paper-scoped conversation or a fake user turn.
 Starting a conversation about a paper is an explicit user operation and the
 conversation references that existing Document-owned context.
+
+## First-party research activity
+
+The research-activity capability is delivered with the additive contract and
+schema introduced by [ADR 0039](../decisions/0039-first-party-research-activity-ledger.md).
+It does not backfill reading duration from `LibraryPaper.last_accessed_at` or
+from Project actions that predate collection. Insight responses expose
+`reading_data_since` and `activity_history_complete_since` so clients can
+distinguish an empty period from unavailable historical evidence.
+
+The public HTTP surface is:
+
+- `GET|PUT /api/v1/me/reading-activity-preferences` for the independent
+  recording and anonymous-Project-contribution preferences;
+- `POST /api/v1/papers/{document_id}/reading-sessions` to open an owner-scoped
+  session after paper and optional Project-context authorization;
+- `PUT /api/v1/reading-sessions/{session_id}` to submit cumulative visible,
+  active-estimate, page, and normalized-region evidence;
+- `GET /api/v1/papers/{document_id}/insights`,
+  `GET /api/v1/projects/{project_id}/insights`, and
+  `GET /api/v1/me/research-insights` for paper, private-versus-team Project,
+  and personal period projections;
+- `GET /api/v1/projects/{project_id}/activity` for the authorized Project-fact
+  feed;
+- `GET /api/v1/me/reading-activity/export?format=json|csv` for an actor-owned
+  portable export;
+- `DELETE /api/v1/reading-sessions/{session_id}`,
+  `DELETE /api/v1/papers/{document_id}/reading-activity`,
+  `DELETE /api/v1/projects/{project_id}/me/reading-activity`, and
+  `DELETE /api/v1/me/reading-activity` for session, paper, Project-attribution,
+  and complete scopes.
+
+Preferences default to `recording_enabled=true` and
+`contribute_anonymous_project_aggregates=true`. Turning off recording prevents
+the Web from opening another behavioral session; turning off Project
+contribution prevents future Project-attributed rollups. Neither mutation
+deletes existing history. Deleting a Project contribution preserves the same
+user's personal evidence, while paper, complete-history, Project, Document, and
+account deletion follow their owning cascade.
+
+The first measurement definition is `active-reading-v1`. Web admits bounded
+five-second slices only while Reader is foreground-visible and focused, treats
+interaction older than 120 seconds as idle for the active estimate, and flushes
+cumulative evidence at most every 30 seconds and at lifecycle boundaries.
+Server rejects a decrease, a duration outside the bounded session contract, an
+active value greater than visible, an unauthorized Project attribution, or a
+page/region outside the Document bounds. Substantive coverage requires 15
+active-estimate seconds on a page, and the vertical page distribution uses 20
+normalized regions. The API names and copy retain estimate semantics; no field
+claims gaze, attention, comprehension, or productivity.
+
+Fine session-page trajectory rows have a 90-day retention ceiling. Coarse
+sessions and personal page/hour rollups remain until user or account deletion;
+Project-attributed page/hour rollups remain until contribution, source,
+Project, or account deletion. Maintenance removes expired detail without
+discarding the coarse personal trend and marks the owning session as purged. A
+request to delete that one old session returns a stable conflict because its
+deltas can no longer be reversed exactly; paper, Project-contribution, and
+complete-history deletion remain exact. Export and every deletion authorize
+the actor before retrieval or mutation.
+
+Project insight returns the current actor's private contribution independently
+from its team projection. Team reading statistics are suppressed unless the
+selected period contains at least three contributors, and returned team time is
+rounded to five-minute units. There is no member filter, exact team session
+boundary, per-member series, or leaderboard. Project activity is computed from
+the canonical Project Paper, Project-audience Research Item and annotation
+comment, and Project collaborator records. There is no copied
+`project_activity_facts` table.
+
+PostHog and OpenTelemetry are operationally separate and are not composed as an
+activity repository. Logs, metrics, traces, the Operation Journal, Redis, and
+job envelopes receive no session path, page payload, selected text, or exported
+history. Low-cardinality endpoint outcome and latency telemetry remains
+permitted.
 
 ## Billing usage projection
 

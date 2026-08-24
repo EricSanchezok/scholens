@@ -25,6 +25,18 @@ redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
 return count
 """
 
+_IDEMPOTENT_RATE_LIMIT_SCRIPT = """
+local marker = redis.call(
+  'SET', KEYS[2], '1', 'EX', tonumber(ARGV[1]), 'NX'
+)
+if not marker then
+  return tonumber(redis.call('GET', KEYS[1]) or '0')
+end
+local count = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+return count
+"""
+
 _ACQUIRE_SCRIPT = """
 local key = KEYS[1]
 local now = tonumber(ARGV[1])
@@ -35,7 +47,7 @@ redis.call('ZREMRANGEBYSCORE', key, '-inf', now)
 if redis.call('ZSCORE', key, member) then
   redis.call('ZADD', key, expires, member)
   redis.call('EXPIRE', key, math.ceil((expires - now) / 1000))
-  return 1
+  return 2
 end
 if redis.call('ZCARD', key) >= limit then
   return 0
@@ -92,6 +104,7 @@ async def enforce_rate_limit(
     user_id: int,
     ip_address: str,
     feature: str,
+    operation_id: str | None = None,
     redis_url: str | None = None,
     environment: str | None = None,
 ) -> None:
@@ -112,12 +125,24 @@ async def enforce_rate_limit(
     try:
         counts = []
         for key, _ in keys:
-            count = await client.eval(
-                _RATE_LIMIT_SCRIPT,
-                1,
-                key,
-                window_seconds + 1,
-            )
+            if operation_id is None:
+                count = await client.eval(
+                    _RATE_LIMIT_SCRIPT,
+                    1,
+                    key,
+                    window_seconds + 1,
+                )
+            else:
+                # The hash tag contains the complete counter key, so the marker
+                # and the rolling-deploy-compatible counter share a cluster slot.
+                marker_key = f"scholens:rate:dedupe:{{{key}}}:{operation_id}"
+                count = await client.eval(
+                    _IDEMPOTENT_RATE_LIMIT_SCRIPT,
+                    2,
+                    key,
+                    marker_key,
+                    window_seconds + 1,
+                )
             counts.append(int(count))
     except RedisError:
         add_counter(
@@ -135,6 +160,7 @@ async def enforce_rate_limit(
 class AIConcurrencyLease:
     key: str
     member: str
+    created: bool = False
 
 
 async def acquire_concurrency(
@@ -162,14 +188,16 @@ async def acquire_concurrency(
     ttl_seconds = int(os.getenv("AI_CONCURRENCY_TTL_SECONDS", "3600"))
     now_ms = int(time.time() * 1000)
     try:
-        acquired = await client.eval(
-            _ACQUIRE_SCRIPT,
-            1,
-            key,
-            now_ms,
-            now_ms + ttl_seconds * 1000,
-            limit,
-            member,
+        acquire_result = int(
+            await client.eval(
+                _ACQUIRE_SCRIPT,
+                1,
+                key,
+                now_ms,
+                now_ms + ttl_seconds * 1000,
+                limit,
+                member,
+            )
         )
     except RedisError:
         add_counter(
@@ -178,9 +206,15 @@ async def acquire_concurrency(
         )
         logger.exception("dependency.redis.concurrency_failed")
         raise AILimitExceeded("concurrency_limit_unavailable") from None
-    if not acquired:
+    if acquire_result == 0:
         raise AILimitExceeded(f"{category}_concurrency_exceeded")
-    return AIConcurrencyLease(key=key, member=member)
+    if acquire_result not in {1, 2}:
+        raise RuntimeError("Concurrency acquire returned an invalid result")
+    return AIConcurrencyLease(
+        key=key,
+        member=member,
+        created=acquire_result == 1,
+    )
 
 
 async def release_concurrency(

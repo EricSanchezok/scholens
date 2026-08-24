@@ -12,7 +12,7 @@ from app.helpers.postgres import sanitize_for_postgres
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.shared.domain import AppError, FailureKind, JsonValue
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, contains_eager, selectinload
 
 GenerationKind = Literal["initial", "retry", "branch"]
 
@@ -696,10 +696,51 @@ class TurnRepository:
         user_id: int,
         turn_id: UUID,
     ) -> list[ConversationTurn]:
-        _, turns = self._all_turns(
-            db,
-            conversation_id=conversation_id,
-            user_id=user_id,
+        ancestry = (
+            select(
+                ConversationTurn.id.label("turn_id"),
+                ConversationTurn.parent_turn_id.label("parent_turn_id"),
+            )
+            .join(
+                Conversation,
+                Conversation.id == ConversationTurn.conversation_id,
+            )
+            .where(
+                ConversationTurn.id == turn_id,
+                ConversationTurn.conversation_id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+            .cte("conversation_ancestry", recursive=True)
+        )
+        parent = aliased(ConversationTurn)
+        # UNION bounds corrupt cycles; the validation below still reports them.
+        ancestry = ancestry.union(
+            select(
+                parent.id,
+                parent.parent_turn_id,
+            )
+            .join(ancestry, parent.id == ancestry.c.parent_turn_id)
+            .where(parent.conversation_id == conversation_id)
+        )
+        selected_response = aliased(ConversationResponse)
+        turns = list(
+            db.scalars(
+                select(ConversationTurn)
+                .join(ancestry, ancestry.c.turn_id == ConversationTurn.id)
+                .outerjoin(
+                    selected_response,
+                    selected_response.id == ConversationTurn.selected_response_id,
+                )
+                .options(
+                    contains_eager(
+                        ConversationTurn.selected_response,
+                        alias=selected_response,
+                    )
+                )
+                .execution_options(populate_existing=True)
+            )
+            .unique()
+            .all()
         )
         by_id = {turn.id: turn for turn in turns}
         target = by_id.get(turn_id)
