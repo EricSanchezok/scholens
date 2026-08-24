@@ -21,6 +21,7 @@ import {
   NextIcon,
   RepositoryIcon,
   SettingsIcon,
+  UsageIcon,
 } from "@/design-system/icons/semantic-icons";
 import {
   CurrentUserAvatar,
@@ -235,6 +236,12 @@ function AccountHubHome({ actor }: { actor: Actor }) {
           {t("groups.account")}
         </h2>
         <AccountHubGroup>
+          <AccountHubRow
+            description={t("activity.description")}
+            glyph={UsageIcon}
+            href="/me/activity"
+            label={t("activity.title")}
+          />
           <AccountHubRow
             description={t("settings.description")}
             glyph={SettingsIcon}

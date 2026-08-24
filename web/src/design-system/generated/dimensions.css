@@ -33,6 +33,12 @@
   --type-ui: 14px;
 }
 @theme inline {
+  --color-activity-empty: var(--color-research-activity-empty);
+  --color-activity-high: var(--color-research-activity-high);
+  --color-activity-low: var(--color-research-activity-low);
+  --color-activity-medium: var(--color-research-activity-medium);
+  --color-activity-peak: var(--color-research-activity-peak);
+  --color-activity-secondary: var(--color-research-activity-secondary);
   --color-canvas: var(--color-bg-canvas);
   --color-control: var(--color-border-control);
   --color-danger: var(--color-danger-text);

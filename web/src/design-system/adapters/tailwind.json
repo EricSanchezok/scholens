@@ -32,7 +32,13 @@
     "warning": "color.warning.text",
     "state-warning-bg": "color.warning.bg",
     "info": "color.info.text",
-    "state-info-bg": "color.info.bg"
+    "state-info-bg": "color.info.bg",
+    "activity-empty": "color.research-activity.empty",
+    "activity-low": "color.research-activity.low",
+    "activity-medium": "color.research-activity.medium",
+    "activity-high": "color.research-activity.high",
+    "activity-peak": "color.research-activity.peak",
+    "activity-secondary": "color.research-activity.secondary"
   },
   "fontSizes": {
     "ui": "type.ui",

@@ -60,6 +60,10 @@ import {
 import { cn } from "@/lib/utilities/cn";
 import type { PaperSort, PaperStatus as FilterStatus } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
+import {
+  CompactPaperActivity,
+  type PaperActivitySummary,
+} from "@/features/research-activity";
 import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
 
 type Paper = components["schemas"]["LibraryPaperListPaperEntry"];
@@ -509,6 +513,7 @@ function MobileTagFilter({
 }
 
 export function PapersView({
+  activityByDocumentId,
   attentionCount,
   data,
   error,
@@ -541,6 +546,7 @@ export function PapersView({
   tags,
   tagsLoading = false,
 }: {
+  activityByDocumentId?: ReadonlyMap<string, PaperActivitySummary>;
   attentionCount: number;
   data?: PaperList;
   error?: unknown;
@@ -605,6 +611,9 @@ export function PapersView({
   );
   const workbenchItems: PaperCollectionItem[] = papers.map((paper) => {
     const metadata = paperMetadata(paper);
+    const activitySummary = activityByDocumentId?.get(
+      paper.document.document_id,
+    );
     const publication = [
       paper.metadata_overrides.journal ?? paper.document.journal,
       paper.metadata_overrides.publisher ?? paper.document.publisher,
@@ -623,6 +632,9 @@ export function PapersView({
         dateStyle: "medium",
       }),
       authors: metadata.authors,
+      activity: activitySummary ? (
+        <CompactPaperActivity summary={activitySummary} />
+      ) : undefined,
       doi: paper.metadata_overrides.doi ?? paper.document.doi ?? undefined,
       href: `/reader/${paper.document.document_id}` as Route,
       id: paper.document.document_id,

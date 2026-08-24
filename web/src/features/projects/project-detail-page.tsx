@@ -78,6 +78,7 @@ import {
   type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import { ProjectInsightsContainer } from "@/features/research-activity";
 import { cn } from "@/lib/utilities/cn";
 import {
   CollectionToolbar,
@@ -112,6 +113,7 @@ import {
   parseProjectDetailSearch,
   serializeProjectDetailSearch,
   type ProjectDetailSearchState,
+  type ProjectActivityRange,
   type ProjectOutputKind,
   type ProjectOutputSort,
   type ProjectPaperSort,
@@ -1097,7 +1099,16 @@ export function ProjectDetailWorkspace({
               </TabsList>
 
               <TabsContent className="mt-5" value="overview">
-                <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+                <ProjectInsightsContainer
+                  onRangeChange={(activityRange) =>
+                    replaceSearch({
+                      activityRange: activityRange as ProjectActivityRange,
+                    })
+                  }
+                  projectId={projectId}
+                  range={state.activityRange}
+                />
+                <div className="border-line-subtle mt-8 grid min-w-0 gap-4 border-t pt-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
                   <Frame
                     aria-label={t("detail.recentPapers")}
                     className="min-w-0"

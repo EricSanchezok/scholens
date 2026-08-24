@@ -2,6 +2,8 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
+import { hasInvalidManualSvg } from "./architecture-rules.mjs";
+
 const webRoot = path.resolve(import.meta.dirname, "..");
 const sourceRoot = path.join(webRoot, "src");
 const generatedDirectories = [
@@ -87,11 +89,11 @@ for (const filePath of files) {
       "raw color found outside token sources/generated output; use a semantic token",
     );
   }
-  if (/<svg\b|createElement\(\s*["']svg["']/.test(contents)) {
+  if (hasInvalidManualSvg(contents)) {
     report(
       violations,
       filePath,
-      "manually rendered SVG found; add an Iconoir glyph through the Scholens Icon wrapper",
+      "manual SVG must be a named semantic data visualization; glyphs use the Scholens Iconoir wrapper",
     );
   }
   if (/navigator\.clipboard/.test(contents) && filePath !== clipboardOwner) {

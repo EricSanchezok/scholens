@@ -17,8 +17,9 @@ preserves other workspace state.
 
 Phones use an account center instead of shrinking that dialog. The fourth
 workspace destination opens `/me`, whose unboxed identity block, one compact
-plan-and-usage summary surface, and divided preference/help groups form the
-mobile account overview. Its children are real routes:
+plan-and-usage summary surface, a private Research activity entry, and divided
+preference/help groups form the mobile account overview. Its children are real
+routes:
 
 - `/me/account` owns read-only identity, Account Center, and current-browser
   Sign out;
@@ -26,6 +27,8 @@ mobile account overview. Its children are real routes:
 - `/me/settings` discloses only Display and interaction plus Translation;
 - `/me/settings/display` owns appearance, interface locale, and motion;
 - `/me/settings/translation` owns Reader translation preferences;
+- `/me/activity` owns private research insight, export, and complete-history
+  deletion;
 - `/me/connections` and `/me/access-keys` own their existing account resources.
 
 The `/me` overview omits both a duplicate title bar and session actions, and
@@ -39,9 +42,12 @@ are ignored.
 The responsive Settings launcher writes `?settings=` on desktop and the
 corresponding `/me` path on phones. An old phone `?settings=` URL is replaced
 with the new route while preserving other workspace state and the allowlisted
-Zotero callback fields. Direct desktop visits to `/me` routes replace to the
-equivalent existing Settings dialog, so account controls never acquire a
-second desktop composition.
+Zotero callback fields. Direct desktop visits to dialog-backed `/me` routes
+replace to the equivalent existing Settings dialog, so account controls never
+acquire a second desktop composition. `/me/activity` is the deliberate
+exception: its annual calendar, trend, Project distribution, and paper table
+require a dedicated full-width page on desktop as well as mobile and never
+redirect into the Settings dialog.
 
 Desktop navigation uses 20 px semantic glyphs in fixed 24 px slots. The active
 row and its icon strengthen together on one quiet hover surface; inactive icons
@@ -75,11 +81,13 @@ service without spending menu width on the license label.
 
 - General is labeled Appearance. It owns application locale, curated Theme,
   the visual Light, Dark, and System choices, and the independent System,
-  Reduced, and Full motion preference. Theme remains independent from
-  Appearance and is stored only in the current browser. A Theme picker is
-  omitted while only Default is registered and appears automatically once a
-  second curated theme ships; Appearance previews always inherit the selected
-  Theme.
+  Reduced, and Full motion preference. The same panel adds a distinct Research
+  activity group for the Server-owned recording and anonymous-Project-
+  contribution preferences; those controls do not become browser-only display
+  settings. Theme remains independent from Appearance and is stored only in
+  the current browser. A Theme picker is omitted while only Default is
+  registered and appears automatically once a second curated theme ships;
+  Appearance previews always inherit the selected Theme.
 - Account presents the authenticated Actor's shared identity as read-only,
   current-browser Sign out, and one external SanchezCloud Account action.
   The avatar is the private shared profile image managed by Account Center;
@@ -110,6 +118,119 @@ service without spending menu width on the license label.
   credential is established only through the dedicated read-only OAuth flow.
 - Translation uses the same translation-preference feature as Reader. It does
   not duplicate server state or couple paper language to interface locale.
+
+## Research activity preferences
+
+`GET|PUT /api/v1/me/reading-activity-preferences` is the only account preference
+authority for the research-activity slice defined by
+[ADR 0038](../../docs/decisions/0038-first-party-research-activity-ledger.md).
+The Research activity group contains two independent switches:
+
+- **Record reading activity** controls future private Reader sessions, active-
+  reading estimates, page heatmaps, and personal rollups;
+- **Contribute to anonymous Project summaries** controls future Project-
+  attributed rollups while preserving the same activity in the researcher's
+  private history.
+
+Both default to enabled. The Project control explains that a selected-period
+team aggregate is published only after at least three members contribute and
+that team time is rounded; it never promises individual analytics. Turning off
+recording leaves the Project preference stored but inactive because there is no
+new reading evidence to attribute. Turning recording back on does not silently
+change the Project choice.
+
+A successful switch mutation confirms only future behavior. Existing history
+remains visible and the panel links to `/me/activity` for export or deletion;
+copy must never say that disabling is the same as clearing. A failed mutation
+restores the confirmed Server value and keeps an inline retry. These controls
+are product-data preferences, not cookie consent, PostHog configuration,
+OpenTelemetry sampling, or a browser-local appearance setting.
+
+The explanatory disclosure states the current retention boundary: fine session-
+page trajectories are retained for at most 90 days, while coarse personal
+trends remain until scoped or account deletion. It links to the activity page
+instead of placing destructive actions beside ordinary display controls.
+
+## Personal research activity
+
+`/me/activity` is a private annual research review on desktop and mobile. Its
+shareable `range` accepts `30d`, `90d`, `365d`, or `all`; the default `365d` is
+omitted. `GET /api/v1/me/research-insights` supplies one authorized projection,
+including `reading_data_since`, `activity_history_complete_since`, and the
+metric-definition version. The route never joins exports or recent rows in the
+browser to synthesize missing insight.
+
+`reading_data_since` anchors the first known evidence and daily densification;
+`activity_history_complete_since` is the metric collection boundary. A finite
+window that starts before the latter is partial even when the user has no
+reading evidence. `all` means all history collected under the current metric
+definition, and the boundary remains visible in first-use states.
+Finite windows use the response time zone for calendar labels while including
+whole UTC-hour ledger buckets. A calendar boundary that falls inside a UTC hour
+therefore excludes that incomplete first bucket instead of presenting a
+millisecond-exact cutoff.
+
+The reading order is:
+
+1. a summary strip for active-reading estimate, visible time, sessions, active
+   days, substantive papers/pages, annotations, private questions, and outputs;
+2. a day calendar for consistency, followed by an unsmoothed daily line trend;
+3. horizontal Project bars showing only this researcher's own Project-
+   attributed effort, never other members or a rank;
+4. a Top papers table linking to each paper's Reader Insights panel;
+5. Data controls for portable export and complete-history deletion.
+
+Effort, process, and outcome labels remain visually grouped but mathematically
+separate. The route may acknowledge a personal best or return to a paper the
+researcher repeatedly revisited; it does not create a composite score, global
+percentile, member comparison, or punitive streak. Project bars compare the
+current actor's authorized contexts, not people, and their labels carry the
+numeric value without depending on bar length or color. Each Project title is
+a keyboard-focusable link to that Project's activity view; the personal
+`365d` range maps to Project `all` because Project does not expose a `365d`
+period.
+
+The calendar is an at-a-glance image paired in the same region with an
+expandable, keyboard-accessible daily table exposing date, active-reading
+estimate, visible time, and session count. Unrecorded history, a recorded zero,
+and unavailable expired detail use distinct text and patterns. The trend reuses
+that table equivalent rather than adding a second daily table; charts do not
+smooth across missing dates or claim that active time is attention,
+comprehension, or productivity. A partial previous period omits percentage
+comparison.
+
+The public export supports
+`GET /api/v1/me/reading-activity/export?format=json|csv`. The Web download uses
+CSV keyset pages of at most 1,000 records: it requests the header on the first
+page, follows each `X-Next-Cursor` with `include_header=false`, rejects a
+repeated cursor, and combines the Blob chunks locally without injecting their
+contents into analytics or logs. The signed cursor fixes the first export
+timestamp and resume position. The effective raw-detail retention boundary is
+re-evaluated on every page, so details that age out during a long resume may be
+omitted from later pages. This is not a transactional database snapshot;
+concurrent mutations may affect records not yet emitted. Clear all calls
+`DELETE /api/v1/me/reading-activity` only after an explicit confirmation that
+names the scope, irreversibility, and the fact that recording remains enabled
+unless the user changes its switch. A successful deletion resets the insight
+evidence (`reading_data_since` becomes empty until a later session) and
+invalidates Home, Reader, Project, and activity queries. It does not change the
+global metric-definition collection boundary reported by
+`activity_history_complete_since`.
+
+The first UI slice exposes scoped deletion where its meaning is clearest:
+Reader Insights deletes the current paper through
+`DELETE /api/v1/papers/{document_id}/reading-activity`, and Project Overview
+deletes only the current actor's Project attribution through
+`DELETE /api/v1/projects/{project_id}/me/reading-activity`. The public session
+deletion contract remains available to API clients while that session's
+90-day detail remains; an older purged session returns a stable conflict.
+`/me/activity` does not invent a session-management table from export data.
+
+A first-use, recording-disabled, partial-history, or empty selected period is a
+complete state with explanatory copy, not a zero-filled calendar. A disabled
+account may export or delete retained history. Loading and recoverable failure
+keep the period selector and page identity stable and never replace a private
+history error with a team aggregate.
 
 ## MinerU connection contract
 
@@ -181,8 +302,12 @@ Settings panels compose product feature slices; they do not handwrite backend
 DTOs. TanStack Query owns Server state, React Hook Form plus Zod owns editable
 forms, and local state owns disclosure and confirmation interactions. Shared
 integration queries live in `features/integrations`; shared content-language
-preferences live in `features/translation-preferences`. Generic fields,
-dialogs, feedback, and semantic Iconoir wrappers remain shared components.
+preferences live in `features/translation-preferences`. The shared research-
+activity feature owns preference and insight queries, range serialization,
+completeness semantics, export/delete mutations, and estimate formatting;
+Settings and `/me/activity` compose those contracts without owning another
+tracker or rollup. Generic fields, dialogs, feedback, and semantic Iconoir
+wrappers remain shared components.
 
 ## Acceptance states
 
@@ -212,6 +337,17 @@ empty, populated, create, edit, revoke, one-time secret states, the MCP guide
 link, and its 320px header composition. The shared Dialog responsive-full story
 verifies the mobile shell independently.
 
+Research-activity acceptance covers both default-on switches, every independent
+combination, recording-off with retained history, mutation rollback, the
+three-contributor explanation, and the 90-day detail disclosure. `/me/activity`
+covers every range, first use, populated calendar/trend/Project/paper states,
+partial history, recording disabled, export JSON/CSV, deletion confirmation and
+success, deletion failure, mobile, 320 px, localized long labels, Light/Dark,
+keyboard chart traversal, and table equivalents. These runtime states ship with
+the feature; until the account Figma matrix has stable activity node IDs,
+Storybook and route E2E are the acceptance owner rather than a fabricated frame
+reference.
+
 Feature changes must retain the Figma hierarchy, semantic tokens, generated API
 types, localized copy parity, keyboard behavior, and narrow-content coverage.
 
@@ -224,4 +360,8 @@ responsive overlay recipe. General writes `scholens-motion` and updates the
 root policy live; System follows the media query, Reduced removes spatial and
 perpetual movement, and Full remains explicit even when the OS asks to reduce.
 `Features/Settings/Dialog` → `General` and Motion Lab are the executable
-preference evidence.
+preference evidence. The `/me/activity` calendar, line, and Project bars use a
+bounded range-change transition only; values, axes, table alternatives, and
+focus state update directly. Reduced mode removes chart drawing and bar-growth
+motion without removing the before/after relationship or delaying export and
+deletion feedback.

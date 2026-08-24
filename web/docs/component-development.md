@@ -38,6 +38,12 @@ actually shared.
   `src/design-system/icons/semantic-icons.ts`. Product code under `app/` and
   `features/` must not import `iconoir-react` directly, import another icon
   library, or manually redraw a glyph. `design:check` enforces this boundary.
+- Feature-owned data visualizations may use semantic SVG when CSS cannot express
+  the relationship. Mark the root `data-visualization`, expose `role="img"`
+  with `aria-label` or `aria-labelledby`, use semantic tokens, and provide a
+  keyboard-accessible table equivalent. This exception never applies to glyphs
+  or decorative illustrations; those still use the shared icon and media
+  systems. `architecture:check` enforces the marker and accessible-name pair.
 - Every product meaning has exactly one semantic icon name, and every Iconoir
   glyph in the registry belongs to exactly one meaning. The same meaning must
   reuse the same semantic export everywhere; a glyph must not be registered a

@@ -23,6 +23,7 @@ export function readReaderPanel(
   return value === "ask" ||
     value === "annotations" ||
     value === "translation" ||
+    value === "insights" ||
     value === "details"
     ? value
     : undefined;

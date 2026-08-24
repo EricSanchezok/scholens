@@ -13,6 +13,81 @@ import {
 const api = "http://127.0.0.1:7301/api/v1";
 
 const populated = [
+  http.get(`${api}/projects/:projectId/insights`, ({ params, request }) => {
+    const range = new URL(request.url).searchParams.get("range") ?? "30d";
+    return HttpResponse.json({
+      activity_history_complete_since: "2026-07-01T00:00:00Z",
+      metric_definition_version: "active-reading-v1",
+      mine: {
+        annotation_count: 7,
+        papers_with_activity: 2,
+        private_conversation_count: 4,
+        reading: {
+          active_days: 8,
+          active_ms: 5_940_000,
+          coverage_percent: 54,
+          session_count: 12,
+          substantive_pages: 19,
+          visible_ms: 7_020_000,
+        },
+      },
+      papers: projectPaperFixtures.map((paper, index) => ({
+        document_id: paper.document_id,
+        last_activity_at: `2026-08-${22 + index}T08:00:00Z`,
+        my_active_ms: (index + 2) * 31 * 60_000,
+        my_coverage_percent: 42 + index * 19,
+        discussion_message_count: index + 2,
+        shared_annotation_count: index + 1,
+        title: paper.title,
+      })),
+      papers_total_count: projectPaperFixtures.length,
+      project_id: params.projectId,
+      range,
+      reading_data_since: "2026-07-01T00:00:00Z",
+      team: {
+        active_collaborators: 2,
+        active_ms: null,
+        anonymous_reading_available: false,
+        outputs: 2,
+        papers_added: 2,
+        papers_with_activity: null,
+        resolved_discussions: 1,
+        shared_annotations: 9,
+        discussion_message_count: 12,
+        substantive_pages: null,
+        visible_ms: null,
+      },
+      time_zone: "UTC",
+      trend: Array.from({ length: 30 }, (_, index) => ({
+        date: new Date(Date.UTC(2026, 6, 26 + index))
+          .toISOString()
+          .slice(0, 10),
+        my_active_ms: index % 5 === 0 ? 0 : (18 + index * 2) * 60_000,
+        shared_activity_count: index % 4,
+        team_active_ms: null,
+      })),
+    });
+  }),
+  http.get(`${api}/projects/:projectId/activity`, ({ params }) =>
+    HttpResponse.json({
+      items: [
+        {
+          actor_display_name: "Mina Park",
+          document_id: projectPaperFixtures[0]!.document_id,
+          document_title: projectPaperFixtures[0]!.title,
+          id: "annotation:story",
+          kind: "annotation_created",
+          occurred_at: "2026-08-24T08:00:00Z",
+        },
+      ],
+      next_cursor: null,
+      project_id: params.projectId,
+    }),
+  ),
+  http.delete(
+    `${api}/projects/:projectId/me/reading-activity`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
   http.get(`${api}/projects`, () =>
     HttpResponse.json({
       items: projectFixtures,

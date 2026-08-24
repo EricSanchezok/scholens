@@ -35,6 +35,10 @@ import { ApiError } from "@/lib/api";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { useInstallExperience } from "@/features/install-experience";
 import {
+  PaperInsightsContainer,
+  ReadingActivityTracker,
+} from "@/features/research-activity";
+import {
   conversationKeys,
   conversationQueries,
   setConversationPinned,
@@ -181,6 +185,7 @@ function ReaderDocumentWorkspace({
     Record<string, ResearchContext>
   >({});
   const reflowScrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const pdfScrollContainerRef = React.useRef<HTMLDivElement>(null);
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const [fullTranslationStatus, setFullTranslationStatus] =
@@ -672,6 +677,7 @@ function ReaderDocumentWorkspace({
     panel === "ask" ||
     panel === "annotations" ||
     panel === "translation" ||
+    panel === "insights" ||
     panel === "details";
   const useDesktopPanel = useDesktopReaderPanel();
   const showDocumentNavigation = useDocumentNavigationRail();
@@ -821,6 +827,16 @@ function ReaderDocumentWorkspace({
     selectedAnnotationId,
     setReasoningLevel,
     title,
+    insightsPanel: (
+      <PaperInsightsContainer
+        documentId={documentId}
+        onPageSelect={(nextPage) =>
+          updateLocation({ page: nextPage, view: "pdf" })
+        }
+        pageCount={pageCount}
+        projectId={projectId}
+      />
+    ),
     translationPanel: (
       <ReaderTranslationPanel
         onAnnotate={(selection, translatedText) => {
@@ -864,6 +880,16 @@ function ReaderDocumentWorkspace({
       signingOut={signingOut}
       suppressInstallPromotion={reflowNudge.visible}
     >
+      <ReadingActivityTracker
+        documentId={documentId}
+        projectId={projectId}
+        rootRef={
+          readerView === "pdf"
+            ? pdfScrollContainerRef
+            : reflowScrollContainerRef
+        }
+        viewMode={readerView}
+      />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         {documentQuery.isPending && (
           <div className="m-auto w-full max-w-sm p-6">
@@ -1058,6 +1084,7 @@ function ReaderDocumentWorkspace({
                     )}
                   {readerView === "pdf" && adapter ? (
                     <PdfPage
+                      activityScrollContainerRef={pdfScrollContainerRef}
                       activeTextSelection={activeTextSelection}
                       adapter={adapter}
                       annotationNavigation={annotationNavigation}

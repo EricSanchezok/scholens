@@ -15,6 +15,52 @@ const activeConversation = {
 };
 
 const baseHandlers = [
+  http.get(`${api}/me/research-insights`, () =>
+    HttpResponse.json({
+      activity_history_complete_since: "2026-07-01T00:00:00Z",
+      annotation_count: 12,
+      conversation_count: 7,
+      metric_definition_version: "active-reading-v1",
+      output_count: 3,
+      papers_with_activity: 9,
+      projects: [
+        {
+          active_ms: 5_040_000,
+          project_id: homeProjects[0]!.id,
+          session_count: 8,
+          title: homeProjects[0]!.title,
+        },
+      ],
+      range: "30d",
+      reading_data_since: "2026-07-01T00:00:00Z",
+      summary: {
+        active_days: 12,
+        active_ms: 8_460_000,
+        coverage_percent: 62,
+        session_count: 21,
+        substantive_pages: 37,
+        visible_ms: 10_020_000,
+      },
+      time_zone: "UTC",
+      top_papers: [
+        {
+          active_ms: 2_460_000,
+          document_id: homePapers[0]!.document.document_id,
+          last_read_at: "2026-08-23T08:00:00Z",
+          session_count: 5,
+          title: homePapers[0]!.document.title,
+        },
+      ],
+      trend: Array.from({ length: 30 }, (_, index) => ({
+        active_ms: index % 5 === 0 ? 0 : (20 + index * 3) * 60_000,
+        date: new Date(Date.UTC(2026, 6, 26 + index))
+          .toISOString()
+          .slice(0, 10),
+        session_count: index % 5 === 0 ? 0 : 1,
+        visible_ms: index % 5 === 0 ? 0 : (25 + index * 3) * 60_000,
+      })),
+    }),
+  ),
   http.get(`${api}/conversations`, () =>
     HttpResponse.json({ items: homeConversations, next_cursor: null }),
   ),

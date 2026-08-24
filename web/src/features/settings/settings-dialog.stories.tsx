@@ -74,6 +74,15 @@ const integrations = [
 
 const settingsHandlers = [
   ...billingHandlers.success,
+  http.get(`${api}/me/reading-activity-preferences`, () =>
+    HttpResponse.json({
+      contribute_anonymous_project_aggregates: true,
+      recording_enabled: true,
+    }),
+  ),
+  http.put(`${api}/me/reading-activity-preferences`, async ({ request }) =>
+    HttpResponse.json((await request.json()) as object),
+  ),
   http.get(`${api}/me/access-keys`, () =>
     HttpResponse.json({
       items: [

@@ -238,6 +238,10 @@ const createdAnnotationPositions: Array<Record<string, unknown>> = [];
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
+  let readingPreferences = {
+    contribute_anonymous_project_aggregates: true,
+    recording_enabled: false,
+  };
   await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -253,6 +257,77 @@ async function mockReader(page: Page) {
       contentType: "application/json",
       body: JSON.stringify({ items: [], next_cursor: null }),
     }),
+  );
+  await page.route(
+    `${apiPattern}/me/reading-activity-preferences`,
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        readingPreferences = route
+          .request()
+          .postDataJSON() as typeof readingPreferences;
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(readingPreferences),
+      });
+    },
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/insights**`,
+    async (route) => {
+      const url = new URL(route.request().url());
+      const range = url.searchParams.get("range") ?? "30d";
+      const allTime = range === "all";
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          activity_history_complete_since: "2026-01-01T00:00:00Z",
+          document_id: paperDocument.document_id,
+          metric_definition_version: "active-reading-v1",
+          page_count: 4,
+          pages: allTime
+            ? [
+                {
+                  active_ms: 180_000,
+                  annotation_count: 1,
+                  page_number: 2,
+                  vertical_segments_ms: [
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 180_000, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0,
+                  ],
+                  visible_ms: 240_000,
+                  visit_count: 2,
+                },
+              ]
+            : [],
+          range,
+          reading_data_since: "2026-08-01T00:00:00Z",
+          summary: {
+            active_days: 3,
+            active_ms: 180_000,
+            coverage_percent: allTime ? 25 : null,
+            session_count: 2,
+            substantive_pages: allTime ? 1 : null,
+            visible_ms: 240_000,
+          },
+          time_zone: url.searchParams.get("time_zone") ?? "UTC",
+          trend: allTime
+            ? []
+            : [
+                {
+                  active_ms: 180_000,
+                  date: "2026-08-24",
+                  session_count: 2,
+                  visible_ms: 240_000,
+                },
+              ],
+        }),
+      });
+    },
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/reading-activity`,
+    (route) => route.fulfill({ status: 204 }),
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}`,

@@ -344,6 +344,10 @@
       "title": "Settings",
       "description": "Display, interaction, and translation preferences"
     },
+    "activity": {
+      "title": "Research activity",
+      "description": "Review reading time, research rhythm, and progress"
+    },
     "display": {
       "title": "Display and interaction",
       "description": "Appearance, interface language, and motion"
@@ -907,7 +911,11 @@
       "ask": "Ask",
       "annotations": "Annotations",
       "translation": "Translate",
+      "insights": "Insights",
       "details": "Details"
+    },
+    "insights": {
+      "unavailable": "Reading insights are temporarily unavailable. You can continue reading normally."
     },
     "search": {
       "close": "Close PDF search",
@@ -2005,6 +2013,206 @@
     "unknownAuthors": "Unknown authors",
     "loadMore": "Load more matches",
     "loadingMore": "Loading more matches"
+  },
+  "ResearchActivity": {
+    "title": "Research activity",
+    "description": "Review the time, reading coverage, and research outcomes Scholens has recorded for you.",
+    "since": "Recording since {date}",
+    "metricCollectionSince": "Activity metrics available since {date}",
+    "partialHistory": "Activity before {date} may be incomplete. Empty days and pages in that period do not necessarily mean no activity.",
+    "metricVersion": "Measurement method: {version}",
+    "actions": {
+      "retry": "Try again",
+      "export": "Export activity",
+      "settings": "Activity settings",
+      "delete": "Delete activity",
+      "deleteProjectContribution": "Delete my reading"
+    },
+    "exportError": "Unable to export activity. Try again.",
+    "deleteDialog": {
+      "paperTitle": "Delete this paper's reading activity?",
+      "paperDescription": "This permanently deletes your reading sessions and page-level map for this paper. The paper and annotations stay available. Your recording preference stays on, so continued reading creates new activity.",
+      "projectTitle": "Delete your Project reading contribution?",
+      "projectDescription": "This removes this Project's attribution and anonymous contribution from your reading history. Your private reading sessions and history remain, as do shared papers, annotations, discussions, and outputs. Your recording preference stays on, so continued reading in this Project creates a new contribution.",
+      "allTitle": "Delete all reading activity?",
+      "allDescription": "This permanently deletes every reading session and page-level map in your account. Papers and other research work stay available. Your recording preference stays on, so continued reading creates new activity.",
+      "cancel": "Cancel",
+      "confirm": "Delete permanently",
+      "error": "Activity could not be deleted. Try again."
+    },
+    "metrics": {
+      "activeTime": "Active reading estimate",
+      "visibleTime": "Visible time",
+      "activeDays": "Active days",
+      "activeMembers": "Active collaborators",
+      "sessions": "Sessions",
+      "coverage": "Substantial coverage",
+      "substantivePages": "Substantive pages",
+      "annotations": "Annotations",
+      "conversations": "Private questions",
+      "outputs": "Outputs",
+      "papersWithActivity": "Papers with activity",
+      "papersAdded": "Papers added",
+      "resolvedDiscussions": "Discussions resolved",
+      "sharedAnnotations": "Shared annotations",
+      "discussionMessages": "Discussion messages"
+    },
+    "legend": {
+      "none": "No recorded time",
+      "under15s": "Under 15 sec",
+      "from15sTo1m": "15 sec–1 min",
+      "from1mTo3m": "1–3 min",
+      "atLeast3m": "At least 3 min",
+      "relativeNone": "No activity",
+      "relativeLow": "Lower",
+      "relativeMedium": "Medium",
+      "relativeHigh": "Higher",
+      "relativePeak": "Highest in view"
+    },
+    "ranges": {
+      "label": "Activity range",
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days",
+      "365d": "1 year",
+      "all": "All time"
+    },
+    "chart": {
+      "myReading": "My active reading estimate",
+      "teamReading": "Anonymous team reading estimate",
+      "date": "Date",
+      "events": "Shared events",
+      "showTable": "View data table",
+      "paperLabel": "Daily active reading estimate for this paper",
+      "projectLabel": "My and anonymous team reading estimates by day",
+      "personalLabel": "My daily active reading estimate"
+    },
+    "paper": {
+      "loading": "Loading reading insights",
+      "errorTitle": "Reading insights are unavailable",
+      "errorDescription": "The paper remains available. Try loading its activity again.",
+      "emptyTitle": "Your reading map will appear here",
+      "emptyDescription": "Spend a little time reading this paper and Scholens will record an approximate, private activity history.",
+      "summary": "Reading summary",
+      "approximate": "Active time is an estimate, not a measure of attention or understanding. A page counts toward substantial coverage after at least 15 seconds of accumulated active reading.",
+      "readingMap": "Reading map",
+      "readingMapDescription": "Darker pages received more active reading time. The side rail shows where within each page; a dot marks annotations.",
+      "scaleLabel": "Reading-map scale",
+      "absolute": "Time bands",
+      "relative": "Relative",
+      "annotationCount": "{count, plural, one {# annotation} other {# annotations}}",
+      "pageDetail": "Page {page}: {time}, {visits, plural, one {# visit} other {# visits}}, {annotations, plural, one {# annotation} other {# annotations}}",
+      "pageRangeDetail": "Pages {startPage}–{endPage}: {time}, {visits, plural, one {# visit} other {# visits}}, {annotations, plural, one {# annotation} other {# annotations}}",
+      "trend": "Reading rhythm",
+      "focusPages": "Most-read pages",
+      "page": "Page {page}",
+      "pages": "Pages {startPage}–{endPage}",
+      "revisitContext": "{visits, plural, one {# visit} other {# visits}} · {annotations, plural, one {# annotation} other {# annotations}}",
+      "untitled": "Untitled paper"
+    },
+    "recording": {
+      "offTitle": "Reading recording is off",
+      "offEmptyDescription": "Existing history stays available, but future reading will not be added until you turn recording on.",
+      "offHistory": "This history is retained. Future reading is not being recorded.",
+      "unknownTitle": "Reading activity is not available yet",
+      "unknownDescription": "Open activity settings to check whether future reading is being recorded."
+    },
+    "project": {
+      "title": "Research progress",
+      "description": "Your private effort and the project's shared work stay separate.",
+      "loading": "Loading project insights",
+      "errorTitle": "Project insights are unavailable",
+      "errorDescription": "Papers and outputs remain available. Try loading activity again.",
+      "mine": "My progress",
+      "team": "Project pulse",
+      "teamThreshold": "Anonymous reading time appears only after at least three collaborators contribute in this period.",
+      "trend": "Research rhythm",
+      "trendDescription": "Reading minutes and shared events use separate tracks so unlike quantities are not combined.",
+      "paperProgress": "Paper progress",
+      "paperProgressDescription": "Active reading estimates follow the selected period. Page coverage appears in All time only and counts pages with at least 15 seconds of accumulated active reading; open a paper for its private reading map.",
+      "noPaperActivity": "Reading activity for project papers will appear here.",
+      "papersTruncated": "Showing {shown} of {total} project papers.",
+      "viewPapers": "View all project papers",
+      "coverageValue": "{value}% covered",
+      "discussionBreakdown": "{annotations, plural, one {# annotation} other {# annotations}} · {messages, plural, one {# message} other {# messages}}",
+      "lastActivityValue": "Last activity {date}",
+      "noLastActivity": "No activity in this period",
+      "activity": "Shared activity",
+      "activityError": "Shared activity could not be loaded. Project insights above are still current.",
+      "activityKinds": {
+        "annotation_created": "Added a shared annotation",
+        "discussion_message_posted": "Added a discussion message",
+        "discussion_resolved": "Resolved a shared discussion",
+        "member_joined": "Joined the project",
+        "output_created": "Created a shared output",
+        "paper_added": "Added a paper",
+        "unknown": "Updated the project"
+      },
+      "columns": {
+        "paper": "Paper",
+        "reading": "My active reading estimate",
+        "coverage": "My coverage",
+        "discussions": "Shared discussion activity",
+        "lastActivity": "Last activity"
+      }
+    },
+    "personal": {
+      "loading": "Loading research activity",
+      "errorTitle": "Research activity is unavailable",
+      "errorDescription": "Your research is safe. Check your connection and try again.",
+      "emptyTitle": "Your research rhythm starts here",
+      "emptyDescription": "Reading papers, adding annotations, asking questions, and creating outputs will build this private history.",
+      "summary": "This period",
+      "summaryDescription": "A private view of your research effort and the work it produced.",
+      "calendar": "Reading calendar",
+      "calendarDescription": "Each cell represents a day of active reading.",
+      "calendarLabel": "Daily active reading calendar",
+      "trend": "Reading trend",
+      "projects": "Time by project",
+      "papers": "Most-read papers",
+      "sessionContext": "{count, plural, one {# session} other {# sessions}}",
+      "paperContext": "{count, plural, one {# session} other {# sessions}} · Last read {date}",
+      "noProjects": "Project reading will appear here.",
+      "noPapers": "Paper reading will appear here."
+    },
+    "preferences": {
+      "title": "Reading activity",
+      "description": "Control private reading records and anonymous Project contributions.",
+      "recording": "Record my reading activity",
+      "recordingDescription": "Estimate active time and page coverage while the Reader is visible and recently used. Turning this off stops future recording; existing history stays.",
+      "project": "Contribute anonymous Project reading",
+      "projectDescription": "Include rounded reading totals only when at least three collaborators contribute. Turning this off stops future contributions; earlier anonymous contributions remain until you delete that Project's reading contribution, and private history stays.",
+      "saving": "Saving activity settings",
+      "saved": "Reading activity preferences saved.",
+      "saveError": "Unable to save activity settings. Try again.",
+      "loading": "Loading reading activity settings",
+      "errorTitle": "Reading activity settings are unavailable",
+      "errorDescription": "Your existing preference is unchanged. Try loading it again.",
+      "retry": "Try again"
+    },
+    "library": {
+      "summary": "{duration} active reading estimate, {coverage}% substantial coverage",
+      "durationOnly": "{duration} active reading estimate",
+      "durationAndCoverage": "{duration} · {coverage}% covered"
+    },
+    "home": {
+      "title": "Research activity",
+      "period": "Last 30 days",
+      "active": "Active reading estimate",
+      "daysAndPapers": "{days} days · {papers} papers with activity",
+      "annotations": "{count, plural, one {# annotation} other {# annotations}}",
+      "questions": "{count, plural, one {# private question} other {# private questions}}",
+      "outputs": "{count, plural, one {# output} other {# outputs}}",
+      "recorded": "Research activity recorded",
+      "empty": "Your reading rhythm and research progress will appear here.",
+      "open": "View activity",
+      "settings": "Activity settings",
+      "recordingOff": "Reading recording is off. Existing history stays available, but future reading will not be added.",
+      "recordingOffHistory": "Future reading is not being recorded; existing history is retained.",
+      "preferenceUnknown": "Open activity settings to check whether future reading is being recorded.",
+      "error": "Activity is temporarily unavailable.",
+      "retry": "Try again"
+    }
   },
   "Errors": {
     "unexpected": {

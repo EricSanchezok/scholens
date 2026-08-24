@@ -20,7 +20,7 @@
     "tokens:build": "node scripts/build-tokens.mjs",
     "tokens:check": "node scripts/check-generated.mjs tokens",
     "i18n:check": "node scripts/check-messages.mjs",
-    "architecture:check": "node scripts/check-architecture.mjs",
+    "architecture:check": "node --test scripts/architecture-rules.test.mjs && node scripts/check-architecture.mjs",
     "design:check": "node scripts/check-design-system.mjs",
     "docs:check": "node scripts/check-docs.mjs && pnpm docs:contract:check",
     "docs:contract:check": "node scripts/check-documentation-contract.mjs",

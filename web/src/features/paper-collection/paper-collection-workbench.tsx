@@ -58,6 +58,7 @@ export type PaperCollectionTag = {
 export type PaperCollectionItem = {
   id: string;
   title: string;
+  activity?: React.ReactNode;
   authors: string[];
   publication?: string;
   lastOpened?: string;
@@ -1285,6 +1286,11 @@ export function PaperCollectionWorkbench({
                               {item.authors.join(" · ") ||
                                 t("preview.unknownAuthors")}
                             </span>
+                            {item.activity ? (
+                              <span className="mt-2 block">
+                                {item.activity}
+                              </span>
+                            ) : null}
                           </Link>
                           <span className="mt-2 flex items-center gap-2">
                             <StatusControl
@@ -1323,12 +1329,24 @@ export function PaperCollectionWorkbench({
                           >
                             <PaperThumbnail item={item} />
                             <span className="min-w-0">
-                              <span className="line-clamp-2 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
+                              <span
+                                className={cn(
+                                  "text-xs leading-4 font-semibold [overflow-wrap:anywhere]",
+                                  item.activity
+                                    ? "line-clamp-1"
+                                    : "line-clamp-2",
+                                )}
+                              >
                                 {item.title}
                               </span>
                               {item.snippet ? (
                                 <span className="text-secondary mt-0.5 line-clamp-1 block text-[0.6875rem]">
                                   {item.snippet}
+                                </span>
+                              ) : null}
+                              {item.activity ? (
+                                <span className="mt-1 block">
+                                  {item.activity}
                                 </span>
                               ) : null}
                             </span>

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const projectSortSchema = z.enum(["activity_desc", "title_asc", "papers_desc"]);
 const projectViewSchema = z.enum(["overview", "papers", "outputs"]);
+const activityRangeSchema = z.enum(["7d", "30d", "90d", "all"]);
 const paperSortSchema = z.enum([
   "added_desc",
   "title_asc",
@@ -27,6 +28,7 @@ export type ProjectView = z.infer<typeof projectViewSchema>;
 export type ProjectPaperSort = z.infer<typeof paperSortSchema>;
 export type ProjectOutputSort = z.infer<typeof outputSortSchema>;
 export type ProjectOutputKind = z.infer<typeof outputKindSchema>;
+export type ProjectActivityRange = z.infer<typeof activityRangeSchema>;
 
 export type ProjectsSearchState = {
   query: string;
@@ -36,6 +38,7 @@ export type ProjectsSearchState = {
 
 export type ProjectDetailSearchState = {
   view: ProjectView;
+  activityRange: ProjectActivityRange;
   conversation?: string;
   panel?: "chat";
   paperQuery: string;
@@ -76,6 +79,7 @@ export function parseProjectDetailSearch(
 ): ProjectDetailSearchState {
   return {
     view: projectViewSchema.catch("overview").parse(params.get("view")),
+    activityRange: activityRangeSchema.catch("30d").parse(params.get("range")),
     conversation: optionalValue(params.get("conversation")),
     panel: params.get("panel") === "chat" ? "chat" : undefined,
     paperQuery: params.get("paper_q")?.trim() ?? "",
@@ -105,6 +109,7 @@ export function parseProjectDetailSearch(
 export function serializeProjectDetailSearch(state: ProjectDetailSearchState) {
   const params = new URLSearchParams();
   if (state.view !== "overview") params.set("view", state.view);
+  if (state.activityRange !== "30d") params.set("range", state.activityRange);
   if (state.conversation) params.set("conversation", state.conversation);
   if (state.panel) params.set("panel", state.panel);
   if (state.paperQuery) params.set("paper_q", state.paperQuery);

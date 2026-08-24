@@ -120,6 +120,14 @@
       "bg": { "$type": "color", "$value": "{palette.status.warning.subtle}" },
       "text": { "$type": "color", "$value": "{palette.status.warning.strong}" }
     },
+    "research-activity": {
+      "empty": { "$type": "color", "$value": "{palette.neutral.100}" },
+      "low": { "$type": "color", "$value": "{palette.neutral.300}" },
+      "medium": { "$type": "color", "$value": "{palette.neutral.400}" },
+      "high": { "$type": "color", "$value": "{palette.neutral.600}" },
+      "peak": { "$type": "color", "$value": "{palette.neutral.900}" },
+      "secondary": { "$type": "color", "$value": "{palette.neutral.600}" }
+    },
     "info": {
       "bg": { "$type": "color", "$value": "{palette.status.info.subtle}" },
       "text": { "$type": "color", "$value": "{palette.status.info.strong}" },

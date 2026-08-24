@@ -48,4 +48,17 @@ describe("Projects URL state", () => {
     expect(serialized).toContain("conversation=c1");
     expect(serialized).not.toContain("panel=chat");
   });
+
+  it("keeps the project activity range in URL state", () => {
+    const state = parseProjectDetailSearch(new URLSearchParams("range=90d"));
+    expect(state.activityRange).toBe("90d");
+    expect(serializeProjectDetailSearch(state).toString()).toContain(
+      "range=90d",
+    );
+    expect(
+      serializeProjectDetailSearch(
+        parseProjectDetailSearch(new URLSearchParams("range=nope")),
+      ).toString(),
+    ).not.toContain("range");
+  });
 });
