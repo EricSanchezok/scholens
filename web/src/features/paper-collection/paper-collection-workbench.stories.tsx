@@ -90,6 +90,30 @@ const items: PaperCollectionItem[] = [
   {
     abstract:
       "A practical account of controllable memory formation and retrieval for adaptive agents.",
+    activityTrail: (
+      <span
+        aria-label="Page reading distribution"
+        className="flex h-2 items-center gap-0.5"
+        role="img"
+      >
+        {[
+          "bg-activity-low",
+          "bg-activity-medium",
+          "bg-activity-peak",
+          "bg-activity-high",
+          "bg-activity-empty",
+          "bg-activity-medium",
+          "bg-activity-low",
+          "bg-activity-empty",
+        ].map((className, index) => (
+          <span
+            aria-hidden
+            className={`h-1.5 w-2.5 shrink-0 rounded-[1px] ${className}`}
+            key={index}
+          />
+        ))}
+      </span>
+    ),
     addedAt: "Aug 20, 2026",
     authors: ["Eric Hanchen Jiang", "Zhi Zhang", "Yuchen Wu"],
     doi: "10.48550/arXiv.2608.12001",
@@ -99,6 +123,7 @@ const items: PaperCollectionItem[] = [
     keywords: ["memory", "agents", "retrieval"],
     lastOpened: "Today, 14:32",
     publication: "arXiv · 2026",
+    readingTime: "18 min",
     summary:
       "## Key findings\n\n**Controlled memory** improves retrieval quality.\n\n- Stable updates\n- Inspectable decisions",
     status: "reading",
@@ -228,18 +253,14 @@ export const Library: Story = {
     await expect(
       canvas.getByRole("heading", { name: "Key findings" }),
     ).toBeVisible();
-    const paperResize = canvas.getByRole("separator", {
-      name: "Resize boundary between Paper and Status",
-    });
-    const initialPaperWidth = Number(paperResize.getAttribute("aria-valuenow"));
-    paperResize.focus();
-    await userEvent.keyboard("{ArrowLeft}");
-    await waitFor(() =>
-      expect(paperResize).toHaveAttribute(
-        "aria-valuenow",
-        String(initialPaperWidth - 8),
-      ),
-    );
+    await expect(
+      canvas.getByRole("columnheader", { name: "Active reading" }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole("separator", {
+        name: "Resize boundary between Paper and Active reading",
+      }),
+    ).not.toBeInTheDocument();
     const previewResize = canvas.getByRole("separator", {
       name: "Resize paper details",
     });
@@ -291,12 +312,29 @@ export const Library: Story = {
         name: /A deliberately long research paper title/,
       }),
     ).toBeVisible();
-    await userEvent.unhover(longTitleLink);
+    const finalPaperLink = canvas.getByRole("link", {
+      name: /When Does Pairing Seeds Reduce Variance/,
+    });
+    await userEvent.hover(finalPaperLink);
     await expect(
       within(preview).getByRole("heading", {
-        name: /Memory as a Controlled Process/,
+        name: /When Does Pairing Seeds Reduce Variance/,
       }),
     ).toBeVisible();
+    await userEvent.unhover(finalPaperLink);
+    await expect(
+      within(preview).getByRole("heading", {
+        name: /When Does Pairing Seeds Reduce Variance/,
+      }),
+    ).toBeVisible();
+    await expect(finalPaperLink.closest('[role="row"]')).toHaveAttribute(
+      "data-current",
+      "true",
+    );
+    await expect(paperLink.closest('[role="row"]')).toHaveAttribute(
+      "data-current",
+      "false",
+    );
     const previewToggle = canvas.getByRole("button", {
       name: "Close paper details",
     });
@@ -424,23 +462,12 @@ export const AdjacentColumnResizing: Story = {
       });
     };
 
-    const paper = columnHeader("Paper");
     const status = columnHeader("Status");
-    const paperBoundary = canvas.getByRole("separator", {
-      name: "Resize boundary between Paper and Status",
-    });
-    await expect(paperBoundary).toHaveAttribute("aria-valuemin", "160");
-    const paperBefore = paper.getBoundingClientRect();
-    const statusBefore = status.getBoundingClientRect();
-    dragLeft(paperBoundary, 48);
-    await waitFor(() => {
-      const paperAfter = paper.getBoundingClientRect();
-      const statusAfter = status.getBoundingClientRect();
-      expect(paperAfter.width).toBeCloseTo(paperBefore.width - 48, 0);
-      expect(statusAfter.width).toBeCloseTo(statusBefore.width + 48, 0);
-      expect(statusAfter.right).toBeCloseTo(statusBefore.right, 0);
-    });
-    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
+    await expect(
+      canvas.queryByRole("separator", {
+        name: "Resize boundary between Paper and Active reading",
+      }),
+    ).not.toBeInTheDocument();
 
     const tags = columnHeader("Tags");
     const statusBoundary = canvas.getByRole("separator", {
@@ -448,18 +475,18 @@ export const AdjacentColumnResizing: Story = {
     });
     const statusBeforeSecondDrag = status.getBoundingClientRect();
     const tagsBefore = tags.getBoundingClientRect();
-    dragLeft(statusBoundary, 32);
+    dragLeft(statusBoundary, 8);
     await waitFor(() => {
       const statusAfter = status.getBoundingClientRect();
       const tagsAfter = tags.getBoundingClientRect();
       expect(statusAfter.width).toBeCloseTo(
-        statusBeforeSecondDrag.width - 32,
+        statusBeforeSecondDrag.width - 8,
         0,
       );
-      expect(tagsAfter.width).toBeCloseTo(tagsBefore.width + 32, 0);
+      expect(tagsAfter.width).toBeCloseTo(tagsBefore.width + 8, 0);
       expect(tagsAfter.right).toBeCloseTo(tagsBefore.right, 0);
     });
-    await waitFor(() => expect(resizePreferenceRequestCount).toBe(2));
+    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
     const lastOpened = columnHeader("Last opened");
     await expect(
       lastOpened.querySelector("[data-paper-resize-handle]"),
@@ -643,7 +670,6 @@ export const KeyboardColumnReordering: Story = {
       ).toHaveFocus(),
     );
     await userEvent.keyboard("{Enter}");
-
     await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
     await waitFor(() =>
       expect(queuedPersistedPreferences.visible_columns).toEqual([

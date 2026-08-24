@@ -6,7 +6,8 @@ export {
   ReadingActivityTracker,
 } from "./containers";
 export {
-  CompactPaperActivity,
+  CompactPaperActivityDuration,
+  CompactPaperActivityTrail,
   hasPaperActivityEvidence,
 } from "./components/compact-paper-activity";
 export { HomeActivitySnapshot } from "./components/home-activity-snapshot";

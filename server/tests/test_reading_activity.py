@@ -11,8 +11,13 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import Table
+from sqlalchemy import Table, select
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import load_only
 
+from app.bootstrap.adapters.reading_activity_paper_queries import (
+    PaperInsightsRepository,
+)
 from app.bootstrap.app_factory import create_app
 from app.modules.reading_activity.application import (
     ReadingActivity,
@@ -64,6 +69,10 @@ from app.bootstrap.adapters.reading_activity_mutations import (
     _snapshot_deltas,
     _validate_page_totals,
 )
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_READING_ACTIVITY_COLUMNS,
+)
+from app.modules.papers.infrastructure.models import Document
 from app.modules.reading_activity.infrastructure.rollup_mutations import (
     ReadingRollupWriter,
 )
@@ -163,6 +172,45 @@ def _snapshot(
         hours=hours,
         pages=[],
     )
+
+
+def test_reading_activity_document_profile_loads_only_page_bounds() -> None:
+    assert {column.key for column in DOCUMENT_READING_ACTIVITY_COLUMNS} == {
+        "id",
+        "page_count",
+    }
+    statement = select(Document).options(
+        load_only(*DOCUMENT_READING_ACTIVITY_COLUMNS, raiseload=True)
+    )
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+    assert "documents.page_count" in sql
+    assert "documents.raw_content" not in sql
+    assert "documents.page_offset_map" not in sql
+
+
+def test_paper_insights_requests_the_reading_activity_document_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ExpectedAccessStop(Exception):
+        pass
+
+    def require_access(*args: object, **kwargs: object) -> None:
+        del args
+        assert kwargs["document_columns"] is DOCUMENT_READING_ACTIVITY_COLUMNS
+        raise ExpectedAccessStop
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.reading_activity_paper_queries.require_document_access",
+        require_access,
+    )
+
+    with pytest.raises(ExpectedAccessStop):
+        PaperInsightsRepository(MagicMock(), clock=FrozenClock()).paper_insights(
+            actor=_actor(),
+            document_id=uuid4(),
+            insight_range=ReadingInsightsRange.ALL,
+            time_zone="UTC",
+        )
 
 
 def test_page_bucket_boundaries_match_sql_for_non_divisible_page_count() -> None:
@@ -370,9 +418,15 @@ def test_project_contribution_is_frozen_without_materializing_lost_start_rollups
         return None
 
     db.get.side_effect = get
+
+    def require_access(*args: object, **kwargs: object) -> object:
+        del args
+        assert kwargs["document_columns"] is DOCUMENT_READING_ACTIVITY_COLUMNS
+        return object()
+
     monkeypatch.setattr(
         "app.bootstrap.adapters.reading_activity_mutations.require_document_access",
-        lambda *args, **kwargs: object(),
+        require_access,
     )
     project_id = uuid4()
     result = ReadingActivityMutationRepository(db, clock=FrozenClock()).start_session(
@@ -395,6 +449,34 @@ def test_project_contribution_is_frozen_without_materializing_lost_start_rollups
     user_lock = db.execute.call_args_list[0].args[0]
     assert "pg_advisory_xact_lock" in str(user_lock)
     assert "reading-activity-user:41" in user_lock.compile().params.values()
+
+
+def test_session_update_requests_the_reading_activity_document_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ExpectedAccessStop(Exception):
+        pass
+
+    model = _session()
+    db = MagicMock()
+    db.scalar.return_value = model
+
+    def get_access(*args: object, **kwargs: object) -> None:
+        del args
+        assert kwargs["document_columns"] is DOCUMENT_READING_ACTIVITY_COLUMNS
+        raise ExpectedAccessStop
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.reading_activity_mutations.get_document_access",
+        get_access,
+    )
+
+    with pytest.raises(ExpectedAccessStop):
+        ReadingActivityMutationRepository(db, clock=FrozenClock()).update_session(
+            actor=_actor(),
+            session_id=model.id,
+            request=_snapshot(),
+        )
 
 
 def test_session_start_replay_survives_later_opt_out_and_access_loss() -> None:

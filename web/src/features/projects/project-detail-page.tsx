@@ -5,6 +5,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  useQueries,
 } from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
@@ -80,7 +81,15 @@ import {
   type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
-import { ProjectInsightsContainer } from "@/features/research-activity";
+import {
+  chunkPaperSummaryDocumentIds,
+  CompactPaperActivityDuration,
+  CompactPaperActivityTrail,
+  hasPaperActivityEvidence,
+  ProjectInsightsContainer,
+  researchActivityQueries,
+  type PaperActivitySummary,
+} from "@/features/research-activity";
 import { cn } from "@/lib/utilities/cn";
 import {
   CollectionToolbar,
@@ -150,9 +159,10 @@ function ProjectSearchField({
   return (
     <SearchField
       aria-label={label}
-      className="border-line bg-surface rounded-full text-base sm:text-sm"
+      className="border-line text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
+      surfaceClassName="rounded-full"
       value={input}
     />
   );
@@ -578,6 +588,41 @@ export function ProjectDetailWorkspace({
     () => papersQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [papersQuery.data?.pages],
   );
+  const projectPaperSearchResults = React.useMemo(
+    () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [paperSearchQuery.data?.pages],
+  );
+  const paperActivityIds = React.useMemo(
+    () => [
+      ...projectPapers.map((paper) => paper.document_id),
+      ...projectPaperSearchResults.map((paper) => paper.document_id),
+    ],
+    [projectPaperSearchResults, projectPapers],
+  );
+  const paperActivityIdChunks = React.useMemo(
+    () => chunkPaperSummaryDocumentIds(paperActivityIds),
+    [paperActivityIds],
+  );
+  const paperActivityQueries = useQueries({
+    queries:
+      state.view === "papers"
+        ? paperActivityIdChunks.map((documentIds) =>
+            researchActivityQueries.paperSummaries(documentIds),
+          )
+        : [],
+  });
+  const paperActivitySummaries = paperActivityQueries.flatMap(
+    (query) => query.data ?? [],
+  );
+  const paperActivityByDocumentId = React.useMemo(
+    () =>
+      new Map<string, PaperActivitySummary>(
+        paperActivitySummaries
+          .filter(hasPaperActivityEvidence)
+          .map((summary) => [summary.documentId, summary]),
+      ),
+    [paperActivitySummaries],
+  );
   const projectPaperById = React.useMemo(
     () => new Map(projectPapers.map((paper) => [paper.document_id, paper])),
     [projectPapers],
@@ -595,41 +640,48 @@ export function ProjectDetailWorkspace({
   );
   const projectWorkbenchItems = React.useMemo<PaperCollectionItem[]>(
     () =>
-      projectPapers.map((paper) => ({
-        abstract: paper.abstract ?? undefined,
-        addedAt: format.dateTime(new Date(paper.added_at), {
-          dateStyle: "medium",
-        }),
-        authors: paper.authors ?? [],
-        doi: paper.doi ?? undefined,
-        href: `/reader/${paper.document_id}?project=${projectId}` as Route,
-        id: paper.document_id,
-        inLibrary: paper.in_library,
-        keywords: paper.keywords ?? [],
-        lastOpened: paper.personal_last_accessed_at
-          ? format.dateTime(new Date(paper.personal_last_accessed_at), {
-              dateStyle: "medium",
-            })
-          : undefined,
-        previewUrl: paper.preview_url ?? undefined,
-        publication: [
-          paper.journal ?? paper.publisher,
-          paper.publish_date
-            ? new Date(paper.publish_date).getUTCFullYear().toString()
+      projectPapers.map((paper) => {
+        const activitySummary = paperActivityByDocumentId.get(
+          paper.document_id,
+        );
+        return {
+          abstract: paper.abstract ?? undefined,
+          activityTrail: activitySummary ? (
+            <CompactPaperActivityTrail summary={activitySummary} />
+          ) : undefined,
+          addedAt: format.dateTime(new Date(paper.added_at), {
+            dateStyle: "medium",
+          }),
+          authors: paper.authors ?? [],
+          doi: paper.doi ?? undefined,
+          href: `/reader/${paper.document_id}?project=${projectId}` as Route,
+          id: paper.document_id,
+          inLibrary: paper.in_library,
+          keywords: paper.keywords ?? [],
+          lastOpened: paper.personal_last_accessed_at
+            ? format.dateTime(new Date(paper.personal_last_accessed_at), {
+                dateStyle: "medium",
+              })
             : undefined,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        status: paper.personal_status ?? undefined,
-        summary: paper.summary ?? undefined,
-        tags: paper.personal_tags ?? [],
-        title: paper.title || t("detail.papers.untitled"),
-      })),
-    [format, projectId, projectPapers, t],
-  );
-  const projectPaperSearchResults = React.useMemo(
-    () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
-    [paperSearchQuery.data?.pages],
+          previewUrl: paper.preview_url ?? undefined,
+          publication: [
+            paper.journal ?? paper.publisher,
+            paper.publish_date
+              ? new Date(paper.publish_date).getUTCFullYear().toString()
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          readingTime: activitySummary ? (
+            <CompactPaperActivityDuration summary={activitySummary} />
+          ) : undefined,
+          status: paper.personal_status ?? undefined,
+          summary: paper.summary ?? undefined,
+          tags: paper.personal_tags ?? [],
+          title: paper.title || t("detail.papers.untitled"),
+        };
+      }),
+    [format, paperActivityByDocumentId, projectId, projectPapers, t],
   );
   const projectPaperSearchTotal = paperSearchQuery.data?.pages[0]?.total;
   React.useEffect(() => {
@@ -695,6 +747,25 @@ export function ProjectDetailWorkspace({
     papers: projectPaperSearchResults,
     readerProjectId: projectId,
   });
+  const projectPaperSearchWorkbenchWithActivity = projectPaperSearchWorkbench
+    ? {
+        ...projectPaperSearchWorkbench,
+        items: projectPaperSearchWorkbench.items.map((item) => {
+          const activitySummary = paperActivityByDocumentId.get(item.id);
+          return activitySummary
+            ? {
+                ...item,
+                activityTrail: (
+                  <CompactPaperActivityTrail summary={activitySummary} />
+                ),
+                readingTime: (
+                  <CompactPaperActivityDuration summary={activitySummary} />
+                ),
+              }
+            : item;
+        }),
+      }
+    : null;
   const updateMutation = useMutation({
     mutationFn: (value: { title: string; description: string | null }) =>
       updateProject(projectId, value),
@@ -1013,7 +1084,7 @@ export function ProjectDetailWorkspace({
     tableFooter: projectPaperPagination,
   };
   const projectPaperWorkbenchProps: PaperCollectionWorkbenchProps =
-    projectPaperSearchWorkbench ?? projectPaperBrowseProps;
+    projectPaperSearchWorkbenchWithActivity ?? projectPaperBrowseProps;
 
   return (
     <WorkspaceShell

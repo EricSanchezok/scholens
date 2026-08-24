@@ -8,6 +8,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.papers.infrastructure.access import require_document_access
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_READING_ACTIVITY_COLUMNS,
+)
 from app.modules.reading_activity.application.contracts import (
     PaperInsightsResponse,
     ReadingInsightsRange,
@@ -52,6 +55,7 @@ class PaperInsightsRepository(ReadingActivityRepositoryBase):
             document_id=document_id,
             user_id=actor.id,
             project_id=project_id,
+            document_columns=DOCUMENT_READING_ACTIVITY_COLUMNS,
         )
         now = self._clock.now()
         start = _range_start(insight_range, now, time_zone=time_zone)

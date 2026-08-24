@@ -1896,6 +1896,7 @@
     "columns": {
       "actions": "操作",
       "paper": "论文",
+      "reading_time": "主动阅读",
       "thumbnail": "论文缩略图",
       "selection": "选择",
       "status": "状态",
@@ -1962,7 +1963,7 @@
     "untitled": "未命名论文",
     "unknownAuthors": "作者未知",
     "form": {
-      "minimumQuery": "请输入至少 2 个字符，或清空输入框后按回车显示全部论文。",
+      "minimumQuery": "请输入至少 2 个字符，或清空输入框以显示全部论文。",
       "relevanceSort": "相关性"
     },
     "results": {
@@ -2027,7 +2028,11 @@
     "metricCollectionSince": "研究活动统计自 {date} 起可用",
     "partialHistory": "{date} 之前的活动可能不完整；该时段的空白日期或页面不一定代表没有活动。",
     "metricVersion": "统计方法：{version}",
+    "metricDefinitions": {
+      "activeReadingV1": "主动阅读估算 v1"
+    },
     "actions": {
+      "data": "数据",
       "retry": "重试",
       "export": "导出活动",
       "settings": "活动设置",
@@ -2088,6 +2093,7 @@
       "teamReading": "匿名团队阅读估算",
       "date": "日期",
       "events": "共享事件",
+      "singleDay": "阅读趋势从这里开始，积累更多阅读日期后会显示变化。",
       "showTable": "查看数据表",
       "paperLabel": "这篇论文的每日主动阅读估算",
       "projectLabel": "我的阅读估算与匿名团队阅读估算趋势",
@@ -2199,7 +2205,13 @@
     "library": {
       "summary": "主动阅读估算 {duration}，实质覆盖 {coverage}%",
       "durationOnly": "主动阅读估算 {duration}",
-      "durationAndCoverage": "{duration} · 覆盖 {coverage}%"
+      "durationAndCoverage": "{duration} · 覆盖 {coverage}%",
+      "coverageValue": "覆盖 {coverage}%",
+      "distributionLabel": "页面阅读分布",
+      "distributionDescription": "页面阅读分布。每格代表一个页段；颜色越深，主动阅读时间越长。",
+      "partialDistributionLabel": "已记录页面的阅读分布",
+      "partialDistributionDescription": "已记录页面的阅读分布。当前缺少论文总页数，省略号表示论文可能仍有后续页面。",
+      "bucketDescription": "第 {pageRange} 页：主动阅读 {duration}"
     },
     "home": {
       "title": "研究活动",

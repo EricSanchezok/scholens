@@ -1896,6 +1896,7 @@
     "columns": {
       "actions": "Actions",
       "paper": "Paper",
+      "reading_time": "Active reading",
       "thumbnail": "Paper thumbnail",
       "selection": "Selection",
       "status": "Status",
@@ -1962,7 +1963,7 @@
     "untitled": "Untitled paper",
     "unknownAuthors": "Unknown authors",
     "form": {
-      "minimumQuery": "Enter at least 2 characters, or clear the field and press Enter to show all papers.",
+      "minimumQuery": "Enter at least 2 characters, or clear the field to show all papers.",
       "relevanceSort": "Relevance"
     },
     "results": {
@@ -2027,7 +2028,11 @@
     "metricCollectionSince": "Activity metrics available since {date}",
     "partialHistory": "Activity before {date} may be incomplete. Empty days and pages in that period do not necessarily mean no activity.",
     "metricVersion": "Measurement method: {version}",
+    "metricDefinitions": {
+      "activeReadingV1": "Active reading estimate v1"
+    },
     "actions": {
+      "data": "Data",
       "retry": "Try again",
       "export": "Export activity",
       "settings": "Activity settings",
@@ -2088,6 +2093,7 @@
       "teamReading": "Anonymous team reading estimate",
       "date": "Date",
       "events": "Shared events",
+      "singleDay": "Your reading trend starts here. More reading days will reveal the pattern.",
       "showTable": "View data table",
       "paperLabel": "Daily active reading estimate for this paper",
       "projectLabel": "My and anonymous team reading estimates by day",
@@ -2199,7 +2205,13 @@
     "library": {
       "summary": "{duration} active reading estimate, {coverage}% substantial coverage",
       "durationOnly": "{duration} active reading estimate",
-      "durationAndCoverage": "{duration} · {coverage}% covered"
+      "durationAndCoverage": "{duration} · {coverage}% covered",
+      "coverageValue": "{coverage}% covered",
+      "distributionLabel": "Page reading distribution",
+      "distributionDescription": "Page reading distribution. Each cell is a page range; darker cells indicate more active reading.",
+      "partialDistributionLabel": "Recorded page reading distribution",
+      "partialDistributionDescription": "Recorded page reading distribution. Total page count is not available, so the ellipsis means the paper may continue beyond these cells.",
+      "bucketDescription": "Page {pageRange}: {duration} active reading"
     },
     "home": {
       "title": "Research activity",

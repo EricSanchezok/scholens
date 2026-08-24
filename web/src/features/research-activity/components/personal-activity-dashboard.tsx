@@ -284,6 +284,7 @@ export function PersonalActivityDashboard({
                     date: t("chart.date"),
                     events: t("chart.events"),
                     sessions: t("metrics.sessions"),
+                    singleDay: t("chart.singleDay"),
                     table: t("chart.showTable"),
                     team: t("chart.teamReading"),
                     visible: t("metrics.visibleTime"),

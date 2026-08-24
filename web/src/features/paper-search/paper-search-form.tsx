@@ -86,10 +86,17 @@ export function PaperSearchForm({
         aria-describedby={invalid ? errorId : undefined}
         aria-invalid={invalid || undefined}
         aria-label={label}
-        className="border-line bg-surface rounded-full text-base sm:text-sm"
+        className="border-line text-base sm:text-sm"
         onChange={(event) => {
+          const nextDraft = event.currentTarget.value;
           if (invalid) setInvalidDraft(undefined);
-          onDraftChange(event.currentTarget.value);
+          onDraftChange(nextDraft);
+          if (
+            normalizeSearchQuery(nextDraft).length === 0 &&
+            committedQuery.length > 0
+          ) {
+            onCommit("");
+          }
         }}
         onCompositionEnd={() => {
           composingRef.current = false;
@@ -106,6 +113,7 @@ export function PaperSearchForm({
           }
         }}
         placeholder={label}
+        surfaceClassName="rounded-full"
         value={draft}
       />
       {invalid ? (

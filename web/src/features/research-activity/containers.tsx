@@ -164,12 +164,8 @@ export function PaperInsightsContainer({
           void allTime.refetch();
           void recent.refetch();
         }}
+        onDeleteActivity={() => setDeleteOpen(true)}
         recordingEnabled={preferences.data?.recordingEnabled}
-        toolbar={
-          <Button onClick={() => setDeleteOpen(true)} size="sm" variant="ghost">
-            {t("actions.delete")}
-          </Button>
-        }
       />
       <DeleteActivityDialog
         description={t("deleteDialog.paperDescription")}

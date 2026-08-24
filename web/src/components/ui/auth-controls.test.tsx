@@ -11,7 +11,7 @@ import {
   FieldLabel,
   FieldMessage,
 } from "./field";
-import { Input, PasswordInput } from "./input";
+import { Input, PasswordInput, SearchField } from "./input";
 import { InputModalityListener } from "./text-control-focus";
 
 describe("authentication controls", () => {
@@ -120,6 +120,22 @@ describe("authentication controls", () => {
     await user.tab();
     expect(input).toHaveFocus();
     expect(input).toHaveAttribute("data-focus-origin", "keyboard");
+  });
+
+  it("keeps composite search geometry on its single focus surface", () => {
+    render(
+      <SearchField
+        aria-label="Search papers"
+        surfaceClassName="rounded-full"
+      />,
+    );
+    const input = screen.getByRole("searchbox", { name: "Search papers" });
+    const surface = input.closest<HTMLElement>("[data-focus-surface]");
+
+    expect(surface).not.toBeNull();
+    expect(surface).toHaveClass("rounded-full");
+    expect(input).toHaveClass("rounded-[inherit]", "bg-transparent");
+    expect(input).toHaveAttribute("data-focus-delegate", "surface");
   });
 
   it("preserves keyboard modality when a lazy control auto-focuses", async () => {

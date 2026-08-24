@@ -227,7 +227,7 @@ export function ZoteroLibraryDialog({
               >
                 <SearchField
                   aria-label={t("search")}
-                  className="border-line bg-surface shadow-raised rounded-full"
+                  className="border-line"
                   onChange={(event) => {
                     setQuery(event.currentTarget.value);
                     setFilters((current) => ({
@@ -236,6 +236,7 @@ export function ZoteroLibraryDialog({
                     }));
                   }}
                   placeholder={t("search")}
+                  surfaceClassName="shadow-raised rounded-full"
                   value={query}
                 />
                 <div className="grid gap-1.5">

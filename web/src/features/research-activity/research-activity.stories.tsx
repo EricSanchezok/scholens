@@ -11,7 +11,10 @@ import {
   readingActivityPreferencesFixture,
 } from "./fixtures";
 import { ActivityTrendChart } from "./components/activity-visualizations";
-import { CompactPaperActivity } from "./components/compact-paper-activity";
+import {
+  CompactPaperActivityDuration,
+  CompactPaperActivityTrail,
+} from "./components/compact-paper-activity";
 import { HomeActivitySnapshot } from "./components/home-activity-snapshot";
 import { PaperInsightsPanel } from "./components/paper-insights-panel";
 import { PersonalActivityDashboard } from "./components/personal-activity-dashboard";
@@ -24,6 +27,7 @@ const meta = {
   component: PaperInsightsPanel,
   args: {
     insights: paperInsightsFixture,
+    onDeleteActivity: fn(),
     onPageSelect: fn(),
     onRetry: fn(),
     recordingEnabled: true,
@@ -74,6 +78,26 @@ export const PaperPartialHistory: Story = {
       historyPartial: true,
     },
   },
+};
+export const PaperSingleDay: Story = {
+  args: {
+    insights: {
+      ...paperInsightsFixture,
+      daily: [
+        {
+          activeMs: 180_000,
+          date: "2026-08-25",
+          sessionCount: 1,
+          visibleMs: 300_000,
+        },
+      ],
+      readingDataSince: "2026-08-25T00:00:00Z",
+      summary: paperInsightsFixture.summary.filter(
+        (metric) => metric.key !== "coverage_percent",
+      ),
+    },
+  },
+  globals: { locale: "zh-CN" },
 };
 export const PaperNarrowDarkChinese: Story = {
   globals: {
@@ -424,8 +448,9 @@ export const PreferencesError: Story = {
 
 export const CompactLibraryActivity: Story = {
   render: () => (
-    <div className="bg-canvas w-80 p-6">
-      <CompactPaperActivity summary={paperActivitySummaryFixture} />
+    <div className="bg-canvas grid w-96 grid-cols-[minmax(0,1fr)_7rem] items-center gap-6 p-6">
+      <CompactPaperActivityTrail summary={paperActivitySummaryFixture} />
+      <CompactPaperActivityDuration summary={paperActivitySummaryFixture} />
     </div>
   ),
 };
@@ -435,6 +460,42 @@ export const HomeSnapshot: Story = {
     <div className="bg-canvas mx-auto w-full max-w-xl p-6">
       <HomeActivitySnapshot
         insights={{ ...personalInsightsFixture, range: "30d" }}
+        onRetry={fn()}
+        recordingEnabled
+      />
+    </div>
+  ),
+};
+
+export const HomeSnapshotSingleDay: Story = {
+  globals: { locale: "zh-CN" },
+  render: () => (
+    <div className="bg-canvas mx-auto w-full max-w-[60rem] p-6">
+      <HomeActivitySnapshot
+        insights={{
+          ...personalInsightsFixture,
+          daily: [
+            {
+              activeMs: 180_000,
+              date: "2026-08-25",
+              sessionCount: 1,
+              visibleMs: 300_000,
+            },
+          ],
+          range: "30d",
+          readingDataSince: "2026-08-25T00:00:00Z",
+          summary: [
+            { key: "active_ms", unit: "milliseconds", value: 180_000 },
+            { key: "active_days", unit: "count", value: 1 },
+            {
+              key: "papers_with_activity",
+              unit: "count",
+              value: 1,
+            },
+            { key: "annotations", unit: "count", value: 12 },
+            { key: "conversations", unit: "count", value: 1 },
+          ],
+        }}
         onRetry={fn()}
         recordingEnabled
       />
@@ -504,6 +565,7 @@ export const ChartTableLongChinese: Story = {
           date: "记录日期",
           events: "发生的共享研究事件数量",
           sessions: "阅读次数",
+          singleDay: "阅读趋势从这里开始，积累更多阅读日期后会显示变化。",
           table: "查看完整的可访问数据表格",
           team: "满足匿名阈值后的项目团队主动阅读估算",
           visible: "前台可见时间",

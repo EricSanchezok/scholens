@@ -67,6 +67,15 @@ DOCUMENT_ACCESS_COLUMNS: DocumentColumns = (
     Document.title,
 )
 
+# Reading-activity authorization also needs the canonical page boundary for
+# snapshot validation and paper-level coverage. Keep this profile separate
+# from the authorization-only default so those callers cannot accidentally
+# regress to a forbidden lazy load or hydrate unrelated canonical content.
+DOCUMENT_READING_ACTIVITY_COLUMNS: DocumentColumns = (
+    Document.id,
+    Document.page_count,
+)
+
 # Parsed-content consumers opt into their large values explicitly. These
 # profiles still avoid unrelated large fields on the same Document row.
 DOCUMENT_PAPER_CONTENT_COLUMNS: DocumentColumns = (

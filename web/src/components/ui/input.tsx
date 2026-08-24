@@ -55,32 +55,39 @@ export const Textarea = React.forwardRef<
 });
 Textarea.displayName = "Textarea";
 
-export const SearchField = React.forwardRef<
-  HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
->(({ className, ...props }, ref) => (
-  <div
-    className={cn(
-      "bg-surface relative rounded-[var(--radius-md)]",
-      focusSurfaceVariants({ intent: "neutral" }),
-    )}
-    data-focus-surface
-  >
-    <Icon
-      className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-      glyph={Search}
-      size={20}
-      tone="secondary"
-    />
-    <Input
-      className={cn("bg-transparent pl-10 hover:bg-transparent", className)}
-      data-focus-delegate="surface"
-      ref={ref}
-      type="search"
-      {...props}
-    />
-  </div>
-));
+export type SearchFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  surfaceClassName?: string;
+};
+
+export const SearchField = React.forwardRef<HTMLInputElement, SearchFieldProps>(
+  ({ className, surfaceClassName, ...props }, ref) => (
+    <div
+      className={cn(
+        "bg-surface relative rounded-[var(--radius-md)]",
+        focusSurfaceVariants({ intent: "neutral" }),
+        surfaceClassName,
+      )}
+      data-focus-surface
+    >
+      <Icon
+        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+        glyph={Search}
+        size={20}
+        tone="secondary"
+      />
+      <Input
+        className={cn(
+          "rounded-[inherit] bg-transparent pl-10 hover:bg-transparent",
+          className,
+        )}
+        data-focus-delegate="surface"
+        ref={ref}
+        type="search"
+        {...props}
+      />
+    </div>
+  ),
+);
 SearchField.displayName = "SearchField";
 
 export type PasswordInputProps = Omit<

@@ -85,15 +85,24 @@ to panel-specific display minima instead of disappearing by breakpoint. If the
 remaining collection width cannot contain them, local horizontal scrolling
 keeps every selected column reachable.
 
-Default columns are Paper, Status, Tags, Authors, Publication, and Last opened.
-Added and DOI are optional; every column except Paper can be hidden and the
-visible columns can be reordered. Column order, per-column widths, preview
-width, and preview disclosure are account-scoped and shared with Project Papers;
-sort and filters remain URL state. The Paper column can contract to 160 px and
-expand to 1,600 px. Dragging an internal column boundary redistributes the
-stored bounded width only between its two adjacent visible columns, keeping
-their combined width and the trailing column edge fixed; preview compression is
-a display projection and is never persisted as an invalid preference. The
+Default columns are Paper, Active reading, Status, Tags, Authors, Publication,
+and Last opened. Added and DOI are optional; preference-backed columns can be
+hidden and reordered. Active reading is a fixed compact duration column beside
+Paper, so this presentation does not expand the stable public preference enum
+or break an older Web during a rolling release. The Paper cell keeps a separate,
+label-backed page-distribution
+trail of up to twelve contiguous page-range cells whose semantic intensity
+shows where reading accumulated without claiming completion progress. Each cell
+retains its source page range and hover description; longer distributions are
+aggregated without discarding activity. When the document's total page count is
+not yet available, the trail ends with an ellipsis so its observed page range
+cannot be mistaken for the full paper. Column order, per-column widths, preview width,
+and preview disclosure are account-scoped and shared with Project Papers; sort
+and filters remain URL state. The Paper column can contract to 160 px and expand
+to 1,600 px. Dragging an internal boundary between two preference-backed columns
+redistributes the stored bounded width only between its two adjacent visible columns, keeping their
+combined width and the trailing column edge fixed; preview compression is a
+display projection and is never persisted as an invalid preference. The
 boundary stops when either column reaches its limit, and the final data column
 has no resize handle. Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the
@@ -123,11 +132,11 @@ desktop-only selection controls therefore do not create phantom mobile columns.
 When the page-level container is below 1040 px, the preview temporarily becomes
 unavailable without rewriting the stored preference; selected desktop columns
 remain reachable through the collection's local horizontal scroller. Mobile
-exposes neither column management nor preview. Selecting or
-focusing a paper updates the preview with its full title, authors, publication,
-DOI, personal status, tags, abstract or summary, and keywords. Hover provides a
-temporary preview; focus or pointer activation persists the current row so
-moving the pointer away does not discard the user's context. Summary Markdown
+exposes neither column management nor preview. Selecting, focusing, or hovering
+a paper updates the preview with its full title, authors, publication, DOI,
+personal status, tags, abstract or summary, and keywords. Each interaction also
+makes that paper current, so moving the pointer away preserves the most recently
+visited row instead of returning to the first paper. Summary Markdown
 is rendered as restrained editorial content rather than exposed source syntax.
 The preview presents the portrait beside core metadata so the abstract or
 summary starts earlier, and never repeats navigation.

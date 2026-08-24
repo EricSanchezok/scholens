@@ -58,10 +58,11 @@ export type PaperCollectionTag = {
 export type PaperCollectionItem = {
   id: string;
   title: string;
-  activity?: React.ReactNode;
+  activityTrail?: React.ReactNode;
   authors: string[];
   publication?: string;
   lastOpened?: string;
+  readingTime?: React.ReactNode;
   addedAt?: string;
   doi?: string;
   status?: PaperStatus;
@@ -75,11 +76,16 @@ export type PaperCollectionItem = {
   href: Route;
 };
 
+type PaperCollectionRenderedColumn = PaperCollectionColumn | "reading_time";
+type PaperCollectionRenderedSizedColumn =
+  PaperCollectionSizedColumn | "reading_time";
+
 const COLUMN_WIDTH_LIMITS: Record<
-  PaperCollectionSizedColumn,
+  PaperCollectionRenderedSizedColumn,
   { default: number; max: number; min: number }
 > = {
   paper: { default: 360, max: 1600, min: 160 },
+  reading_time: { default: 112, max: 240, min: 96 },
   status: { default: 96, max: 960, min: 88 },
   tags: { default: 160, max: 400, min: 128 },
   authors: { default: 176, max: 520, min: 144 },
@@ -88,8 +94,12 @@ const COLUMN_WIDTH_LIMITS: Record<
   added_at: { default: 120, max: 280, min: 112 },
   doi: { default: 160, max: 480, min: 144 },
 };
-const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
+const PREVIEW_COLUMN_MINIMUMS: Record<
+  PaperCollectionRenderedSizedColumn,
+  number
+> = {
   paper: 200,
+  reading_time: 80,
   status: 64,
   tags: 56,
   authors: 80,
@@ -99,15 +109,21 @@ const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
   doi: 96,
 };
 
-const ALL_COLUMNS = Object.keys(
+const RENDERED_COLUMNS = Object.keys(
   COLUMN_WIDTH_LIMITS,
-) as PaperCollectionSizedColumn[];
-const CONFIGURABLE_COLUMNS = ALL_COLUMNS.filter(
+) as PaperCollectionRenderedSizedColumn[];
+const PERSISTED_COLUMNS = RENDERED_COLUMNS.filter(
+  (column): column is PaperCollectionSizedColumn => column !== "reading_time",
+);
+const CONFIGURABLE_COLUMNS = PERSISTED_COLUMNS.filter(
   (column): column is PaperCollectionColumn => column !== "paper",
 );
 const DEFAULT_COLUMN_WIDTHS = Object.fromEntries(
-  ALL_COLUMNS.map((column) => [column, COLUMN_WIDTH_LIMITS[column].default]),
-) as Record<PaperCollectionSizedColumn, number>;
+  RENDERED_COLUMNS.map((column) => [
+    column,
+    COLUMN_WIDTH_LIMITS[column].default,
+  ]),
+) as Record<PaperCollectionRenderedSizedColumn, number>;
 const MIN_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_WIDTH = 720;
 const MIN_LIST_WIDTH_WITH_PREVIEW = 640;
@@ -142,9 +158,12 @@ function getColumnWidths(preferences: PaperListPreferences) {
 }
 
 function toColumnWidthPreferences(
-  widths: Record<PaperCollectionSizedColumn, number>,
+  widths: Record<PaperCollectionRenderedSizedColumn, number>,
 ) {
-  return ALL_COLUMNS.map((column) => ({ column, width: widths[column] }));
+  return PERSISTED_COLUMNS.map((column) => ({
+    column,
+    width: widths[column],
+  }));
 }
 
 function resizeColumnPair({
@@ -861,7 +880,7 @@ export function PaperCollectionWorkbench({
     setPreviewWidth(preferences.preview_width);
   }, [persistedColumnWidths, preferences.preview_width]);
   const commitColumnWidths = React.useCallback(
-    (updates: Partial<Record<PaperCollectionSizedColumn, number>>) => {
+    (updates: Partial<Record<PaperCollectionRenderedSizedColumn, number>>) => {
       setColumnWidths((current) => ({ ...current, ...updates }));
       mutatePreferences((current) => {
         const nextWidths = {
@@ -893,11 +912,7 @@ export function PaperCollectionWorkbench({
   const measuredWidth = width ?? 0;
   const availableWidth = sidePanelLayout?.containerWidth ?? measuredWidth;
   const [previewId, setPreviewId] = React.useState<string>();
-  const [hoveredPreviewId, setHoveredPreviewId] = React.useState<string>();
-  const preview =
-    items.find((item) => item.id === hoveredPreviewId) ??
-    items.find((item) => item.id === previewId) ??
-    items[0];
+  const preview = items.find((item) => item.id === previewId) ?? items[0];
   const previewVisible = Boolean(
     contentState === undefined &&
     preview &&
@@ -950,7 +965,15 @@ export function PaperCollectionWorkbench({
     },
     [setSidePanelState],
   );
-  const effectiveColumns = preferences.visible_columns;
+  const effectiveColumns = React.useMemo<PaperCollectionRenderedColumn[]>(
+    () => [
+      "reading_time",
+      ...preferences.visible_columns.filter(
+        (column) => String(column) !== "reading_time",
+      ),
+    ],
+    [preferences.visible_columns],
+  );
   const compact = listWidth < 640;
   const columnCount = compact
     ? 2 + (actions ? 1 : 0)
@@ -969,7 +992,7 @@ export function PaperCollectionWorkbench({
       scrollRef.current.scrollTop = 0;
     }
   }, [contentState, scrollResetKey]);
-  const orderedColumns = React.useMemo<PaperCollectionSizedColumn[]>(
+  const orderedColumns = React.useMemo<PaperCollectionRenderedSizedColumn[]>(
     () => ["paper", ...effectiveColumns],
     [effectiveColumns],
   );
@@ -977,7 +1000,7 @@ export function PaperCollectionWorkbench({
     const leadingWidth = previewVisible ? 40 : 48;
     const actionsWidth = previewVisible ? 36 : 44;
     const columnGap = previewVisible ? 8 : 12;
-    const minimumFor = (column: PaperCollectionSizedColumn) =>
+    const minimumFor = (column: PaperCollectionRenderedSizedColumn) =>
       previewVisible
         ? PREVIEW_COLUMN_MINIMUMS[column]
         : COLUMN_WIDTH_LIMITS[column].min;
@@ -1023,7 +1046,7 @@ export function PaperCollectionWorkbench({
           ),
         ];
       }),
-    ) as Partial<Record<PaperCollectionSizedColumn, number>>;
+    ) as Partial<Record<PaperCollectionRenderedSizedColumn, number>>;
   }, [
     actions,
     columnCount,
@@ -1058,7 +1081,7 @@ export function PaperCollectionWorkbench({
     (actions ? actionsColumnWidth : 0) +
     Math.max(0, columnCount - 1) * tableColumnGap +
     16;
-  const columnLabel = (column: PaperCollectionSizedColumn) =>
+  const columnLabel = (column: PaperCollectionRenderedSizedColumn) =>
     t(
       column === "paper"
         ? "columns.paper"
@@ -1194,16 +1217,19 @@ export function PaperCollectionWorkbench({
                     const nextLabel = nextColumn
                       ? columnLabel(nextColumn)
                       : undefined;
-                    const resizePair = nextColumn
-                      ? (nextLeft: number) =>
-                          resizeColumnPair({
-                            left: columnWidths[column],
-                            leftLimits: COLUMN_WIDTH_LIMITS[column],
-                            nextLeft,
-                            right: columnWidths[nextColumn],
-                            rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
-                          })
-                      : undefined;
+                    const resizePair =
+                      nextColumn &&
+                      column !== "reading_time" &&
+                      nextColumn !== "reading_time"
+                        ? (nextLeft: number) =>
+                            resizeColumnPair({
+                              left: columnWidths[column],
+                              leftLimits: COLUMN_WIDTH_LIMITS[column],
+                              nextLeft,
+                              right: columnWidths[nextColumn],
+                              rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
+                            })
+                        : undefined;
                     const pair = resizePair?.(columnWidths[column]);
                     return (
                       <span
@@ -1281,8 +1307,7 @@ export function PaperCollectionWorkbench({
                     data-index={virtualRow.index}
                     key={item.id}
                     onFocusCapture={() => setPreviewId(item.id)}
-                    onMouseEnter={() => setHoveredPreviewId(item.id)}
-                    onMouseLeave={() => setHoveredPreviewId(undefined)}
+                    onMouseEnter={() => setPreviewId(item.id)}
                     onPointerDownCapture={() => setPreviewId(item.id)}
                     ref={rowVirtualizer.measureElement}
                     role="row"
@@ -1318,9 +1343,18 @@ export function PaperCollectionWorkbench({
                               {item.authors.join(" · ") ||
                                 t("preview.unknownAuthors")}
                             </span>
-                            {item.activity ? (
-                              <span className="mt-2 block">
-                                {item.activity}
+                            {item.activityTrail || item.readingTime ? (
+                              <span className="mt-2 flex min-w-0 items-center gap-3">
+                                {item.activityTrail ? (
+                                  <span className="min-w-0 flex-1">
+                                    {item.activityTrail}
+                                  </span>
+                                ) : null}
+                                {item.readingTime ? (
+                                  <span className="shrink-0">
+                                    {item.readingTime}
+                                  </span>
+                                ) : null}
                               </span>
                             ) : null}
                           </Link>
@@ -1370,7 +1404,7 @@ export function PaperCollectionWorkbench({
                               <span
                                 className={cn(
                                   "text-xs leading-4 font-semibold [overflow-wrap:anywhere]",
-                                  item.activity
+                                  item.activityTrail
                                     ? "line-clamp-1"
                                     : "line-clamp-2",
                                 )}
@@ -1382,9 +1416,9 @@ export function PaperCollectionWorkbench({
                                   {item.snippet}
                                 </span>
                               ) : null}
-                              {item.activity ? (
-                                <span className="mt-1 block">
-                                  {item.activity}
+                              {item.activityTrail ? (
+                                <span className="mt-2 block">
+                                  {item.activityTrail}
                                 </span>
                               ) : null}
                             </span>
@@ -1409,6 +1443,8 @@ export function PaperCollectionWorkbench({
                               t("preview.unknownAuthors")
                             ) : column === "publication" ? (
                               item.publication || t("unknown")
+                            ) : column === "reading_time" ? (
+                              item.readingTime || "—"
                             ) : column === "last_opened" ? (
                               item.lastOpened || t("neverOpened")
                             ) : column === "added_at" ? (

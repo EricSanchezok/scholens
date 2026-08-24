@@ -115,9 +115,10 @@ function DebouncedLibrarySearch({
   return (
     <SearchField
       aria-label={label}
-      className="border-line bg-surface rounded-full text-base sm:text-sm"
+      className="border-line text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
+      surfaceClassName="rounded-full"
       value={input}
     />
   );
@@ -280,11 +281,13 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     [papersQuery.data?.pages],
   );
   const paperActivityIds = React.useMemo(
-    () =>
-      paperEntries.flatMap((entry) =>
+    () => [
+      ...paperEntries.flatMap((entry) =>
         entry.entry_type === "paper" ? [entry.document.document_id] : [],
       ),
-    [paperEntries],
+      ...paperSearchResults.map((paper) => paper.document_id),
+    ],
+    [paperEntries, paperSearchResults],
   );
   const paperActivityIdChunks = React.useMemo(
     () => chunkPaperSummaryDocumentIds(paperActivityIds),

@@ -58,12 +58,10 @@ export const InvalidChinese: Story = {
 
     await userEvent.type(search, "码{Enter}");
     await expect(
-      canvas.getByText(
-        "请输入至少 2 个字符，或清空输入框后按回车显示全部论文。",
-      ),
+      canvas.getByText("请输入至少 2 个字符，或清空输入框以显示全部论文。"),
     ).toBeVisible();
     await expect(search).toHaveAccessibleDescription(
-      "请输入至少 2 个字符，或清空输入框后按回车显示全部论文。",
+      "请输入至少 2 个字符，或清空输入框以显示全部论文。",
     );
   },
 };
