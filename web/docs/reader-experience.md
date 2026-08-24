@@ -439,6 +439,13 @@ local draft until the first send. Scope filtering and authorization happen on
 the Server; the Web must not fetch global conversations and filter them
 locally.
 
+On phones, Reader preserves two distinct headers rather than compressing their
+jobs into one row. The outer header retains Ask, Annotations, Translate,
+Details, and the panel-close action. The inner Ask header runs from conversation
+history, as its only flexible and widest item, to the compact label-only
+reasoning-strength selector and New chat. Desktop retains the same outer panel
+header and keeps reasoning in the Composer.
+
 The open paper (and the active Project when reading inside one) is the default
 research context of a new draft, not a locked boundary. The shared `@` context
 trigger on the Ask Composer opens the same picker as Home, so the user may
@@ -457,17 +464,19 @@ through the sidebar.
 
 The Ask message viewport and Composer are two siblings inside the contextual
 panel. Messages own the panel's vertical scroll, while the `context-panel`
-Composer remains docked at the bottom. Its resting state is one compact row:
-context, input, reasoning, and send controls share the same pill. It expands to
-a second control row only for multiline input, long input, or an attached
-passage. The switcher, message viewport, and Composer are separated by spacing
-rather than stacked card borders; the Composer uses the same `border-line`
-resting boundary and desktop raised elevation as Home at the narrower panel
-measure. The transcript and Composer share 20 px horizontal panel insets, so
-user messages align to the Composer's right edge and assistant content aligns
-to its left edge. Its outer surface alone owns keyboard focus. The Jump to latest action
-is anchored to the message-viewport/Composer boundary so it remains fully above
-the Composer at every expanded height.
+Composer remains docked at the bottom. On desktop, context, input, the shared
+reasoning trigger, and send controls share that surface; on phones, reasoning
+moves to the inner Ask header. The Composer follows the
+[shared shape and reasoning contract](./visual-language.md#shape-and-density)
+for visual wrapping, height limits, and open-menu treatment. The switcher,
+message viewport, and Composer are separated by spacing rather than stacked
+card borders; the Composer uses the same `border-line` resting boundary and
+desktop raised elevation as Home at the narrower panel measure. The transcript
+and Composer share 20 px horizontal panel insets, so user messages align to the
+Composer's right edge and assistant content aligns to its left edge. Its outer
+surface alone owns keyboard focus. The Jump to latest action is anchored to the
+message-viewport/Composer boundary so it remains fully above the Composer at
+every expanded height.
 An empty paper conversation uses a quiet title and supporting description with
 no decorative icon or suggestion shortcuts; Home retains its existing empty
 behavior through the optional structured-empty-state interface.
@@ -531,16 +540,18 @@ Playwright coverage for the following matrix:
 | AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link                                                                                         |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                                                                                                          |
 | Ask                | local new chat, streaming, response ready, suggestions delayed, historical, prompt edit retained on early failure, branch pager, failed leaf after refresh, retried variants, source open |
-| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                                                                                                            |
+| Composer           | compact full pill, visual wrap or explicit newline, fixed 24 px expanded corners, maximum-height internal scroll, desktop reasoning closed/open                                           |
+| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat, mobile dual headers and ordered inner controls                                                            |
 | Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                                                                                                          |
 | Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                                                                                                      |
 
 ### Figma and Storybook acceptance mapping
 
 The active Figma Reader page above remains the visual-intent source. The
-collaboration contract is executable in Storybook with these state mappings;
-until dedicated collaboration frames receive stable node IDs, reviewers use
-the named `50 — Reader` states rather than inventing links:
+collaboration contract is executable in Storybook, plus route Playwright where
+the full Reader composition is required. Until dedicated collaboration frames
+receive stable node IDs, reviewers use the named `50 — Reader` states rather
+than inventing links:
 
 | Figma `50 — Reader` state     | Executable acceptance evidence                            |
 | ----------------------------- | --------------------------------------------------------- |
@@ -560,6 +571,8 @@ the named `50 — Reader` states rather than inventing links:
 | AI reflow translation error   | `TranslationError`, `PartialFailure`                      |
 | AI reflow toolbar settings    | `DesktopPopover`                                          |
 | AI reflow mobile/Dark         | `SmallMobile`, `LargeMobile`, `MobileBottomSheet`, `Dark` |
+| Shared mobile Ask Composer    | `ContextPanelMobileVisualWrapExpansion`                   |
+| Mobile Ask dual headers       | Reader Playwright `keeps Reader Ask controls…`            |
 
 The Project discussion stories deliberately show flat replies from two
 authors, immutable audience badges, root-only color, and resolve/reopen

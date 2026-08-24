@@ -34,10 +34,17 @@ list, article, navigation region, or table into a generic Item.
 
 ## Shape and density
 
-- Composer and mobile quick actions may use `radius-full`; this is the product's
-  distinctive high-affordance control shape.
+- Compact single-line Composers and mobile quick actions may use `radius-full`;
+  this is the product's distinctive high-affordance control shape. A Composer
+  that wraps or contains an explicit line break uses the fixed 24 px
+  `radius-2xl`, keeps its bottom edge anchored, and grows upward until its
+  textarea begins scrolling internally.
 - Workspace panels and grouped collections use `radius-xl` or `radius-2xl`.
 - Controls and rows use `radius-lg`; small badges remain full pills.
+- Desktop reasoning strength uses a transparent text-and-chevron trigger at
+  rest and a semantic background while open. Its two-option menu keeps each
+  supporting description and a trailing selected check; mobile uses the same
+  radio state in a label-only menu.
 - Adjacent controls use the existing 36 px desktop / 44 px touch density.
 - A section uses 8–12 px within a group and at least 20–24 px between groups.
 - Selected navigation and current records use a surface, structure border, and
@@ -52,7 +59,7 @@ install the block unchanged.
 | --------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspace rail and mobile navigation          | `c-navigation-menu-3`, `c-item-4`                | Keep the feature-owned shell, Iconoir glyphs, conversation history, collapse animation, URL state, and mobile sheet; adopt framed active rows and clear icon tiles.  |
 | Account menu                                  | `c-dropdown-menu-9`, `c-dropdown-menu-14`        | Preserve live usage, public links, focus order, and Settings routing; retain the compact identity header and framed usage summary.                                   |
-| Home Composer                                 | `c-input-group-34`                               | Preserve the rounded single-line contract, context picker, reasoning selector, IME handling, and mobile keyboard behavior.                                           |
+| Home Composer                                 | `c-input-group-34`                               | Preserve the single-line full pill, fixed-corner upward expansion, context picker, unboxed reasoning selector, IME handling, and mobile keyboard behavior.           |
 | Home recents                                  | `c-card-7`, `c-item-6`, `frame`                  | Give each paper or project one outline. Separate preview and metadata with one divider; use fill, not another border, for project icon tiles.                        |
 | Library papers and outputs                    | `c-tabs-7`, `c-item-6`, `c-dropdown-menu-12`     | Keep semantic table/list collections, column preferences, bulk selection, preview, filters, and URL state; frame the workbench and strengthen current-row hierarchy. |
 | Projects list and detail                      | `c-item-4`, `c-item-6`, `c-tabs-7`, `c-dialog-3` | Use framed rows, metric chips, and a stable detail header; retain real project capabilities and confirmation behavior.                                               |

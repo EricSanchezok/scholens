@@ -1867,15 +1867,54 @@ test("keeps Reader Ask controls inside a panned visual viewport", async ({
   await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
 
   const panel = page.locator('[data-placement="visual-full"]');
-  const newConversation = page
+  const switcher = panel.locator("[data-conversation-switcher]");
+  const history = switcher.locator("[data-conversation-switcher-history]");
+  const reasoning = switcher.getByRole("button", {
+    name: "Reasoning strength: Standard",
+  });
+  const create = switcher
     .getByRole("button", { name: "New conversation", exact: true })
-    .first();
+    .last();
+  const close = panel.getByRole("button", { name: "Close context panel" });
   const composer = page
     .getByRole("textbox", { name: "Ask a follow-up" })
     .locator("xpath=ancestor::form");
   await expect(panel).toBeVisible();
-  await expect(newConversation).toBeVisible();
+  await expect(history).toBeVisible();
+  await expect(close).toBeVisible();
   await expect(composer).toBeVisible();
+  const controlBoxes = await Promise.all(
+    [history, reasoning, create].map((control) => control.boundingBox()),
+  );
+  expect(controlBoxes.every(Boolean)).toBe(true);
+  expect(controlBoxes.map((box) => Math.round(box!.x))).toEqual(
+    [...controlBoxes]
+      .sort((left, right) => left!.x - right!.x)
+      .map((box) => Math.round(box!.x)),
+  );
+  expect(controlBoxes[0]!.width).toBeGreaterThan(
+    Math.max(...controlBoxes.slice(1).map((box) => box!.width)),
+  );
+  expect(
+    controlBoxes
+      .slice(0, -1)
+      .every((box, index) => box!.x + box!.width <= controlBoxes[index + 1]!.x),
+  ).toBe(true);
+  const closeBox = await close.boundingBox();
+  expect(closeBox).not.toBeNull();
+  expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(
+    controlBoxes[0]!.y,
+  );
+  expect(
+    await switcher.evaluate((element) => element.scrollWidth),
+  ).toBeLessThanOrEqual(
+    await switcher.evaluate((element) => element.clientWidth),
+  );
+  await reasoning.click();
+  await page.getByRole("menuitemradio", { name: /Deep/ }).click();
+  await expect(
+    switcher.getByRole("button", { name: "Reasoning strength: Deep" }),
+  ).toBeVisible();
 
   await setVisualViewport(page, { height: 500, offsetTop: 220 });
   await expect
@@ -1890,11 +1929,11 @@ test("keeps Reader Ask controls inside a panned visual viewport", async ({
       }),
     )
     .toEqual({ bottom: 720, height: 500, top: 220 });
-  const [newConversationBox, composerBox] = await Promise.all([
-    newConversation.boundingBox(),
+  const [historyBox, composerBox] = await Promise.all([
+    history.boundingBox(),
     composer.boundingBox(),
   ]);
-  expect(newConversationBox!.y).toBeGreaterThanOrEqual(220);
+  expect(historyBox!.y).toBeGreaterThanOrEqual(220);
   expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(720);
 
   await setVisualViewport(page, { height: 844, offsetTop: 0 });
