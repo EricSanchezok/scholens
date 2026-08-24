@@ -291,12 +291,29 @@ export const Library: Story = {
         name: /A deliberately long research paper title/,
       }),
     ).toBeVisible();
-    await userEvent.unhover(longTitleLink);
+    const finalPaperLink = canvas.getByRole("link", {
+      name: /When Does Pairing Seeds Reduce Variance/,
+    });
+    await userEvent.hover(finalPaperLink);
     await expect(
       within(preview).getByRole("heading", {
-        name: /Memory as a Controlled Process/,
+        name: /When Does Pairing Seeds Reduce Variance/,
       }),
     ).toBeVisible();
+    await userEvent.unhover(finalPaperLink);
+    await expect(
+      within(preview).getByRole("heading", {
+        name: /When Does Pairing Seeds Reduce Variance/,
+      }),
+    ).toBeVisible();
+    await expect(finalPaperLink.closest('[role="row"]')).toHaveAttribute(
+      "data-current",
+      "true",
+    );
+    await expect(paperLink.closest('[role="row"]')).toHaveAttribute(
+      "data-current",
+      "false",
+    );
     const previewToggle = canvas.getByRole("button", {
       name: "Close paper details",
     });

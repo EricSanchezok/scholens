@@ -893,11 +893,7 @@ export function PaperCollectionWorkbench({
   const measuredWidth = width ?? 0;
   const availableWidth = sidePanelLayout?.containerWidth ?? measuredWidth;
   const [previewId, setPreviewId] = React.useState<string>();
-  const [hoveredPreviewId, setHoveredPreviewId] = React.useState<string>();
-  const preview =
-    items.find((item) => item.id === hoveredPreviewId) ??
-    items.find((item) => item.id === previewId) ??
-    items[0];
+  const preview = items.find((item) => item.id === previewId) ?? items[0];
   const previewVisible = Boolean(
     contentState === undefined &&
     preview &&
@@ -1281,8 +1277,7 @@ export function PaperCollectionWorkbench({
                     data-index={virtualRow.index}
                     key={item.id}
                     onFocusCapture={() => setPreviewId(item.id)}
-                    onMouseEnter={() => setHoveredPreviewId(item.id)}
-                    onMouseLeave={() => setHoveredPreviewId(undefined)}
+                    onMouseEnter={() => setPreviewId(item.id)}
                     onPointerDownCapture={() => setPreviewId(item.id)}
                     ref={rowVirtualizer.measureElement}
                     role="row"

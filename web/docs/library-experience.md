@@ -123,11 +123,11 @@ desktop-only selection controls therefore do not create phantom mobile columns.
 When the page-level container is below 1040 px, the preview temporarily becomes
 unavailable without rewriting the stored preference; selected desktop columns
 remain reachable through the collection's local horizontal scroller. Mobile
-exposes neither column management nor preview. Selecting or
-focusing a paper updates the preview with its full title, authors, publication,
-DOI, personal status, tags, abstract or summary, and keywords. Hover provides a
-temporary preview; focus or pointer activation persists the current row so
-moving the pointer away does not discard the user's context. Summary Markdown
+exposes neither column management nor preview. Selecting, focusing, or hovering
+a paper updates the preview with its full title, authors, publication, DOI,
+personal status, tags, abstract or summary, and keywords. Each interaction also
+makes that paper current, so moving the pointer away preserves the most recently
+visited row instead of returning to the first paper. Summary Markdown
 is rendered as restrained editorial content rather than exposed source syntax.
 The preview presents the portrait beside core metadata so the abstract or
 summary starts earlier, and never repeats navigation.
