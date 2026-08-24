@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from app.shared.domain import JsonValue
@@ -10,6 +10,7 @@ from app.shared.domain.enums import (
     AnnotationColor,
     AnnotationThreadMode,
     AnnotationThreadStatus,
+    ResearchAudienceType,
     ResearchItemKind,
 )
 from app.modules.papers.application.contracts.citation import (
@@ -19,6 +20,38 @@ from app.modules.papers.application.contracts.citation import (
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.research.application.positions import ResearchPosition
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA: dict[str, Any] = {
+    "oneOf": [
+        {
+            "required": ["color"],
+            "properties": {
+                "color": {
+                    "description": "Replacement highlight color.",
+                    "not": {"type": "null"},
+                },
+                "status": {
+                    "description": "Must be null when color is changed.",
+                    "type": "null",
+                },
+            },
+        },
+        {
+            "required": ["status"],
+            "properties": {
+                "color": {
+                    "description": "Must be null when status is changed.",
+                    "type": "null",
+                },
+                "status": {
+                    "description": "Replacement discussion status.",
+                    "not": {"type": "null"},
+                },
+            },
+        },
+    ]
+}
 
 
 class ResearchCreatorResponse(BaseModel):
@@ -205,6 +238,56 @@ class ResearchItemListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class ResearchOutputCreatorSummary(BaseModel):
+    """Bounded creator identity for a catalog row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int | None
+    display_name: str | None = Field(default=None, max_length=320)
+
+
+class ResearchOutputSourceSummary(BaseModel):
+    """Stable audience source without storage or delivery credentials."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    audience_type: ResearchAudienceType
+    audience_id: UUID | None
+    title: str = Field(min_length=1, max_length=240)
+
+
+class ResearchOutputSummary(BaseModel):
+    """Bounded catalog projection; complete output content is fetched separately."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: UUID
+    kind: ResearchItemKind
+    audience: ResearchAudience
+    target_document_id: UUID | None
+    title: str = Field(min_length=1, max_length=240)
+    excerpt: str = Field(max_length=1_200)
+    creator: ResearchOutputCreatorSummary
+    created_at: datetime
+    updated_at: datetime
+    source: ResearchOutputSourceSummary
+    resource_uri: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=r"^scholens://(?:annotation-threads|research-outputs)/",
+    )
+
+
+class ResearchOutputSummaryListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ResearchOutputSummary] = Field(max_length=25)
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    previous_cursor: str | None = Field(default=None, max_length=2_048)
+    total_count: int = Field(ge=0)
+
+
 class CreateAnnotationThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -216,7 +299,10 @@ class CreateAnnotationThreadRequest(BaseModel):
 
 
 class UpdateAnnotationThreadRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA,
+    )
 
     color: AnnotationColor | None = None
     status: AnnotationThreadStatus | None = None

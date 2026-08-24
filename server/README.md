@@ -59,12 +59,12 @@ degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
-fully authorized catalog exposes 57 stored-knowledge and management tools:
+fully authorized catalog exposes 63 stored-knowledge and management tools:
 paper retrieval, Project and collaborator management, personal Library and
 tags, known-source ingestion and jobs, annotation discussions, and existing
 research outputs. Narrower Access Keys see only their permitted subset.
 Internet paper discovery and research-output generation are intentionally
-absent. The in-product Conversation Agent also selects 57 definitions: it
+absent. The in-product Conversation Agent also selects 63 definitions: it
 excludes the remote upload-preparation primitive because it does not own a
 filesystem and instead includes the internal-only `wait_for_jobs` tool.
 
@@ -75,6 +75,60 @@ coarse capability filter and every concrete resource is re-authorized against
 the current Actor. MCP resources expose bounded manifests at
 `scholens://library`, `scholens://projects`, and typed Project, paper,
 annotation-thread, and research-output URIs.
+
+Six complete-object or full-page reads remain available as owned rolling-
+compatibility contracts: `get_paper`, `get_library_paper`,
+`get_annotation_thread`, `get_research_output`, `list_library_papers`, and
+`list_research_outputs`. New integrations and every Resource continuation use
+their bounded replacements: `get_paper_page`, `get_library_paper_page`,
+`get_annotation_thread_page`, `get_research_output_page`,
+`list_library_paper_summaries`, and `list_research_output_summaries`. The four
+single-object replacements return lossless UTF-8 pages of canonical JSON; the
+list replacements use signed keyset pagination and bounded previews. Library
+paper pages exclude rotating signed preview URLs from durable JSON and expose
+the current URL separately; a revision-keyed bounded LRU serializes each
+multi-page paper, Library paper, annotation, or research-output representation
+once. Canonical JSON above the explicit 64 MiB per-document ceiling fails with
+`json_document_paging_limit_exceeded` instead of falling back to quadratic
+re-serialization. The legacy names, owners, replacement
+names, telemetry keys, and earliest removal dates are governed by
+`contracts/deprecations.json`.
+
+Annotation-thread and research-output Resource manifests use one exact,
+authorized SQL catalog row and never hydrate the complete thread, comments,
+transcript, or table. Full-page reads first obtain an authoritative nested
+revision and a conservative persisted-content serialization bound; an item
+above the retained ceiling is rejected before ORM hydration. Cache misses are
+per-key singleflight operations, and distinct builds reserve the global cache
+budget before they hydrate or serialize, so concurrent misses cannot multiply
+the configured retained-memory ceiling. MCP annotation updates likewise return
+a bounded scalar summary; the HTTP update contract remains complete.
+Paper Resource manifests likewise avoid complete producers: canonical metadata
+comes from an authorized, fixed-width scalar projection, and extracted text
+comes from a database `left(...)` prefix plus scalar line/count facts. A
+Resource read therefore never hydrates the complete metadata object or the
+64 MiB lossless text snapshot merely to emit its 16 KiB preview. Cross-module
+Project lookups must choose an explicit citation, capacity, or storage-reference
+`Document` column profile; none of those paths may lazy-load parsed content or
+unrelated metadata arrays.
+
+Extracted-text continuations and regex-search pages likewise revalidate current
+document access through a lightweight revision query on every call. A separate
+actor-and-revision-keyed LRU retains at most 128 MiB overall and 64 MiB per
+paper, including the text digest and sparse line checkpoints, so complete reads
+do not repeatedly hydrate, split, or hash the same large text. An entry above
+that ceiling fails with `paper_content_paging_limit_exceeded`; content revision
+changes invalidate the signed continuation instead of serving mixed versions.
+Concurrent requests for one actor/document/revision share one hydration and
+index build. Distinct builds reserve their maximum retained size against the
+global cache before reading the complete text. The paper and canonical-JSON
+caches share one singleflight-LRU kernel; it separately reserves bounded build
+working memory, rejects recursive same-key factories, and releases both
+reservations after factory failures. Regex search operates on line spans in the
+immutable source instead of copying complete lines, builds only a fixed-size
+match preview, and shares a process-level concurrency limit even on cache hits.
+Strict Unicode validation and JSON-prefix sizing likewise use bounded temporary
+allocations rather than serializing an entire historical text value first.
 
 Runtime tool errors (`isError: true`) carry the full JSON error
 (code/kind/message/retryable/remediation/diagnostic ID) only in the content
@@ -87,6 +141,28 @@ Authenticated Job callbacks that fail the registered operation contract are
 atomically marked failed before their Redis concurrency leases are released.
 Unexpected handler or database failures keep their leases until retry or TTL,
 so error handling cannot admit duplicate active work.
+Signed worker callbacks use one shared Jobs/Server byte contract and are
+rejected above a 64 MiB request-body ceiling. PDF parser output is additionally
+bounded to 40 MiB of UTF-8 canonical text (the 125% repair-candidate ceiling)
+and 2 MiB of encoded page offsets. Jobs validates the exact encoded callback
+before opening the HTTP request; Server checks a declared `Content-Length`
+before reading and then stops a chunked body at the first over-limit chunk.
+Internal callback routes deliberately declare no eager FastAPI body field: they
+parse only the bounded bytes cached by authentication after signature
+verification. A lost-control worker therefore cannot allocate or persist an
+unbounded result before the transport limit runs.
+
+Transactional generated-object cleanup uses a second shared Jobs contract.
+Only ASCII-safe keys under `documents/` or `research/audio/` are eligible, each
+key is at most 1,024 UTF-8 bytes, and a durable deletion batch is capped at both
+100 strictly ordered unique keys and 64 KiB of compact key JSON. Project and
+Document producers use deterministic keyset-ordered streams; the shared
+batcher retains only the previous key and current batch, and rejects duplicates
+or ordering drift across batch boundaries. Each idempotency key includes its
+ordinal and key digest, and Server accepts completion only when the signed
+deleted-count receipt matches the persisted batch exactly. Newly created Job
+IDs are re-read by origin operation in bounded pages so every `job.created`
+journal fact is preserved without materializing the whole cleanup plan.
 
 External Agents should call `create_project` or `get_project` once, then store
 the returned `binding_markdown` in the research repository. Titles may change;
@@ -114,6 +190,50 @@ deadline. `0` requests an immediate snapshot. Batch ingestion accepts at most
 deadline. The Conversation-only `wait_for_jobs` defaults to 120 seconds and can
 observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
 with capped backoff and never retains a database transaction between reads.
+
+Project collection tools preserve their established inputs and item fields but
+return MCP-specific bounded summaries. `list_projects` and
+`list_paper_projects` return at most 25 rows; `list_project_papers` returns at
+most 10. Large descriptions, abstracts, summaries, names, and metadata lists
+are JSON-byte-safe previews, with explicit `content_truncated` and `guidance`
+fields directing callers to `get_project` or `get_paper_page`. Existing signed
+continuations expose remaining rows, and HTTP Project reads remain complete.
+
+`list_project_members` retains its 50-row input maximum but JSON-byte-bounds
+mutable display names and replaces only unsupported oversized historical email
+values with an explicit placeholder while preserving immutable user IDs.
+Member update/removal authorizes and fetches the exact target directly; update
+and ownership-transfer completions return compact ID/permission receipts rather
+than duplicating collaborator identities or the complete Project.
+
+`list_annotation_threads` accepts its existing page-size range but returns at
+most 50 source-ordered summaries from a database keyset page. Its signed cursor
+binds the actor, filters, and ordering. List rows retain `comment_count`, omit
+comment bodies, and bound quote and PDF-anchor previews; callers use
+`get_annotation_thread_page` for the complete discussion. The HTTP Reader list
+continues to return its complete thread timelines.
+
+Agent-facing Job snapshots are a public status projection: the compatibility
+schema retains `result: object | null`, but the MCP runtime value is always
+`null`. Status reads do not select the Job `payload` or `result` JSON columns,
+and completed work is continued through returned paper, Project, or research
+output identifiers and resources. The HTTP Jobs API retains its complete
+result contract for existing product consumers. `list_jobs` defaults to 20
+items, accepts at most 50, and uses an actor-and-filter-bound signed keyset
+cursor over `(created_at, id)`. Ingestion actions are compact receipts rather
+than copies of the response. A batch receipt preserves input order; an
+oversized source is represented by a UTF-8-safe preview with
+`source_truncated: true`, which must not be reused as ingestion input.
+
+The shared dispatcher applies each tool's public projection before output
+validation, replay persistence, and delivery, and reapplies it to legacy replay
+rows. The 200 KiB default budget measures the complete serialized MCP
+`CallToolResult` result object: its unescaped-Unicode compatibility text,
+`structuredContent`, and standalone `ResourceLink` blocks. The surrounding
+JSON-RPC version and request ID are excluded. Job tools use tighter budgets:
+32 KiB for a single Job, 64 KiB for a Job page, 96 KiB for multi-Job waiting,
+and 192 KiB for batch ingestion. An over-budget result fails with
+`tool_result_budget_exceeded` instead of emitting an unbounded response.
 
 ## Start the Application
 
@@ -214,6 +334,50 @@ dry-run by default. They act only on locally provable candidates: a unique
 verbatim quote for reanchoring, or the current completed PDF job whose result
 object key conflicts with its canonical Document. `--apply` and normal operator
 confirmation are required for writes.
+
+`maintenance reprocess-replacement-character-documents` is the targeted
+Unicode-text repair. Run the consumer-first release in this order: deploy Jobs
+with the dedicated `repair_pdf_text` task, deploy Server, run a dry-run, then
+apply one operator-reviewed batch. The default batch is 25 and the hard maximum
+is 50. Selection transfers only identifiers and text byte counts, keyset-scans
+at most four times the requested batch, locks apply candidates with `SKIP
+LOCKED`, materializes one document at a time, and caps work at 32 MiB per
+document and 64 MiB per invocation. Run one operator invocation at a time and
+repeat dry-run/apply only after the previous repair Jobs are terminal.
+
+Each repair is bound to the current source Job, canonical text SHA-256, repair
+revision, and attempt. A pending or running attempt is not duplicated; a
+completed outcome closes its source generation, and an applied outcome closes
+that Document's revision; failed or cancelled outcomes may be retried up to
+three total attempts. `scholens_job_contracts` is the single owner of that
+attempt ceiling and of the U+FFFD warning, content-ratio thresholds, and
+bounded evidence-comparison algorithm used by both Jobs fallback selection and
+Server callback adoption. Evidence windows must retain source order, so a parser
+that reverses columns or paragraphs is rejected even when every sampled phrase
+is still present. Repair candidates are capped at 40 MiB UTF-8, and annotation
+reanchoring has explicit thread, quote-byte, position-JSON-byte, and scan-work
+ceilings. Scalar database facts are checked before historical quote/position
+values are hydrated; exceeding a ceiling safely keeps the prior canonical text.
+Apply output distinguishes `candidates`,
+`enqueued`, `skipped`, and `work_bytes`; `sample_job_ids` contains the newly
+created repair Job IDs, never the source IDs. The dedicated Job receives only
+the canonical S3 source key and short-lived internal callback, claim, progress,
+and MinerU-credential URLs. Credentials are not stored in the payload. Repair
+Jobs share the bounded Document queue but are hidden from requester-facing Job
+list/get/wait/cancel/retry surfaces; operators can inspect them with the
+read-only `scholens jobs` commands. They are document-global maintenance
+records and deliberately carry no Project foreign key, even when the historical
+source Job was project-scoped. This keeps their lock graph compatible with
+Project deletion's canonical Project-before-Document order while requester
+identity and source provenance remain bound by the repair payload and source
+Job. Stopping further CLI invocations is the
+rollback switch: failed, cancelled, unsafe, or non-improving repairs keep the
+previous canonical text readable. Terminal non-applied callbacks transactionally
+enqueue deletion of the exact versioned candidate namespace; applied callbacks
+delete superseded parser artifacts. Durable repair Job results contain only a
+bounded digest/count/parser/outcome summary, never candidate text or page maps.
+Final Document GC includes every strictly derived repair artifact key and
+sanitizes any legacy repair result before the Document foreign key is cleared.
 
 `maintenance recover-stuck-paper-ingestion --job-id <uuid>` is the dry-run-first
 incident command for one PDF dispatch that is still pending after publication.

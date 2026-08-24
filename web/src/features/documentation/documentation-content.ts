@@ -6,7 +6,7 @@ import {
   SOURCE_REPOSITORY_URL,
 } from "@/lib/product";
 
-export const MCP_TOOL_COUNT = 57;
+export const MCP_TOOL_COUNT = 63;
 export const MCP_MAX_LOCAL_PDF_BYTES = 30 * 1024 * 1024;
 export const DEVELOPMENT_CONNECTOR_REF = "main";
 
@@ -63,7 +63,7 @@ export const mcpPermissions = [
 export const mcpCapabilityGroups = [
   {
     id: "papers",
-    count: 7,
+    count: 8,
     summary: "Stored paper search, bounded content, citation, and download",
   },
   {
@@ -73,7 +73,7 @@ export const mcpCapabilityGroups = [
   },
   {
     id: "library",
-    count: 14,
+    count: 16,
     summary: "Personal Library, sharing, and tags",
   },
   {
@@ -83,12 +83,12 @@ export const mcpCapabilityGroups = [
   },
   {
     id: "annotations",
-    count: 8,
+    count: 9,
     summary: "Annotation threads and comments",
   },
   {
     id: "outputs",
-    count: 2,
+    count: 4,
     summary: "Reading existing research outputs",
   },
 ] as const;

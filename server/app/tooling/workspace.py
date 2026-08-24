@@ -24,7 +24,6 @@ from app.modules.papers.application.contracts.documents import (
 )
 from app.modules.papers.application.contracts.tags import (
     LibraryTagAssignmentResponse,
-    LibraryTagListResponse,
     LibraryTagResponse,
 )
 from app.modules.papers.application.upload_sessions import (
@@ -32,27 +31,52 @@ from app.modules.papers.application.upload_sessions import (
     PreparePaperUploadResponse,
 )
 from app.modules.projects.application.contracts import (
-    ProjectCollaboratorListResponse,
-    ProjectInvitationListResponse,
-    ProjectListResponse,
     ProjectPaperCollectedResponse,
-    ProjectPaperListResponse,
     ProjectPapersAddedResponse,
 )
-from app.modules.research.application.contracts import ResearchItemResponse
+from app.modules.research.application.contracts import (
+    ResearchItemResponse,
+    ResearchOutputSummaryListResponse,
+)
 from app.shared.application import ApplicationExecutor
 from app.shared.domain import WorkspacePermission
 from app.tooling import workspace_contracts as wc
 from app.tooling.catalog import ToolCatalog, ToolProfile
 from app.tooling.contracts import (
+    DEFAULT_TOOL_OUTPUT_BYTES,
     ToolBehavior,
     ToolConfirmationPolicy,
     ToolDefinition,
     ToolExecutionKind,
     ToolHandler,
     WorkflowToolHandler,
+    ToolOutcomeProjector,
+)
+from app.tooling.citation_projection import (
+    project_paper_citation,
+    project_resolved_citation,
+)
+from app.tooling.job_projection import (
+    BATCH_INGESTION_OUTPUT_BYTES,
+    LIST_JOBS_OUTPUT_BYTES,
+    SINGLE_JOB_OUTPUT_BYTES,
+    WAIT_FOR_JOBS_OUTPUT_BYTES,
+    project_batch_paper_ingestion,
+    project_get_job,
+    project_list_jobs,
+    project_retried_paper_ingestion,
+    project_started_paper_ingestion,
+    project_wait_for_jobs,
+)
+from app.tooling.library_paper_projection import project_updated_library_paper
+from app.tooling.paper_content_paging import PAPER_CONTENT_OUTPUT_BYTES
+from app.tooling.workspace_collection_projection import (
+    project_invitation_action,
+    project_invitation_list,
+    project_library_tag_list,
 )
 from app.tooling.workspace_handlers import WorkspaceToolHandlers
+from app.tooling.paper_content_paging import PaperContentSnapshotCache
 from pydantic import BaseModel
 
 CONVERSATION_TOOL_PROFILE = "conversation"
@@ -81,8 +105,11 @@ def _tool(
     open_world: bool = False,
     confirmation: bool = False,
     persist_result: bool = True,
+    outcome_projector: ToolOutcomeProjector | None = None,
+    max_output_bytes: int = DEFAULT_TOOL_OUTPUT_BYTES,
     subject: str | None = None,
     allow_repeated_calls: bool = False,
+    replacement_tool: str | None = None,
 ) -> ToolDefinition[ApplicationCapabilities]:
     behavior = ToolBehavior(
         read_only=execution in {ToolExecutionKind.QUERY, ToolExecutionKind.ASYNC_QUERY},
@@ -112,9 +139,12 @@ def _tool(
             behavior=behavior,
             confirmation_policy=policy,
             persist_result=persist_result,
+            outcome_projector=outcome_projector,
+            max_output_bytes=max_output_bytes,
             workflow_handler=cast(WorkflowToolHandler, handler),
             activity_subject_field=subject,
             allow_repeated_calls=allow_repeated_calls,
+            replacement_tool=replacement_tool,
         )
     return ToolDefinition(
         name=name,
@@ -127,9 +157,12 @@ def _tool(
         behavior=behavior,
         confirmation_policy=policy,
         persist_result=persist_result,
+        outcome_projector=outcome_projector,
+        max_output_bytes=max_output_bytes,
         handler=cast(ToolHandler[ApplicationCapabilities], handler),
         activity_subject_field=subject,
         allow_repeated_calls=allow_repeated_calls,
+        replacement_tool=replacement_tool,
     )
 
 
@@ -140,6 +173,7 @@ def build_workspace_tool_catalog(
     executor: ApplicationExecutor[ApplicationCapabilities] | None = None,
     web_base_url: str = "https://scholens.local",
     cursor_secret: str = "catalog-construction-only",
+    paper_content_snapshot_cache: PaperContentSnapshotCache | None = None,
 ) -> ToolCatalog[ApplicationCapabilities]:
     handlers = WorkspaceToolHandlers(
         executor=cast(ApplicationExecutor[ApplicationCapabilities], executor),
@@ -147,6 +181,7 @@ def build_workspace_tool_catalog(
         citations=citations,
         web_base_url=web_base_url,
         cursor_secret=cursor_secret,
+        paper_content_snapshot_cache=paper_content_snapshot_cache,
     )
     read = WorkspacePermission.READ
     write = WorkspacePermission.WRITE
@@ -182,12 +217,27 @@ def build_workspace_tool_catalog(
                 use="you know a Scholens document UUID and need canonical metadata",
                 avoid="you need full text or internet discovery",
                 result="the paper identity, metadata, processing state, and stable resource link",
-                next_step="use get_paper_content or search_paper_content for evidence.",
+                next_step="use get_paper_page for bounded metadata or get_paper_content for evidence.",
             ),
             input_model=wc.DocumentInput,
             output_model=DocumentResponse,
             permission=read,
             handler=handlers.get_paper,
+            replacement_tool="get_paper_page",
+        ),
+        _tool(
+            name="get_paper_page",
+            title="Get bounded paper metadata",
+            description=_description(
+                use="you know a Scholens document UUID and need lossless metadata within a bounded Agent response",
+                avoid="the legacy complete get_paper response is known to fit",
+                result="one lossless UTF-8 page of canonical metadata JSON",
+                next_step="continue with next_cursor until complete, then parse the concatenated JSON.",
+            ),
+            input_model=wc.PaperMetadataPageInput,
+            output_model=wc.JsonDocumentPageOutput,
+            permission=read,
+            handler=handlers.get_paper_page,
         ),
         _tool(
             name="get_paper_content",
@@ -195,13 +245,17 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need a bounded range of extracted text from a known paper",
                 avoid="you only need metadata or do not know the document UUID",
-                result="numbered lines, a content digest, and the next line cursor",
-                next_step="continue with next_start_line or cite the returned line range.",
+                result=(
+                    "lossless UTF-8-bounded text, numbered compatibility lines, a "
+                    "content digest, and an opaque continuation cursor"
+                ),
+                next_step="continue with next_cursor or cite the returned line range.",
             ),
             input_model=wc.PaperContentInput,
             output_model=wc.PaperContentOutput,
             permission=read,
             handler=handlers.get_paper_content,
+            max_output_bytes=PAPER_CONTENT_OUTPUT_BYTES,
         ),
         _tool(
             name="search_paper_content",
@@ -224,13 +278,20 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need stored bibliographic fields and their completeness",
                 avoid="you want to contact external metadata providers",
-                result="citation fields, missing required fields, and guidance",
-                next_step="call resolve_paper_citation only when important fields are missing.",
+                result=(
+                    "bounded citation-field previews, missing required fields, "
+                    "content_truncated, and guidance"
+                ),
+                next_step=(
+                    "use get_paper_page for lossless metadata, or call "
+                    "resolve_paper_citation when important fields are missing."
+                ),
             ),
             input_model=wc.PaperCitationInput,
             output_model=wc.PaperCitationReadOutput,
             permission=read,
             handler=handlers.get_paper_citation,
+            outcome_projector=project_paper_citation,
         ),
         _tool(
             name="resolve_paper_citation",
@@ -238,8 +299,13 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="stored citation fields are incomplete and external resolution is justified",
                 avoid="get_paper_citation reports complete metadata",
-                result="resolved fields with provenance and a stable paper resource",
-                next_step="persist the returned citation in the research document.",
+                result=(
+                    "bounded resolved fields and provider diagnostics with a stable "
+                    "paper resource, without a duplicate artifact"
+                ),
+                next_step=(
+                    "use resource_uri or get_paper_page for lossless stored metadata."
+                ),
             ),
             input_model=wc.ResolvePaperCitationInput,
             output_model=wc.ResolvedCitationOutput,
@@ -247,6 +313,8 @@ def build_workspace_tool_catalog(
             handler=handlers.resolve_paper_citation,
             execution=workflow,
             open_world=True,
+            persist_result=False,
+            outcome_projector=project_resolved_citation,
         ),
         _tool(
             name="get_paper_download_url",
@@ -268,11 +336,17 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need to find an accessible Project or its immutable UUID",
                 avoid="a repository already records the exact Project UUID",
-                result="a cursor-paginated Project list",
-                next_step="store the chosen project_id in AGENTS.md or README.",
+                result=(
+                    "a cursor-paginated Project summary list with explicit "
+                    "content_truncated and guidance fields"
+                ),
+                next_step=(
+                    "continue through next_cursor, use get_project for complete text, "
+                    "then store the chosen project_id in AGENTS.md or README."
+                ),
             ),
             input_model=wc.ListProjectsInput,
-            output_model=ProjectListResponse,
+            output_model=wc.ProjectListToolOutput,
             permission=read,
             handler=handlers.list_projects,
         ),
@@ -344,11 +418,17 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need the papers already associated with one Project",
                 avoid="you need internet discovery or personal-Library-only papers",
-                result="a filtered, cursor-paginated Project paper list",
-                next_step="use returned document UUIDs with paper and annotation tools.",
+                result=(
+                    "a filtered, cursor-paginated paper summary list with explicit "
+                    "content_truncated and guidance fields"
+                ),
+                next_step=(
+                    "continue through next_cursor and use get_paper_page for complete "
+                    "metadata before downstream paper or annotation work."
+                ),
             ),
             input_model=wc.ListProjectPapersInput,
-            output_model=ProjectPaperListResponse,
+            output_model=wc.ProjectPaperListToolOutput,
             permission=read,
             handler=handlers.list_project_papers,
         ),
@@ -391,11 +471,17 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need every accessible Project containing a known paper",
                 avoid="you only need the paper's personal Library status",
-                result="a Project list",
-                next_step="choose an explicit Project UUID for Project-scoped work.",
+                result=(
+                    "a cursor-paginated Project summary list with explicit "
+                    "content_truncated and guidance fields"
+                ),
+                next_step=(
+                    "continue through next_cursor, use get_project for complete text, "
+                    "then choose an explicit Project UUID for Project-scoped work."
+                ),
             ),
-            input_model=wc.DocumentInput,
-            output_model=ProjectListResponse,
+            input_model=wc.ListPaperProjectsInput,
+            output_model=wc.ProjectListToolOutput,
             permission=read,
             handler=handlers.list_paper_projects,
         ),
@@ -405,11 +491,17 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need collaborator identities, roles, or permissions",
                 avoid="you need pending invitations",
-                result="visible Project collaborators and immutable user IDs",
-                next_step="use those IDs for member or ownership changes.",
+                result=(
+                    "a cursor-paginated list of visible collaborators with bounded "
+                    "identity previews, immutable user IDs, and truncation guidance"
+                ),
+                next_step=(
+                    "continue through next_cursor, then use immutable user IDs for "
+                    "member or ownership changes."
+                ),
             ),
-            input_model=wc.ProjectInput,
-            output_model=ProjectCollaboratorListResponse,
+            input_model=wc.ListProjectMembersInput,
+            output_model=wc.ProjectMemberListToolOutput,
             permission=read,
             handler=handlers.list_project_members,
         ),
@@ -419,13 +511,20 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="a Project manager needs pending invitation status",
                 avoid="you need accepted members",
-                result="pending invitations and their permissions",
-                next_step="resend or revoke only the specific invitation UUID.",
+                result=(
+                    "a cursor-paginated list of active invitations with bounded name "
+                    "previews and explicit content_truncated guidance"
+                ),
+                next_step=(
+                    "continue through next_cursor, then resend or revoke only the "
+                    "specific invitation UUID."
+                ),
             ),
-            input_model=wc.ProjectInput,
-            output_model=ProjectInvitationListResponse,
+            input_model=wc.ListProjectInvitationsInput,
+            output_model=wc.ProjectInvitationListOutput,
             permission=manage,
             handler=handlers.list_project_invitations,
+            outcome_projector=project_invitation_list,
         ),
         _tool(
             name="create_project_invitation",
@@ -433,7 +532,10 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="the user explicitly wants to email Project access to a person",
                 avoid="the person is already a member or email delivery is not intended",
-                result="an impact preview, then invitation and delivery status",
+                result=(
+                    "an impact preview, then a bounded invitation and delivery-status "
+                    "receipt"
+                ),
                 next_step="confirm before queueing, then inspect delivery status.",
             ),
             input_model=wc.CreateProjectInvitationInput,
@@ -443,6 +545,8 @@ def build_workspace_tool_catalog(
             execution=workflow,
             open_world=True,
             confirmation=True,
+            persist_result=False,
+            outcome_projector=project_invitation_action,
         ),
         _tool(
             name="resend_project_invitation",
@@ -450,7 +554,10 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="a specific sent or failed invitation must be queued again",
                 avoid="permissions or recipient must change",
-                result="an impact preview, then refreshed invitation and delivery status",
+                result=(
+                    "an impact preview, then a bounded refreshed invitation and "
+                    "delivery-status receipt"
+                ),
                 next_step="confirm before queueing and revoke/recreate if recipient details are wrong.",
             ),
             input_model=wc.InvitationInput,
@@ -460,6 +567,8 @@ def build_workspace_tool_catalog(
             execution=workflow,
             open_world=True,
             confirmation=True,
+            persist_result=False,
+            outcome_projector=project_invitation_action,
         ),
         _tool(
             name="revoke_project_invitation",
@@ -500,7 +609,10 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="an owner's collaborator permissions must change",
                 avoid="ownership should transfer or the member should be removed",
-                result="an impact preview, then the updated membership",
+                result=(
+                    "an impact preview, then a compact membership receipt containing "
+                    "only stable IDs, owner status, and permissions"
+                ),
                 next_step="confirm the complete replacement permission set.",
             ),
             input_model=wc.UpdateProjectMemberInput,
@@ -550,7 +662,10 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="the owner explicitly wants an existing collaborator to become owner",
                 avoid="only collaborator permissions should change",
-                result="an impact preview, then the resulting Project membership state",
+                result=(
+                    "an impact preview, then a compact receipt containing the Project "
+                    "and new-owner IDs"
+                ),
                 next_step="verify the new owner ID before confirmation.",
             ),
             input_model=wc.TransferProjectOwnershipInput,
@@ -576,31 +691,89 @@ def build_workspace_tool_catalog(
         ),
         _tool(
             name="list_library_papers",
-            title="List Library papers",
+            title="List Library papers (legacy complete response)",
             description=_description(
-                use="you need papers explicitly saved in the current user's Library",
+                use="an existing client requires the complete legacy Library collection",
                 avoid="you need all Project-accessible papers or internet discovery",
-                result="a filtered cursor-paginated Library list including active ingestions",
-                next_step="use a document UUID for paper, Project, or tag operations.",
+                result=(
+                    "the complete historical cursor page, including active ingestions; "
+                    "unusually large pages can exceed the global MCP output budget"
+                ),
+                next_step=(
+                    "migrate model-facing reads to list_library_paper_summaries, use "
+                    "list_jobs for ingestion state, and page lossless metadata with "
+                    "get_library_paper_page."
+                ),
             ),
             input_model=wc.ListLibraryPapersInput,
             output_model=LibraryPaperListResponse,
             permission=read,
             handler=handlers.list_library_papers,
+            replacement_tool="list_library_paper_summaries",
+        ),
+        _tool(
+            name="list_library_paper_summaries",
+            title="List bounded Library paper summaries",
+            description=_description(
+                use=(
+                    "you need a context-safe page of durable papers explicitly saved "
+                    "in the current user's Library"
+                ),
+                avoid="you need active ingestion state or Project-only papers",
+                result=(
+                    "bounded cursor-paginated Library paper previews with explicit "
+                    "content_truncated and guidance fields"
+                ),
+                next_step=(
+                    "continue through next_cursor, use get_library_paper_page for "
+                    "lossless metadata, and use list_jobs for active ingestions."
+                ),
+            ),
+            input_model=wc.ListLibraryPapersInput,
+            output_model=wc.LibraryPaperListToolOutput,
+            permission=read,
+            handler=handlers.list_library_paper_summaries,
         ),
         _tool(
             name="get_library_paper",
-            title="Get Library paper",
+            title="Get Library paper (legacy complete response)",
             description=_description(
-                use="you need one personal Library entry, tags, status, and overrides",
+                use="an existing client requires one complete historical Library entry",
                 avoid="the paper is only accessible through a Project",
-                result="the personal entry plus canonical document metadata",
-                next_step="update only personal fields or use get_paper for canonical data.",
+                result=(
+                    "the complete personal entry plus canonical document metadata; "
+                    "unusually large records can exceed the global MCP output budget"
+                ),
+                next_step=(
+                    "migrate model-facing reads to get_library_paper_page and continue "
+                    "its signed cursor until the lossless JSON is complete."
+                ),
             ),
             input_model=wc.DocumentInput,
             output_model=LibraryPaperResponse,
             permission=read,
             handler=handlers.get_library_paper,
+            replacement_tool="get_library_paper_page",
+        ),
+        _tool(
+            name="get_library_paper_page",
+            title="Get bounded Library paper",
+            description=_description(
+                use=(
+                    "you know a personal Library paper UUID and need lossless durable "
+                    "Library and canonical document metadata"
+                ),
+                avoid="you only need a compact list or status preview",
+                result="one lossless UTF-8 page of the stable Library paper JSON",
+                next_step=(
+                    "continue with next_cursor until complete, concatenate content in "
+                    "byte order, then parse JSON; use access_url separately for preview."
+                ),
+            ),
+            input_model=wc.LibraryPaperPageInput,
+            output_model=wc.JsonDocumentPageOutput,
+            permission=read,
+            handler=handlers.get_library_paper_page,
         ),
         _tool(
             name="update_library_paper",
@@ -608,15 +781,22 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="personal reading status or metadata overrides must change",
                 avoid="canonical shared metadata should change",
-                result="the updated personal Library entry",
-                next_step="read the entry again if another actor may have changed it.",
+                result=(
+                    "a bounded updated entry with content_truncated, guidance, and a "
+                    "compact mutation receipt"
+                ),
+                next_step=(
+                    "use get_library_paper_page for lossless JSON if the preview was "
+                    "truncated."
+                ),
             ),
             input_model=wc.UpdateLibraryPaperInput,
-            output_model=LibraryPaperResponse,
+            output_model=wc.LibraryPaperToolOutput,
             permission=write,
             handler=handlers.update_library_paper,
             execution=command,
             idempotent=True,
+            outcome_projector=project_updated_library_paper,
         ),
         _tool(
             name="remove_library_papers",
@@ -708,13 +888,20 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need the current user's personal tag UUIDs and names",
                 avoid="you need Project-wide labels",
-                result="the personal Library tag list",
-                next_step="use tag UUIDs in list or replace-assignment operations.",
+                result=(
+                    "a cursor-paginated personal tag list with bounded name/color "
+                    "previews and explicit content_truncated guidance"
+                ),
+                next_step=(
+                    "continue through next_cursor, then use tag UUIDs in list or "
+                    "replace-assignment operations."
+                ),
             ),
-            input_model=wc.EmptyInput,
-            output_model=LibraryTagListResponse,
+            input_model=wc.ListLibraryTagsInput,
+            output_model=wc.LibraryTagListOutput,
             permission=read,
             handler=handlers.list_library_tags,
+            outcome_projector=project_library_tag_list,
         ),
         _tool(
             name="create_library_tag",
@@ -788,8 +975,8 @@ def build_workspace_tool_catalog(
                 avoid="you are searching the internet for relevant papers",
                 result="a durable ingestion identity and terminal or timed-out job snapshot",
                 next_step=(
-                    "use the result when terminal; otherwise wait for the returned job "
-                    "instead of rapidly polling"
+                    "open the returned paper resource when terminal; otherwise wait for "
+                    "the returned job instead of rapidly polling"
                 ),
             ),
             input_model=wc.IngestPaperInput,
@@ -798,6 +985,8 @@ def build_workspace_tool_catalog(
             handler=handlers.ingest_paper,
             execution=workflow,
             open_world=True,
+            outcome_projector=project_started_paper_ingestion,
+            max_output_bytes=SINGLE_JOB_OUTPUT_BYTES,
         ),
         _tool(
             name="ingest_papers",
@@ -805,9 +994,13 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you already know between one and fifty paper sources to import together",
                 avoid="you are discovering papers or need different Project destinations per source",
-                result="ordered per-source acceptance and terminal or timed-out job snapshots",
+                result=(
+                    "ordered per-source acceptance and terminal or timed-out job "
+                    "snapshots; source_truncated marks bounded receipt previews"
+                ),
                 next_step=(
-                    "inspect rejected items and wait once for only the remaining active jobs"
+                    "match items by index, inspect rejected items, and wait once for "
+                    "only the remaining active jobs"
                 ),
             ),
             input_model=wc.IngestPapersInput,
@@ -816,6 +1009,8 @@ def build_workspace_tool_catalog(
             handler=handlers.ingest_papers,
             execution=workflow,
             open_world=True,
+            outcome_projector=project_batch_paper_ingestion,
+            max_output_bytes=BATCH_INGESTION_OUTPUT_BYTES,
         ),
         _tool(
             name="retry_paper_ingestion",
@@ -832,6 +1027,8 @@ def build_workspace_tool_catalog(
             handler=handlers.retry_paper_ingestion,
             execution=workflow,
             open_world=True,
+            outcome_projector=project_retried_paper_ingestion,
+            max_output_bytes=SINGLE_JOB_OUTPUT_BYTES,
         ),
         _tool(
             name="cancel_paper_ingestion",
@@ -849,6 +1046,7 @@ def build_workspace_tool_catalog(
             execution=workflow,
             destructive=True,
             confirmation=True,
+            persist_result=False,
         ),
         _tool(
             name="prepare_paper_upload",
@@ -873,13 +1071,15 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you need asynchronous ingestion or research operation status",
                 avoid="you already know one job UUID",
-                result="filtered active or historical jobs",
+                result="a cursor-paginated list of bounded job status snapshots",
                 next_step="use get_job for one exact status and actionable failure.",
             ),
             input_model=wc.ListJobsInput,
             output_model=JobListResponse,
             permission=read,
             handler=handlers.list_jobs,
+            outcome_projector=project_list_jobs,
+            max_output_bytes=LIST_JOBS_OUTPUT_BYTES,
         ),
         _tool(
             name="get_job",
@@ -887,8 +1087,11 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you know one job UUID and need to await its exact progress or failure",
                 avoid="you are searching across jobs",
-                result="terminal status or the latest durable snapshot after a bounded wait",
-                next_step="follow next_action and never rapidly poll an active job.",
+                result="terminal status or the latest bounded status snapshot after a wait",
+                next_step=(
+                    "follow next_action, then use the returned resource identifiers with "
+                    "their paper, Project, or research-output tool"
+                ),
             ),
             input_model=wc.GetJobInput,
             output_model=wc.WaitableJobResponse,
@@ -896,6 +1099,8 @@ def build_workspace_tool_catalog(
             handler=handlers.get_job,
             execution=async_query,
             persist_result=False,
+            outcome_projector=project_get_job,
+            max_output_bytes=SINGLE_JOB_OUTPUT_BYTES,
         ),
         _tool(
             name="wait_for_jobs",
@@ -913,6 +1118,8 @@ def build_workspace_tool_catalog(
             execution=async_query,
             persist_result=False,
             allow_repeated_calls=True,
+            outcome_projector=project_wait_for_jobs,
+            max_output_bytes=WAIT_FOR_JOBS_OUTPUT_BYTES,
         ),
         _tool(
             name="list_annotation_threads",
@@ -935,12 +1142,27 @@ def build_workspace_tool_catalog(
                 use="you know a thread UUID and need its quote, anchor, state, and comments",
                 avoid="you are searching for a thread",
                 result="the complete visible annotation thread",
-                next_step="reply, update, or cite it using the immutable thread UUID.",
+                next_step="use get_annotation_thread_page when the complete discussion may be large.",
             ),
             input_model=wc.AnnotationThreadInput,
             output_model=ResearchItemResponse,
             permission=read,
             handler=handlers.get_annotation_thread,
+            replacement_tool="get_annotation_thread_page",
+        ),
+        _tool(
+            name="get_annotation_thread_page",
+            title="Get bounded annotation thread",
+            description=_description(
+                use="you know a thread UUID and need its complete JSON without an unbounded response",
+                avoid="you need to search or mutate the thread",
+                result="one lossless UTF-8 page of the visible annotation-thread JSON",
+                next_step="continue with next_cursor until complete before replying or citing it.",
+            ),
+            input_model=wc.AnnotationThreadPageInput,
+            output_model=wc.JsonDocumentPageOutput,
+            permission=read,
+            handler=handlers.get_annotation_thread_page,
         ),
         _tool(
             name="create_annotation_thread",
@@ -967,7 +1189,7 @@ def build_workspace_tool_catalog(
                 next_step="read it again when coordinating concurrent collaborators.",
             ),
             input_model=wc.UpdateAnnotationThreadInput,
-            output_model=wc.ThreadActionOutput,
+            output_model=wc.ThreadSummaryActionOutput,
             permission=write,
             handler=handlers.update_annotation_thread,
             execution=command,
@@ -1042,29 +1264,62 @@ def build_workspace_tool_catalog(
             name="list_research_outputs",
             title="List research outputs",
             description=_description(
-                use="you need stored citations, audio overviews, or data tables",
-                avoid="you want to generate a new output or list annotations",
-                result="bounded existing outputs in an explicit scope",
-                next_step="open one output by immutable item UUID.",
+                use=(
+                    "you need stored annotation threads, citations, audio overviews, "
+                    "or data tables"
+                ),
+                avoid="you want to generate a new output",
+                result="legacy complete stored-output items in an explicit scope",
+                next_step="migrate to list_research_output_summaries, then open one immutable item UUID.",
             ),
             input_model=wc.ListResearchOutputsInput,
             output_model=wc.ResearchOutputList,
             permission=read,
             handler=handlers.list_research_outputs,
+            replacement_tool="list_research_output_summaries",
+        ),
+        _tool(
+            name="list_research_output_summaries",
+            title="List research-output summaries",
+            description=_description(
+                use="you need a bounded catalog of stored annotations, citations, audio overviews, or data tables",
+                avoid="you need the complete content of one known output",
+                result="cursor-paginated bounded summaries in an explicit scope",
+                next_step="open one item with its page tool using the immutable item UUID.",
+            ),
+            input_model=wc.ListResearchOutputSummariesInput,
+            output_model=ResearchOutputSummaryListResponse,
+            permission=read,
+            handler=handlers.list_research_output_summaries,
         ),
         _tool(
             name="get_research_output",
             title="Get research output",
             description=_description(
-                use="you know a stored research-output UUID and need its complete content",
-                avoid="the UUID identifies an annotation thread or you want generation",
-                result="the complete visible stored output",
-                next_step="reference its scholens:// URI in durable research notes.",
+                use="you know a stored annotation or research-output UUID and need its complete content",
+                avoid="you want to generate a new output or need a bounded response",
+                result="the complete visible stored output in the legacy shape",
+                next_step="migrate to get_research_output_page for lossless bounded reads.",
             ),
             input_model=wc.ResearchOutputInput,
             output_model=ResearchItemResponse,
             permission=read,
             handler=handlers.get_research_output,
+            replacement_tool="get_research_output_page",
+        ),
+        _tool(
+            name="get_research_output_page",
+            title="Get bounded research output",
+            description=_description(
+                use="you know a stored annotation or research-output UUID and need lossless bounded JSON",
+                avoid="you want to generate a new output",
+                result="one lossless UTF-8 page of canonical stored-output JSON",
+                next_step="continue with next_cursor, concatenate every content fragment, then parse the JSON.",
+            ),
+            input_model=wc.ResearchOutputPageInput,
+            output_model=wc.JsonDocumentPageOutput,
+            permission=read,
+            handler=handlers.get_research_output_page,
         ),
     ]
     internal_names = frozenset({"wait_for_jobs"})

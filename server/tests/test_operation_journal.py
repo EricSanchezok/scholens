@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import (
     OperationAction,
@@ -65,12 +66,11 @@ def _actor() -> Actor:
 def _journal() -> tuple[OperationJournal, _Store, _Clock]:
     store = _Store()
     clock = _Clock()
-    generated = iter((uuid4(), uuid4(), uuid4()))
     return (
         OperationJournal(
             store=store,
             clock=clock,
-            generate_uuid=lambda: next(generated),
+            generate_uuid=uuid4,
         ),
         store,
         clock,
@@ -221,6 +221,110 @@ def test_empty_batch_is_a_noop_without_time_or_store_write() -> None:
     )
 
     assert journal.append_many(actor=None, operation=operation, changes=()) == ()
+    assert store.batches == []
+    assert clock.calls == 0
+
+
+def test_empty_batched_stream_is_a_noop_without_time_or_store_write() -> None:
+    operation_id = uuid4()
+    journal, store, clock = _journal()
+    operation = _root(
+        operation_id=operation_id,
+        origin=SchedulerOrigin("document_gc", uuid4()),
+        initiated_by=OperationInitiator.SYSTEM,
+        credential=None,
+    )
+
+    assert (
+        journal.append_many_batched(
+            actor=None,
+            operation=operation,
+            changes=iter(()),
+        )
+        == 0
+    )
+    assert store.batches == []
+    assert clock.calls == 0
+
+
+def test_batched_stream_writes_more_than_two_bounded_batches_with_one_clock() -> None:
+    operation_id = uuid4()
+    journal, store, clock = _journal()
+    operation = _root(
+        operation_id=operation_id,
+        origin=SchedulerOrigin("document_gc", uuid4()),
+        initiated_by=OperationInitiator.SYSTEM,
+        credential=None,
+    )
+    changes = (
+        OperationChange(
+            action=OperationAction("job.created"),
+            resources=(ResourceRef("job", str(uuid4())),),
+        )
+        for _index in range(250)
+    )
+
+    appended = journal.append_many_batched(
+        actor=None,
+        operation=operation,
+        changes=changes,
+    )
+
+    assert appended == 250
+    assert [len(batch) for batch in store.batches] == [100, 100, 50]
+    assert clock.calls == 1
+    assert {entry.created_at for batch in store.batches for entry in batch} == {NOW}
+
+
+def test_batched_stream_does_not_write_a_partial_batch_after_generator_error() -> None:
+    operation_id = uuid4()
+    journal, store, _clock = _journal()
+    operation = _root(
+        operation_id=operation_id,
+        origin=SchedulerOrigin("document_gc", uuid4()),
+        initiated_by=OperationInitiator.SYSTEM,
+        credential=None,
+    )
+
+    def changes():
+        for _index in range(125):
+            yield OperationChange(
+                action=OperationAction("job.created"),
+                resources=(ResourceRef("job", str(uuid4())),),
+            )
+        raise RuntimeError("producer_failed")
+
+    with pytest.raises(RuntimeError, match="producer_failed"):
+        journal.append_many_batched(
+            actor=None,
+            operation=operation,
+            changes=changes(),
+        )
+
+    # The first store call remains inside the caller's transaction; no partial
+    # second batch is exposed, so the UnitOfWork can roll the whole call back.
+    assert [len(batch) for batch in store.batches] == [100]
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, 101])
+def test_batched_stream_rejects_an_invalid_batch_size(batch_size: int) -> None:
+    operation_id = uuid4()
+    journal, store, clock = _journal()
+    operation = _root(
+        operation_id=operation_id,
+        origin=SchedulerOrigin("document_gc", uuid4()),
+        initiated_by=OperationInitiator.SYSTEM,
+        credential=None,
+    )
+
+    with pytest.raises(ValueError, match="batch size"):
+        journal.append_many_batched(
+            actor=None,
+            operation=operation,
+            changes=iter(()),
+            batch_size=batch_size,
+        )
+
     assert store.batches == []
     assert clock.calls == 0
 

@@ -376,6 +376,7 @@ def _scope(markdown: str = "# Paper\n\nSource paragraph."):
         sha256=hashlib.sha256(b"canonical-pdf").hexdigest(),
     )
     db = MagicMock()
+    db.scalar.return_value = document
     db.get.side_effect = lambda model, key: (
         artifact if model is DocumentReflow and key == document_id else document
     )
@@ -477,6 +478,9 @@ def test_reflow_completion_persists_sequential_evidence_bound_blocks() -> None:
     assert artifact.status == "completed"
     assert artifact.completed_at is not None
     complete.assert_called_once()
+    source_lock = db.scalar.call_args.args[0]
+    assert "FOR UPDATE" in str(source_lock)
+    db.refresh.assert_called_once_with(job, with_for_update=True)
 
 
 def test_reflow_completion_replaces_assets_and_schedules_obsolete_objects() -> None:
@@ -543,9 +547,9 @@ def test_reflow_completion_replaces_assets_and_schedules_obsolete_objects() -> N
     assert [asset.id for asset in artifact.assets] == ["figure-1"]
     assert artifact.assets[0].object_key.endswith("/figure-1.png")
     schedule_deletion.assert_called_once()
-    assert schedule_deletion.call_args.kwargs["object_keys"] == {
+    assert schedule_deletion.call_args.kwargs["object_keys"] == [
         "documents/document-id/reflow/assets/old.png"
-    }
+    ]
 
 
 def test_reflow_completion_rejects_changed_source_content() -> None:

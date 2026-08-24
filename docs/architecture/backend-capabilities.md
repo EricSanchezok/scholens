@@ -51,6 +51,32 @@ Public resources use canonical identifiers:
   conversation, visible output, collaborator, and activity facts without
   per-project count queries. Project paper and output collections use the same
   signed, user-and-filter-bound keyset contract as Library collections.
+- MCP Project-member and paper-containing-Project collections are bounded
+  keyset pages with signed actor-and-scope-bound continuations. Their page size
+  may change between requests; the existing HTTP routes retain their complete
+  collection responses.
+- MCP Project-member rows use JSON-byte-bounded identity previews and retain
+  immutable user IDs for subsequent changes. Member update and ownership
+  transfer tools resolve the target through one authorized member lookup and
+  return compact ID/permission receipts instead of echoing mutable identity or
+  the complete Project. HTTP collaborator reads retain their full response.
+- MCP Project summary pages return at most 25 rows, and Project-paper summary
+  pages return at most 10 rows, even when a compatible client requests a larger
+  maximum. Project descriptions and large paper metadata fields are JSON-byte
+  bounded previews; list results retain their established item fields and add
+  `content_truncated` plus retrieval `guidance`. Signed continuations preserve
+  the remaining rows, while the HTTP Project and Reader contracts keep their
+  complete values.
+- MCP annotation-thread lists return at most 50 source-ordered summaries from
+  a SQL `limit + 1` keyset page. Their signed cursor binds actor, filters, and
+  ordering; summaries preserve `comment_count` but omit comment bodies, bound
+  quote text at the encoded-JSON boundary, and retain only the first PDF anchor
+  rectangle. `get_annotation_thread_page` continues complete discussions, and
+  the HTTP Reader list keeps its self-contained timelines.
+- MCP annotation mutations return a bounded thread summary and obtain comment
+  count, last activity, foreign-reply state, and resolve eligibility through
+  scalar queries. They never load the historical comment collection. The HTTP
+  update capability retains its complete response contract.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
 - `POST /api/v1/search/conversations` is the private lexical history-search
@@ -188,10 +214,22 @@ passages, annotations, comments, and existing outputs already accessible in an
 explicit Library, Project, paper, or all-accessible scope, while
 Scholight's native `search_papers` searches for external literature. This naming
 keeps stored-corpus retrieval distinct from discovery without introducing a
-second connector contract. Library scope is exact personal membership and
-excludes Project-only annotations and outputs; Project scope is exactly one
-Project; paper scope includes personal context plus at most the explicitly
-selected Project; all-accessible scope spans every currently authorized source.
+second connector contract. Each requested producer contributes one bounded
+window of at most 25 candidates per tool call. A signed composite continuation
+retains the independently consumed paper rank, annotation keyset, and output
+keyset, so callers can continue beyond the first producer window without gaps
+or duplicates. The continuation binds the actor, query, scope, kinds, paper
+filters, sort, and requested page size. Existing-output search uses scalar SQL
+catalog summaries rather than hydrating complete Research items, including for
+paper scope. Paper producers likewise select only bounded title, abstract,
+summary, timestamp, and matching-passage scalars; they never hydrate full
+Document content or metadata arrays for a composite search page.
+Annotation search selects bounded thread scalars and at most three matching
+comments per thread and 200 comments per query page; it never loads complete
+comment relationships. Library scope is exact personal membership and excludes
+Project-only annotations and outputs; Project scope is exactly one Project;
+paper scope includes personal context plus at most the explicitly selected
+Project; all-accessible scope spans every currently authorized source.
 
 Server encrypts integration credentials at rest with the deployment-owned
 `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY`. A worker can decrypt nothing itself:
@@ -347,22 +385,22 @@ an external research repository. `create_project` and `get_project` return its
 immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
 Every later call accepts immutable IDs rather than guessing from titles.
 
-The current shared profile contains 56 tools. With all four workspace
-permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 57
+The current shared profile contains 62 tools. With all four workspace
+permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 63
 total. The Conversation profile instead adds the internal-only
-`wait_for_jobs`, also for 57 total. The local stdio bridge hides the remote
-upload primitive and supplies `upload_local_paper`, so it presents 57 tools to
+`wait_for_jobs`, also for 63 total. The local stdio bridge hides the remote
+upload primitive and supplies `upload_local_paper`, so it presents 63 tools to
 a fully authorized key; narrower keys see only their authorized subset. The
 surface covers:
 
 | Capability                                                   | Remote tools | Boundary                                                 |
 | ------------------------------------------------------------ | -----------: | -------------------------------------------------------- |
-| Stored paper search, bounded content, citation, and download |            7 | No internet discovery                                    |
+| Stored paper search, bounded content, citation, and download |            8 | No internet discovery                                    |
 | Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
-| Personal Library, sharing, and tags                          |           14 | Library state remains user-owned                         |
+| Personal Library, sharing, and tags                          |           16 | Library state remains user-owned                         |
 | Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency    |
-| Annotation threads and comments                              |            8 | Personal or one-Project audience                         |
-| Existing research outputs                                    |            2 | Read-only; no generation tool                            |
+| Annotation threads and comments                              |            9 | Personal or one-Project audience                         |
+| Existing research outputs                                    |            4 | Read-only; no generation tool                            |
 
 Agent-facing catalog validation requires a human-readable title, typed output,
 behavior annotations, decision-oriented description, and a description on
@@ -387,14 +425,37 @@ preview and opaque token. The token is stored as a hash, expires after ten
 minutes, is single-use, and binds actor, credential, tool action, normalized
 business arguments, and a live-state fingerprint. Raw confirmation challenges,
 plaintext public bearer tokens, and signed upload URLs are never copied into the
-invocation ledger.
+invocation ledger. Confirmation arguments and live-state graphs cross one
+strict recursive JSON-normalization boundary, so nested typed response models,
+UUIDs, timestamps, and enums retain deterministic digest semantics while
+ambiguous containers and non-finite numbers fail closed.
 
 MCP resource links make durable objects addressable without forcing an Agent
 to repeat discovery calls. Static resources expose Library and Project
 manifests; templates expose Project, paper, annotation-thread, and existing
-research-output records. Reads are re-authorized and bounded to 200,000
-characters, with a continuation-tool instruction when a representation is too
-large.
+research-output records. Reads are re-authorized and bounded to 200,000 UTF-8
+bytes, with typed continuation calls when a representation is too large. Each
+resource kind first builds a typed public manifest and then crosses
+the same strict JSON-normalization boundary; normalization never substitutes
+for field projection or redaction. Invalid URIs, missing resources, access
+denials, and internal failures use bounded JSON-RPC errors. Raw validation
+diagnostics and application model representations remain server-side.
+Annotation-thread and research-output manifests select one authorized bounded
+catalog row by immutable ID; they do not call the complete Research-item
+getter and then discard its large fields.
+Paper manifests use an authorized fixed-width metadata projection and a
+database-bounded extracted-text prefix with scalar total-line/count facts.
+They do not hydrate complete historical metadata or construct the lossless
+64 MiB content snapshot to return a 16 KiB Resource preview.
+
+Established complete-object MCP reads remain registered during a governed
+rolling migration. `get_paper_page`, `get_library_paper_page`,
+`get_annotation_thread_page`, and `get_research_output_page` provide lossless
+canonical JSON continuation, while `list_library_paper_summaries` and
+`list_research_output_summaries` provide bounded keyset catalogs. Resources
+reference these replacements. The six legacy tools retain their historical
+input/output shapes and runtime branches; their owner, telemetry, minimum
+90-day window, and replacement are recorded in the deprecation registry.
 
 ## Single conversation agent
 
@@ -599,6 +660,53 @@ Client cancellation stops observation without cancelling the already-durable
 job. Agent request or tool-call budget exhaustion has the stable
 `agent_orchestration_limit_exceeded` code rather than a generic provider error.
 
+Model-visible Job reads use a status-only repository projection and never load
+or return durable Job `payload` or `result` JSON. Their established schema
+continues to allow `result: object | null` for existing clients, while every MCP
+projector emits null and sanitizes legacy replay rows. The product HTTP Jobs API
+continues to expose its complete result contract. `list_jobs` is a signed
+keyset-paginated status feed (20 by default, 50 maximum), while exact and batch
+waits return stable resource identifiers for continuation through the owning
+paper, Project, or research-output capability. Public projectors also sanitize
+legacy invocation replays and replace response-copying actions with compact
+receipts. The dispatcher enforces UTF-8 byte budgets after projection and
+schema validation; the default success-envelope budget is 200 KiB and Job tools
+use lower per-shape budgets. Batch source previews are truncated only at UTF-8
+boundaries and are explicitly marked `source_truncated`.
+
+Personal Library compatibility reads retain their complete historical
+contracts. New callers use `list_library_paper_summaries`, whose durable-paper
+keyset is capped at five bounded previews per page, and
+`get_library_paper_page`, which exposes lossless canonical JSON in signed,
+actor/resource/revision-bound UTF-8 ranges. Active ingestion state is retrieved
+through `list_jobs`; rotating preview URLs stay outside the canonical document
+as page-level access data. A 128 MiB revision-keyed LRU (64 MiB per entry)
+avoids re-serializing paper, Library, annotation, audio, and data-table
+representations on every page while keeping process memory bounded. Documents
+above that supported ceiling fail explicitly with
+`json_document_paging_limit_exceeded`; they never fall back to an O(N²) path.
+Standalone active ingestions and durable papers form one composite keyset:
+kind-tagged cursor positions cross the segment seam in both directions, pages
+never exceed the requested limit, and active-ingestion counts use an
+independent count plus a `limit + 1` scalar projection rather than ORM
+hydration of the full active set.
+Research pages calculate an authoritative revision across the owning item,
+typed payload, identities, and annotation comments, plus a conservative
+persisted-content serialization upper bound, before full hydration. Paper-text
+pages perform the parallel lightweight retained-size preflight. Both caches
+singleflight one key and reserve each distinct in-flight build against the
+global retained budget before its factory runs. A shared cache kernel also
+reserves explicit transient build memory and fails fast on recursive same-key
+factories, so JSON normalization/encoding and text indexing cannot bypass the
+retained-memory limit through concurrent misses. Paper regex search scans the
+immutable cached string by start/end offsets, never copies an unbounded line,
+and admits at most two concurrent scans per Server process, including cache-hit
+requests. Match previews and JSON-string prefixes are sized incrementally with
+bounded temporary memory.
+`update_library_paper` returns a bounded, explicitly marked
+preview and compact receipt so a valid write cannot be rolled back by an
+oversized historical metadata echo; the page read closes the lossless path.
+
 The inbound Streamable HTTP MCP endpoint is `/mcp`, outside the public OpenAPI
 surface. Every request requires a Scholens AccessKey in the Bearer header.
 The key's immutable permission snapshot determines the MCP `ToolAccess`; its
@@ -771,6 +879,30 @@ PDF completion persists extracted metadata, generated summary, and summary
 citations on the canonical `Document`. It rejects a successful worker result
 whose `s3_object_key` does not match the Document's canonical source key,
 failing the job with `job_result_key_mismatch` instead of persisting content.
+Jobs parser fallback and Server repair adoption share one service-neutral PDF
+text-quality contract from `scholens_job_contracts`: the Unicode replacement
+marker and warning, three-attempt ceiling, 80–125% substantive-content ratio,
+and 80% ordered bounded-evidence threshold have no per-service copies. Jobs adapts the
+decision to `ParsedDocument`; Server adapts it to canonical-content and
+annotation-reanchoring workflow state. The signed callback transport has one
+Jobs/Server-owned 64 MiB wire-body ceiling, repair candidates have a 40 MiB
+UTF-8 ceiling, encoded page offsets have a 2 MiB ceiling, and
+reanchoring rejects work above explicit thread, cumulative-quote, or scan
+budgets without replacing canonical text. Repair Job JSONB retains bounded
+audit evidence rather than candidate bodies. Rejected candidates, superseded
+parser artifacts, and every repair namespace found by final Document GC are
+deleted through the transactional storage-deletion outbox. That outbox validates
+the generated `documents/` and `research/audio/` namespaces before the owning
+transaction commits and consumes strictly increasing, caller-owned key streams
+without retaining prior batches. It rejects duplicate or out-of-order keys
+across batch boundaries and creates deterministic batches bounded to 100 keys
+and 64 KiB of compact key JSON. Batch idempotency is bound to its ordinal and
+SHA-256 key digest. Jobs repeats the shared key and batch validation before
+claim or S3 I/O, while Server verifies that each signed completion count equals
+the exact persisted batch. Project deletion confirmation computes bounded
+counts and revision digests, then re-reads created cleanup Job IDs in bounded
+origin-operation pages so every Job is journaled without materializing the
+Project's associations, storage keys, or audit entries.
 It does not synthesize a paper-scoped conversation or a fake user turn.
 Starting a conversation about a paper is an explicit user operation and the
 conversation references that existing Document-owned context.

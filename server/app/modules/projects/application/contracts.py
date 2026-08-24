@@ -146,6 +146,7 @@ class ProjectCollaboratorResponse(BaseModel):
 class ProjectCollaboratorListResponse(BaseModel):
     items: list[ProjectCollaboratorResponse]
     next_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
 
 
 class ProjectInvitationResponse(BaseModel):

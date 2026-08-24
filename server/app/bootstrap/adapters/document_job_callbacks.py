@@ -2,68 +2,81 @@
 
 import logging
 import uuid
+from collections.abc import Iterator
 from datetime import datetime, timezone
 
-from scholens_job_contracts import JobQueue
 from scholens_ai import (
     EMBEDDING_MODEL_REVISION,
     semantic_document_text,
     semantic_source_digest,
 )
+from scholens_job_contracts import JobQueue
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.bootstrap.adapters.upload_repository import (
-    upload_reservation_repository,
-)
-from app.modules.identity.infrastructure.users import user_repository
-from app.modules.integrations.zotero.infrastructure.import_repository import (
-    zotero_import_repository,
-)
-from app.modules.integrations.connections.infrastructure.models import (
-    IntegrationConnection,
-)
-from app.database.database import engine
-from app.database.models import (
-    Document,
-    DocumentSearchEmbedding,
-    DocumentProcessingStatus,
-    JobStatus,
-    JobOperation,
-    LibraryPaper,
-    ProjectPaper,
-    ZoteroImportStatus,
-)
-from app.shared.domain import AppError, FailureKind
-from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
-from app.helpers.celery_config import get_webhook_base_url
-from app.helpers.parser import parse_publication_date
-from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
 from app.bootstrap.adapters.document_gc import (
     collect_document_if_due,
     schedule_document_gc,
 )
-from app.modules.papers.infrastructure.search_repository import (
-    document_search_repository,
+from app.bootstrap.adapters.document_job_callback_support import (
+    complete_pdf_job as _complete_pdf_job,
 )
-from app.modules.papers.infrastructure.repository import document_repository
-from app.modules.papers.domain import (
-    can_complete_processing,
-    can_fail_processing,
+from app.bootstrap.adapters.document_job_callback_support import (
+    document_change as _document_change,
 )
-from app.modules.jobs.infrastructure.repository import (
-    EnqueueJob,
-    PersistedJob,
-    job_repository,
+from app.bootstrap.adapters.document_job_callback_support import (
+    safe_pdf_failure_code as _safe_pdf_failure_code,
 )
-from app.modules.papers.application.contracts.documents import DocumentUpdate
-from app.modules.papers.application.upload_intent import resolve_created_memberships
-from app.modules.jobs.application.contracts import (
-    JobCallbackIdentity,
-    JobClaimResponse,
-    PDFProcessingResult,
-    PdfProcessingWebhookData,
-    StorageDeleteCallback,
-    TokenUsageEventPayload,
+from app.bootstrap.adapters.document_repair_artifacts import UNICODE_REPAIR_KIND
+from app.bootstrap.adapters.document_text_repair_callbacks import (
+    complete_unicode_repair,
+    failed_unicode_repair_result,
+    schedule_terminal_unicode_repair_cleanup,
 )
+from app.bootstrap.adapters.research_annotations import (
+    create_ai_annotations,
+)
+from app.bootstrap.adapters.storage_cleanup import iter_created_cleanup_job_ids
+from app.bootstrap.adapters.upload_repository import (
+    upload_reservation_repository,
+)
+from app.bootstrap.adapters.zotero_annotations import (
+    apply_persisted_zotero_annotations,
+)
+from app.bootstrap.workflows.pdf_postprocess import (
+    PdfPostprocessReader,
+    PdfPostprocessSnapshot,
+)
+from app.database.database import engine
+from app.database.models import (
+    Document,
+    DocumentProcessingStatus,
+    DocumentSearchEmbedding,
+    JobOperation,
+    JobStatus,
+    LibraryPaper,
+    ProjectPaper,
+    ZoteroImportStatus,
+)
+from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
+from app.helpers.celery_config import get_webhook_base_url
+from app.helpers.parser import parse_publication_date
+from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
+from app.modules.identity.infrastructure.users import (
+    actor_from_auth_user,
+    user_repository,
+)
+from app.modules.integrations.connections.infrastructure.models import (
+    IntegrationConnection,
+)
+from app.modules.integrations.zotero.application.actions import (
+    ZOTERO_IMPORT_COMPLETED,
+)
+from app.modules.integrations.zotero.infrastructure.import_repository import (
+    zotero_import_repository,
+)
+from app.modules.jobs.application.actions import JOB_CREATED
 from app.modules.jobs.application.callbacks import (
     JobHandlerResult,
     JobPostCommitAction,
@@ -73,96 +86,49 @@ from app.modules.jobs.application.callbacks import (
     ScheduledZoteroJobs,
     SettleJobUsage,
 )
-from app.modules.jobs.application.actions import JOB_CREATED
+from app.modules.jobs.application.contracts import (
+    JobCallbackIdentity,
+    JobClaimResponse,
+    PDFProcessingResult,
+    PdfProcessingWebhookData,
+    StorageDeleteCallback,
+    TokenUsageEventPayload,
+)
+from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
+from app.modules.jobs.infrastructure.repository import (
+    EnqueueJob,
+    PersistedJob,
+    job_repository,
+)
+from app.modules.operation_journal.domain import (
+    OperationChange,
+    ResourceRef,
+)
 from app.modules.papers.application.actions import (
     DOCUMENT_DELETED,
     DOCUMENT_METADATA_HYDRATED,
     DOCUMENT_PROCESSING_COMPLETED,
     DOCUMENT_PROCESSING_FAILED,
 )
+from app.modules.papers.application.contracts.documents import DocumentUpdate
+from app.modules.papers.application.upload_intent import resolve_created_memberships
+from app.modules.papers.domain import (
+    can_complete_processing,
+    can_fail_processing,
+)
+from app.modules.papers.domain.citations import fields_from_paper
+from app.modules.papers.infrastructure.repository import document_repository
+from app.modules.papers.infrastructure.search_repository import (
+    document_search_repository,
+)
 from app.modules.research.application.items import (
     RESEARCH_ANNOTATION_COMMENT_CREATED,
     RESEARCH_ANNOTATION_THREAD_CREATED,
 )
-from app.modules.integrations.zotero.application.actions import (
-    ZOTERO_IMPORT_COMPLETED,
-)
-from app.modules.operation_journal.domain import (
-    OperationAction,
-    OperationChange,
-    ResourceRef,
-)
 from app.shared.application import Actor, OperationContext
-from app.modules.papers.domain.citations import fields_from_paper
-from app.bootstrap.workflows.pdf_postprocess import (
-    PdfPostprocessReader,
-    PdfPostprocessSnapshot,
-)
-from app.modules.identity.infrastructure.users import actor_from_auth_user
-from app.bootstrap.adapters.zotero_annotations import (
-    apply_persisted_zotero_annotations,
-)
-from app.bootstrap.adapters.research_annotations import (
-    create_ai_annotations,
-)
-from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
-from sqlalchemy import delete, select
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, sessionmaker
+from app.shared.domain import AppError, FailureKind
 
 logger = logging.getLogger(__name__)
-
-SAFE_PDF_FAILURE_CODES = frozenset(
-    {
-        "pdf_content_insufficient",
-        "pdf_processing_timeout",
-        "mineru_credential_required",
-        "mineru_credential_invalid",
-        "mineru_rate_limited",
-        "mineru_unavailable",
-        "mineru_content_insufficient",
-        "mineru_response_unsafe",
-        "job_result_key_mismatch",
-        "paper_ingestion_downloading_failed",
-        "paper_ingestion_parsing_failed",
-        "paper_ingestion_metadata_failed",
-        "paper_ingestion_indexing_failed",
-        "paper_ingestion_finalizing_failed",
-        "paper_ingestion_claim_failed",
-    }
-)
-PDF_PROGRESS_FAILURE_CODES = {
-    "downloading": "paper_ingestion_downloading_failed",
-    "parsing": "paper_ingestion_parsing_failed",
-    "extracting_metadata": "paper_ingestion_metadata_failed",
-    "indexing": "paper_ingestion_indexing_failed",
-    "finalizing": "paper_ingestion_finalizing_failed",
-}
-
-
-def _safe_pdf_failure_code(*, reason: str, progress_code: str | None) -> str:
-    if reason in SAFE_PDF_FAILURE_CODES:
-        return reason
-    if progress_code is None:
-        return "paper_ingestion_parsing_failed"
-    return PDF_PROGRESS_FAILURE_CODES.get(
-        progress_code,
-        "paper_ingestion_parsing_failed",
-    )
-
-
-def _complete_pdf_job(
-    db: Session,
-    *,
-    job_id: uuid.UUID,
-    result: PDFProcessingResult,
-) -> bool:
-    _, changed = job_repository.complete(
-        db,
-        job_id=job_id,
-        result=result.model_dump(mode="json"),
-    )
-    return changed
 
 
 def _enqueue_pdf_postprocess(
@@ -689,29 +655,32 @@ def complete_document_gc_job(
             "cancelled": result.cancelled,
         },
     )
-    changes: list[OperationChange] = []
-    if result.deleted:
-        changes.append(
-            OperationChange(
+
+    def document_gc_changes() -> Iterator[OperationChange]:
+        if result.deleted:
+            yield OperationChange(
                 action=DOCUMENT_DELETED,
                 resources=(ResourceRef("document", str(result.document_id)),),
             )
-        )
-    if result.storage_deletion is not None and result.storage_deletion.created:
-        changes.append(
-            OperationChange(
+        if result.storage_deletion is None:
+            return
+        observed_job_count = 0
+        for created_job_id in iter_created_cleanup_job_ids(
+            db,
+            origin_operation_id=operation.trace.operation_id,
+            operations=(JobOperation.STORAGE_DELETE,),
+        ):
+            observed_job_count += 1
+            yield OperationChange(
                 action=JOB_CREATED,
-                resources=(
-                    ResourceRef(
-                        "job",
-                        str(result.storage_deletion.job_id),
-                    ),
-                ),
+                resources=(ResourceRef("job", str(created_job_id)),),
             )
-        )
+        if observed_job_count != result.storage_deletion.created_job_count:
+            raise RuntimeError("document_gc_cleanup_job_audit_count_mismatch")
+
     return JobHandlerResult(
         value=JobClaimResponse(claimed=changed),
-        changes=tuple(changes),
+        changes=document_gc_changes(),
     )
 
 
@@ -725,6 +694,17 @@ def complete_storage_delete_job(
         raise AppError(
             code="job_callback_mismatch",
             message="Job callback does not match",
+            kind=FailureKind.CONFLICT,
+        )
+    object_keys = job.payload.get("object_keys")
+    if not isinstance(object_keys, list) or any(
+        not isinstance(key, str) for key in object_keys
+    ):
+        raise RuntimeError("storage_delete_job_payload_invalid")
+    if callback.deleted_count != len(object_keys):
+        raise AppError(
+            code="storage_delete_receipt_mismatch",
+            message="Storage deletion receipt does not match the scheduled batch",
             kind=FailureKind.CONFLICT,
         )
     _, changed = job_repository.complete(
@@ -751,17 +731,6 @@ def _pdf_post_commit_actions(
             job_id=job_id,
         ),
         *telemetry,
-    )
-
-
-def _document_change(
-    *,
-    action: OperationAction,
-    document_id: object,
-) -> OperationChange:
-    return OperationChange(
-        action=action,
-        resources=(ResourceRef("document", str(document_id)),),
     )
 
 
@@ -836,6 +805,14 @@ async def handle_paper_processing_webhook(
         JobStatus.FAILED.value,
         JobStatus.CANCELLED.value,
     }:
+        if durable_job.status in {
+            JobStatus.FAILED.value,
+            JobStatus.CANCELLED.value,
+        }:
+            schedule_terminal_unicode_repair_cleanup(
+                db=db,
+                durable_job=durable_job,
+            )
         logger.warning(
             "document.pdf_callback.skipped_terminal_job",
             extra={
@@ -867,24 +844,47 @@ async def handle_paper_processing_webhook(
     try:
         try:
             with db.begin_nested():
-                db.refresh(durable_job)
+                # Serialize public cancellation and callback completion on the
+                # durable job before any Document/annotation mutation.
+                db.refresh(durable_job, with_for_update=True)
                 if durable_job.status in {
                     JobStatus.COMPLETED.value,
                     JobStatus.FAILED.value,
                     JobStatus.CANCELLED.value,
                 }:
+                    if durable_job.status in {
+                        JobStatus.FAILED.value,
+                        JobStatus.CANCELLED.value,
+                    }:
+                        schedule_terminal_unicode_repair_cleanup(
+                            db=db,
+                            durable_job=durable_job,
+                        )
                     return JobHandlerResult(
                         value={"status": "webhook ignored - job is terminal"},
                         post_commit=post_commit,
                     )
 
                 result = webhook_data.result
+                callback_payload = getattr(durable_job, "payload", {})
+                is_unicode_repair = (
+                    isinstance(callback_payload, dict)
+                    and callback_payload.get("repair_kind") == UNICODE_REPAIR_KIND
+                )
                 zotero_import = zotero_import_repository.get_by_upload_job_id(
                     db,
                     upload_job_id=job_uuid,
                 )
                 if webhook_data.status != "completed" or not result.success:
                     error_message = result.error or "Unknown error"
+                    if is_unicode_repair:
+                        return failed_unicode_repair_result(
+                            db=db,
+                            durable_job=durable_job,
+                            result=result,
+                            reason=error_message,
+                            post_commit=post_commit,
+                        )
                     if zotero_import:
                         salvaged = _finalize_zotero_import(
                             db=db,
@@ -924,6 +924,14 @@ async def handle_paper_processing_webhook(
                         operation=operation,
                         reason=error_message,
                         status="webhook processed - failed",
+                        post_commit=post_commit,
+                    )
+
+                if is_unicode_repair:
+                    return complete_unicode_repair(
+                        db=db,
+                        durable_job=durable_job,
+                        result=result,
                         post_commit=post_commit,
                     )
 

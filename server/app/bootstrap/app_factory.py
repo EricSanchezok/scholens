@@ -107,6 +107,7 @@ from app.modules.projects.infrastructure.invitation_delivery import (
 )
 from app.shared.domain import AppError
 from app.shared.application import OperationContextFactory
+from app.tooling.paper_content_paging import PaperContentSnapshotCache
 from app.shared.infrastructure.email_settings import email_settings
 from app.transport.http.errors import (
     app_error_handler,
@@ -253,11 +254,13 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         operation_factory=operation_context_factory,
         openalex=user_openalex,
     )
+    paper_content_snapshot_cache = PaperContentSnapshotCache()
     tool_catalog, tool_dispatcher = create_workspace_tooling(
         executor=executor,
         ingestion=ingestion_workflow,
         citations=citation_workflow,
         settings=runtime_settings,
+        paper_content_snapshot_cache=paper_content_snapshot_cache,
     )
     conversation_runtime = create_conversation_agent_runtime(
         catalog=tool_catalog,

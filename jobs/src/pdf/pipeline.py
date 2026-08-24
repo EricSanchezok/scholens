@@ -30,6 +30,11 @@ from src.pdf.models import (
     ParserSecurityError,
     ParserTransientError,
 )
+from src.pdf.quality import (
+    apply_text_quality_policy,
+    choose_local_candidate,
+    replacement_character_count,
+)
 from src.s3_service import s3_service
 from src.schemas import (
     PDFProcessingResult,
@@ -40,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 LOCAL_ENGINE_TIMEOUT_SECONDS = 120.0
+REPAIR_REVISION_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 MinerUCredentialLoader = Callable[[], Awaitable[MinerUCredential]]
 MinerUOutcome = Callable[
     [str, Literal["verified", "invalid", "failed"], str | None], None
@@ -76,12 +82,37 @@ def _document_sha256_from_source_key(s3_object_key: str) -> str:
     return match.group(1)
 
 
-def _document_artifact_key(document_sha256: str, filename: str) -> str:
-    return f"documents/{document_sha256}/{filename}"
+def _document_artifact_key(
+    document_sha256: str,
+    filename: str,
+    *,
+    repair_revision: str | None = None,
+    job_id: str | None = None,
+) -> str:
+    if repair_revision is None:
+        return f"documents/{document_sha256}/{filename}"
+    if (
+        REPAIR_REVISION_PATTERN.fullmatch(repair_revision) is None
+        or job_id is None
+        or re.fullmatch(r"[A-Za-z0-9-]{1,64}", job_id) is None
+    ):
+        raise ParserSecurityError("PDF repair artifact scope is invalid")
+    return f"documents/{document_sha256}/repairs/{repair_revision}/{job_id}/{filename}"
 
 
-async def _upload_markdown(document: ParsedDocument, document_sha256: str) -> str:
-    markdown_key = _document_artifact_key(document_sha256, "canonical.md")
+async def _upload_markdown(
+    document: ParsedDocument,
+    document_sha256: str,
+    *,
+    repair_revision: str | None,
+    job_id: str,
+) -> str:
+    markdown_key = _document_artifact_key(
+        document_sha256,
+        "canonical.md",
+        repair_revision=repair_revision,
+        job_id=job_id,
+    )
     await asyncio.to_thread(
         s3_service.upload_bytes_to_key,
         document.markdown.encode("utf-8"),
@@ -94,13 +125,21 @@ async def _upload_markdown(document: ParsedDocument, document_sha256: str) -> st
 async def _upload_mineru_archive(
     document: ParsedDocument,
     document_sha256: str,
+    *,
+    repair_revision: str | None,
+    job_id: str,
 ) -> str:
     if document.archive_bytes is None:
         raise ParserContentError(
             "MinerU full parse has no audit archive",
             phase="archive",
         )
-    archive_key = _document_artifact_key(document_sha256, "mineru-result.zip")
+    archive_key = _document_artifact_key(
+        document_sha256,
+        "mineru-result.zip",
+        repair_revision=repair_revision,
+        job_id=job_id,
+    )
     await asyncio.to_thread(
         s3_service.upload_bytes_to_key,
         document.archive_bytes,
@@ -171,8 +210,9 @@ async def _parse_local_engines(
 ) -> ParsedDocument:
     """Try pymupdf4llm then MarkItDown, each under a bounded time budget."""
     status_callback("Parsing PDF with local pymupdf4llm")
+    primary: ParsedDocument | None = None
     try:
-        return await asyncio.wait_for(
+        primary = await asyncio.wait_for(
             asyncio.to_thread(
                 extract_markdown_pymupdf4llm,
                 pdf_path,
@@ -185,9 +225,12 @@ async def _parse_local_engines(
     except TimeoutError:
         logger.warning("job.pdf_parser.pymupdf4llm.timeout")
 
+    if primary is not None and replacement_character_count(primary.markdown) == 0:
+        return primary
+
     status_callback("Parsing PDF with local MarkItDown")
     try:
-        return await asyncio.wait_for(
+        fallback = await asyncio.wait_for(
             asyncio.to_thread(
                 extract_markdown_markitdown,
                 pdf_path,
@@ -196,11 +239,16 @@ async def _parse_local_engines(
             ),
             timeout=LOCAL_ENGINE_TIMEOUT_SECONDS,
         )
+        return (
+            fallback if primary is None else choose_local_candidate(primary, fallback)
+        )
     except ParserContentError:
         pass
     except TimeoutError:
         logger.warning("job.pdf_parser.markitdown.timeout")
 
+    if primary is not None:
+        return primary
     raise ParserContentError("Local PDF extraction failed")
 
 
@@ -210,6 +258,7 @@ async def process_pdf_file(
     job_id: str,
     status_callback: Callable[[str], None],
     skip_metadata_extraction: bool = False,
+    repair_revision: str | None = None,
     mineru_credential_loader: MinerUCredentialLoader | None = None,
     mineru_outcome_callback: MinerUOutcome | None = None,
 ) -> PDFProcessingResult:
@@ -266,11 +315,37 @@ async def process_pdf_file(
                     document = build_text_last_resort(analysis)
                     status_callback("Using final text-only fallback")
 
-        preview_object_key = await _upload_preview(analysis, document_sha256)
-        markdown_key = await _upload_markdown(document, document_sha256)
+        document = apply_text_quality_policy(document)
+        replacement_count = replacement_character_count(document.markdown)
+        if replacement_count:
+            logger.warning(
+                "job.pdf_parser.unicode_replacement_detected",
+                extra={
+                    "job_id": job_id,
+                    "parser_backend": document.backend.value,
+                    "replacement_count": replacement_count,
+                },
+            )
+
+        # A repair callback never adopts preview state. Avoid creating an
+        # unreferenced artifact that can outlive the bounded repair attempt.
+        preview_object_key = None
+        if repair_revision is None:
+            preview_object_key = await _upload_preview(analysis, document_sha256)
+        markdown_key = await _upload_markdown(
+            document,
+            document_sha256,
+            repair_revision=repair_revision,
+            job_id=job_id,
+        )
         archive_key: str | None = None
         if document.archive_bytes is not None:
-            archive_key = await _upload_mineru_archive(document, document_sha256)
+            archive_key = await _upload_mineru_archive(
+                document,
+                document_sha256,
+                repair_revision=repair_revision,
+                job_id=job_id,
+            )
 
         metadata: PaperMetadataExtraction | None = None
         if not skip_metadata_extraction:

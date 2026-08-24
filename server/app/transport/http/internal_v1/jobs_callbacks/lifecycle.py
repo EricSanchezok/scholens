@@ -8,8 +8,11 @@ from app.bootstrap.execution import get_application_executor
 from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.modules.jobs.application.contracts import JobClaimResponse, JobProgressRequest
 from app.shared.application import ApplicationExecutor
-from app.transport.http.internal_v1.authentication import verify_jobs_webhook
-from fastapi import APIRouter, Depends
+from app.transport.http.internal_v1.authentication import (
+    parse_callback_model,
+    verify_jobs_webhook,
+)
+from fastapi import APIRouter, Depends, Request
 
 lifecycle_webhook_router = APIRouter()
 
@@ -52,12 +55,13 @@ def heartbeat_durable_job(
 )
 def progress_durable_job(
     job_id: uuid.UUID,
-    payload: JobProgressRequest,
+    request: Request,
     _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
 ) -> JobClaimResponse:
+    payload = parse_callback_model(request, JobProgressRequest)
     return executor.command(
         lambda capabilities: capabilities.job_callbacks.progress(
             job_id=job_id,

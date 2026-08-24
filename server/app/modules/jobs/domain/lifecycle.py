@@ -49,6 +49,10 @@ def can_fail_job(status: JobStatus) -> bool:
     return status in {JobStatus.PENDING, JobStatus.RUNNING}
 
 
+def can_cancel_job(status: JobStatus) -> bool:
+    return status in {JobStatus.PENDING, JobStatus.RUNNING}
+
+
 def is_terminal_job(status: JobStatus) -> bool:
     return status in {
         JobStatus.COMPLETED,

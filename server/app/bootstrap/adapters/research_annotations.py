@@ -6,18 +6,22 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from app.database.models import ResearchAudienceType, RoleType
-from app.helpers.parser import get_start_page_from_offset
-from app.llm.utils import find_offsets
-from app.modules.papers.infrastructure.repository import document_repository
+from sqlalchemy.orm import Session
+
 from app.bootstrap.adapters.research_repository import (
     AnnotationThreadCreate,
     research_repository,
 )
+from app.database.models import ResearchAudienceType, RoleType
+from app.helpers.parser import get_start_page_from_offset
+from app.llm.utils import find_offsets
 from app.modules.papers.application.contracts.extraction import PaperMetadataExtraction
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_PARSED_CONTENT_COLUMNS,
+)
+from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.research.application.positions import ParsedTextPosition
 from app.shared.application import Actor
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,7 @@ def require_parsed_content(
         db,
         document_id=document_id,
         user=user,
+        document_columns=DOCUMENT_PARSED_CONTENT_COLUMNS,
     )
     if document is None:
         raise ValueError("document_not_found")

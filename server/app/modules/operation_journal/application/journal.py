@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import datetime
+from itertools import islice
 from uuid import UUID, uuid4
 
 from app.modules.operation_journal.application.ports import OperationJournalStore
@@ -84,7 +86,26 @@ class OperationJournal:
             return ()
         projection = _project_origin(operation)
         now = self._clock.now()
-        entries = tuple(
+        entries = self._entries(
+            actor=actor,
+            operation=operation,
+            changes=normalized_changes,
+            projection=projection,
+            now=now,
+        )
+        self._store.append(entries)
+        return entries
+
+    def _entries(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        changes: tuple[OperationChange, ...],
+        projection: _OriginProjection,
+        now: datetime,
+    ) -> tuple[OperationJournalEntry, ...]:
+        return tuple(
             OperationJournalEntry(
                 entry_id=self._generate_uuid(),
                 operation_id=operation.trace.operation_id,
@@ -114,10 +135,40 @@ class OperationJournal:
                 created_at=now,
                 updated_at=now,
             )
-            for change in normalized_changes
+            for change in changes
         )
-        self._store.append(entries)
-        return entries
+
+    def append_many_batched(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        changes: Iterable[OperationChange],
+        batch_size: int = 100,
+    ) -> int:
+        """Append an arbitrarily large change stream with bounded memory."""
+
+        if batch_size <= 0 or batch_size > 100:
+            raise ValueError("operation journal batch size must be between 1 and 100")
+        change_iterator = iter(changes)
+        batch = tuple(islice(change_iterator, batch_size))
+        if not batch:
+            return 0
+        projection = _project_origin(operation)
+        now = self._clock.now()
+        appended_count = 0
+        while batch:
+            entries = self._entries(
+                actor=actor,
+                operation=operation,
+                changes=batch,
+                projection=projection,
+                now=now,
+            )
+            self._store.append(entries)
+            appended_count += len(batch)
+            batch = tuple(islice(change_iterator, batch_size))
+        return appended_count
 
 
 def _project_origin(operation: OperationContext) -> _OriginProjection:

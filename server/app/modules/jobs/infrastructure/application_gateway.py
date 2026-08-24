@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+from datetime import datetime
 from uuid import UUID
 
 from app.helpers.celery_config import get_webhook_base_url
@@ -31,6 +32,28 @@ def job_response(job: object) -> JobResponse:
     if not isinstance(job, DurableJob):
         raise TypeError("expected DurableJob")
     return JobResponse.model_validate(job, from_attributes=True)
+
+
+def job_status_response(job: object) -> JobResponse:
+    """Project a DurableJob without touching its deferred payload or result JSON."""
+
+    from app.modules.jobs.infrastructure.models import DurableJob
+
+    if not isinstance(job, DurableJob):
+        raise TypeError("expected DurableJob")
+    return JobResponse(
+        id=job.id,
+        operation=job.operation,
+        document_id=job.document_id,
+        project_id=job.project_id,
+        status=job.status,
+        progress_code=job.progress_code,
+        error_code=job.error_code,
+        result=None,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
 
 
 class SqlAlchemyJobsGateway:
@@ -209,6 +232,33 @@ class SqlAlchemyJobsGateway:
             )
         ]
 
+    def list_statuses(
+        self,
+        *,
+        requested_by_id: int,
+        project_id: UUID | None,
+        document_id: UUID | None,
+        operation: JobOperation | None,
+        statuses: tuple[JobStatus, ...] | None,
+        before_created_at: datetime | None,
+        before_id: UUID | None,
+        limit: int,
+    ) -> builtins.list[JobResponse]:
+        return [
+            job_status_response(job)
+            for job in job_repository.list_statuses_for_requester(
+                self._db,
+                requested_by_id=requested_by_id,
+                project_id=project_id,
+                document_id=document_id,
+                operation=operation,
+                statuses=statuses,
+                before_created_at=before_created_at,
+                before_id=before_id,
+                limit=limit,
+            )
+        ]
+
     def get(self, *, requested_by_id: int, job_id: UUID) -> JobResponse:
         return job_response(
             job_repository.require_for_requester(
@@ -227,6 +277,21 @@ class SqlAlchemyJobsGateway:
         return [
             job_response(job)
             for job in job_repository.require_many_for_requester(
+                self._db,
+                job_ids=job_ids,
+                requested_by_id=requested_by_id,
+            )
+        ]
+
+    def get_many_statuses(
+        self,
+        *,
+        requested_by_id: int,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]:
+        return [
+            job_status_response(job)
+            for job in job_repository.require_many_statuses_for_requester(
                 self._db,
                 job_ids=job_ids,
                 requested_by_id=requested_by_id,

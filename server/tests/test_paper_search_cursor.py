@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 from typing import Callable
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
 from app.bootstrap.adapters.paper_search import (
     PostgresPaperSearch,
+    _SearchRanking,
     _compact_query,
     _visibility_condition,
 )
@@ -13,6 +14,8 @@ from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     PaperCollection,
     PersonalLibraryPaperCollection,
+    PaperSearchCandidate,
+    PaperSearchCandidatePage,
     PaperSearchFilters,
     PaperSearchQuery,
     PaperSearchRequest,
@@ -77,6 +80,28 @@ class _SearchBackend:
     ) -> PaperSearchStats:
         raise AssertionError("stats is not used by this test")
 
+    def search_candidates(
+        self,
+        *,
+        actor: Actor,
+        request: PaperSearchQuery,
+    ) -> PaperSearchCandidatePage:
+        self.requests.append(request)
+        paper = _paper()
+        return PaperSearchCandidatePage(
+            items=[
+                PaperSearchCandidate(
+                    document_id=paper.document_id,
+                    title=paper.title,
+                    abstract=paper.abstract,
+                    created_at=paper.created_at,
+                    last_accessed_at=paper.last_accessed_at,
+                    snippets=paper.snippets,
+                )
+            ],
+            total=2,
+        )
+
 
 class _SearchAccess:
     def require_collection_access(
@@ -114,6 +139,125 @@ def test_search_cursor_round_trip_uses_backend_neutral_offset() -> None:
     )
     assert backend.requests[1].offset == 1
     assert second_page.next_cursor is None
+
+
+def test_composite_candidate_page_uses_one_bounded_rank_window() -> None:
+    backend = _SearchBackend()
+    access = _SearchAccess()
+    search = SearchPapers(
+        backend,
+        SearchCursorCodec("x" * 32),
+        access,
+    )
+
+    response = search.candidate_page(
+        actor=_actor(),
+        request=PaperSearchRequest(query="  graph retrieval  ", limit=25),
+        offset=50,
+    )
+
+    assert len(response.items) == 1
+    assert response.total == 2
+    assert backend.requests == [
+        PaperSearchQuery(
+            query="graph retrieval",
+            collection=LibraryPaperCollection(),
+            filters=PaperSearchFilters(),
+            sort=PaperSearchSort.RELEVANCE,
+            limit=25,
+            offset=50,
+        )
+    ]
+
+
+def test_composite_candidate_projection_never_hydrates_full_document_fields() -> None:
+    now = datetime(2026, 8, 24, tzinfo=UTC)
+    document_id = uuid4()
+    hostile = '\x00"\\😀' * 10_000
+    projection = Mock()
+    projection.mappings.return_value.all.return_value = [
+        {
+            "document_id": document_id,
+            "title": hostile,
+            "abstract": hostile,
+            "summary": hostile,
+            "created_at": now,
+            "last_accessed_at": now,
+            "raw_content": object(),
+            "authors": object(),
+            "keywords": object(),
+        }
+    ]
+    passage = Mock()
+    passage.all.return_value = [(document_id, 1, 2, hostile)]
+    db = Mock(spec=Session)
+    db.execute.side_effect = [projection, passage]
+    search = PostgresPaperSearch(db, semantic=False)
+    ranking = _SearchRanking(
+        conditions=[],
+        text_query="bounded-query",
+        retrieval_modes={},
+        semantic_ids=[],
+        ranked_ids=[document_id],
+    )
+
+    with (
+        patch.object(search, "_ranking", return_value=ranking),
+        patch(
+            "app.bootstrap.adapters.paper_search._fallback_snippet",
+            side_effect=AssertionError("full Document fallback must not run"),
+        ),
+        patch(
+            "app.bootstrap.adapters.paper_search._matching_fields",
+            side_effect=AssertionError("full Document matching must not run"),
+        ),
+    ):
+        page = search.search_candidates(
+            actor=_actor(),
+            request=PaperSearchQuery(
+                query="graph retrieval",
+                collection=LibraryPaperCollection(),
+                filters=PaperSearchFilters(),
+                sort=PaperSearchSort.RELEVANCE,
+                limit=25,
+                offset=0,
+            ),
+        )
+
+    assert len(page.items) == 1
+    item = page.items[0]
+    assert len((item.title or "").encode("utf-8")) <= 384
+    assert len((item.abstract or "").encode("utf-8")) <= 900
+    assert len(item.snippets[0].text.encode("utf-8")) <= 900
+    assert len(page.model_dump_json().encode("utf-8")) < 8_192
+
+    projection_sql = " ".join(
+        str(
+            db.execute.call_args_list[0]
+            .args[0]
+            .compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).split()
+    ).lower()
+    passage_sql = " ".join(
+        str(
+            db.execute.call_args_list[1]
+            .args[0]
+            .compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).split()
+    ).lower()
+    assert "documents.raw_content" not in projection_sql
+    assert "documents.authors" not in projection_sql
+    assert "documents.keywords" not in projection_sql
+    assert "left(scholens.documents.title" in projection_sql
+    assert "left(scholens.documents.abstract" in projection_sql
+    assert "left(scholens.documents.summary" in projection_sql
+    assert "left(scholens.document_passages.content" in passage_sql
 
 
 @pytest.mark.parametrize(

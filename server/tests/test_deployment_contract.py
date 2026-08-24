@@ -2526,6 +2526,8 @@ def test_ci_has_one_stable_aggregate_required_check() -> None:
     assert "github.com/oasdiff/oasdiff@v1.29.1" in workflow
     assert workflow.count("oasdiff breaking") == 2
     assert "mcp_contract_compatibility.py check-metadata" in workflow
+    assert "mcp_contract_compatibility.py check-schema-corrections" in workflow
+    assert "server/contracts/schema-corrections.json" in workflow
     assert "deprecation_registry.py" in workflow
     for dependency in (
         "server",

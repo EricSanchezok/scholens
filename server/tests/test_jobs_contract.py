@@ -43,6 +43,21 @@ def test_pdf_jobs_contract_accepts_complete_degraded_result() -> None:
     assert payload.result.parser_warning_code == "text_only_fallback"
 
 
+def test_pdf_jobs_contract_defensively_downgrades_unicode_replacement() -> None:
+    result = _successful_result()
+    result.update(
+        raw_content="source evidence \ufffd remains visible",
+        parser_quality="full",
+        parser_warning_code=None,
+    )
+
+    parsed = PDFProcessingResult.model_validate(result)
+
+    assert "\ufffd" in (parsed.raw_content or "")
+    assert parsed.parser_quality == "text_only"
+    assert parsed.parser_warning_code == "unicode_replacement_detected"
+
+
 def test_pdf_jobs_contract_rejects_half_success_and_extra_fields() -> None:
     incomplete = _successful_result()
     incomplete.pop("parser_version")
@@ -53,6 +68,39 @@ def test_pdf_jobs_contract_rejects_half_success_and_extra_fields() -> None:
     extra["provider_internal_error"] = "do not leak"
     with pytest.raises(ValidationError, match="Extra inputs"):
         PDFProcessingResult.model_validate(extra)
+
+
+def test_pdf_jobs_contract_rejects_parser_fields_above_shared_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholens_job_contracts import callbacks
+
+    monkeypatch.setattr(callbacks, "MAX_PDF_CALLBACK_RAW_CONTENT_BYTES", 8)
+    oversized = _successful_result()
+    oversized["raw_content"] = "论文论"
+
+    with pytest.raises(ValidationError, match="raw_content_too_large"):
+        PDFProcessingResult.model_validate(oversized)
+
+
+@pytest.mark.parametrize(
+    "page_offset_map",
+    [
+        {0: [0, 1]},
+        {1: [0]},
+        {1: [False, 1]},
+        {1: [0, 2], 2: [1, 3]},
+    ],
+)
+def test_pdf_jobs_contract_rejects_invalid_page_offsets(
+    page_offset_map: dict[int, list[int]],
+) -> None:
+    invalid = _successful_result()
+    invalid["raw_content"] = "abc"
+    invalid["page_offset_map"] = page_offset_map
+
+    with pytest.raises(ValidationError, match="page_offset_map_invalid"):
+        PDFProcessingResult.model_validate(invalid)
 
 
 def test_pdf_jobs_contract_requires_stable_failure_code() -> None:

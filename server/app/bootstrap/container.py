@@ -103,8 +103,12 @@ from app.bootstrap.adapters.project_gateway import (
     SqlAlchemyProjectGateway,
 )
 from app.modules.research.application.items import ResearchItems
+from app.modules.research.application.catalog import ResearchOutputCatalog
 from app.bootstrap.adapters.research_items import (
     SqlAlchemyResearchItemGateway,
+)
+from app.bootstrap.adapters.research_output_catalog import (
+    SqlAlchemyResearchOutputCatalog,
 )
 from app.modules.jobs.application.jobs import Jobs
 from app.modules.jobs.application.callbacks import JobCallbacks
@@ -350,9 +354,20 @@ def build_entitlement_admin(
     )
 
 
-def build_library_tags(*, db: Session, journal: OperationJournal) -> LibraryTags:
+def build_library_tags(
+    *,
+    db: Session,
+    cursor_secret: str,
+    journal: OperationJournal,
+) -> LibraryTags:
     return LibraryTags(
         SqlAlchemyLibraryTagGateway(db),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="library-tags-v1",
+            error_code="library_tag_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 
@@ -490,6 +505,22 @@ def build_research_items(*, db: Session, journal: OperationJournal) -> ResearchI
     return ResearchItems(
         SqlAlchemyResearchItemGateway(db),
         journal=journal,
+    )
+
+
+def build_research_output_catalog(
+    *,
+    db: Session,
+    cursor_secret: str,
+) -> ResearchOutputCatalog:
+    return ResearchOutputCatalog(
+        SqlAlchemyResearchOutputCatalog(db),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="research-output-catalog-v1",
+            error_code="research_output_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
     )
 
 

@@ -27,7 +27,15 @@ def test_public_mcp_snapshot_is_current_and_complete() -> None:
 
     assert committed == public_mcp_contract()
     assert committed["endpoint"] == "/mcp"
-    assert len(committed["tools"]) == 57
+    assert len(committed["tools"]) == 63
+    assert len(committed["resources"]) == 2
+    assert len(committed["resource_templates"]) == 4
+    assert committed["resource_limits"] == {"max_utf8_bytes": 200_000}
+    assert all(
+        "anyOf" in resource["output_schema"]
+        for collection in ("resources", "resource_templates")
+        for resource in committed[collection].values()
+    )
     assert all(
         tool["output_schema"].get("type") == "object"
         for tool in committed["tools"].values()
@@ -87,6 +95,253 @@ def test_mcp_metadata_checker_rejects_permission_and_safety_regressions() -> Non
     assert checker.metadata_breaks(revision, base) == [
         "MCP tool read_paper changed confirmation_policy"
     ]
+
+    budgeted = json.loads(json.dumps(base))
+    budgeted["tools"]["read_paper"]["max_success_envelope_utf8_bytes"] = 64_000
+    reduced = json.loads(json.dumps(budgeted))
+    reduced["tools"]["read_paper"]["max_success_envelope_utf8_bytes"] = 32_000
+    assert checker.metadata_breaks(budgeted, reduced) == [
+        "MCP tool read_paper decreased output byte budget"
+    ]
+
+    scoped = json.loads(json.dumps(base))
+    scoped["tool_result_limits"] = {
+        "unit": "utf8_bytes",
+        "scope": "call_tool_result",
+        "includes": [
+            "content.text",
+            "structuredContent",
+            "content.resource_link",
+        ],
+        "excludes": ["jsonrpc", "id"],
+    }
+    changed_scope = json.loads(json.dumps(scoped))
+    changed_scope["tool_result_limits"]["scope"] = "structuredContent"
+    assert checker.metadata_breaks(scoped, changed_scope) == [
+        "MCP tool result budget scope changed"
+    ]
+
+
+def test_mcp_metadata_checker_guards_resources_and_byte_budget() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    base = {
+        "contract_version": 1,
+        "endpoint": "/mcp",
+        "protocol": "mcp",
+        "tools": {},
+        "resource_limits": {"max_utf8_bytes": 200_000},
+        "resources": {
+            "scholens://library": {
+                "name": "library",
+                "mime_type": "application/json",
+                "output_schema": {"type": "object"},
+            }
+        },
+        "resource_templates": {
+            "scholens://papers/{document_id}": {
+                "name": "paper",
+                "mime_type": "application/json",
+                "output_schema": {"type": "object"},
+            }
+        },
+    }
+    revision = json.loads(json.dumps(base))
+    revision["resource_limits"]["max_utf8_bytes"] = 100_000
+    del revision["resources"]["scholens://library"]
+    revision["resource_templates"]["scholens://papers/{document_id}"]["mime_type"] = (
+        "text/plain"
+    )
+
+    assert checker.metadata_breaks(base, revision) == [
+        "MCP resource max_utf8_bytes decreased",
+        "MCP resource removed: scholens://library",
+        ("MCP resource template scholens://papers/{document_id} changed mime_type"),
+    ]
+
+    missing_budget = json.loads(json.dumps(base))
+    del missing_budget["resource_limits"]
+    assert checker.metadata_breaks(base, missing_budget) == [
+        "MCP resource max_utf8_bytes decreased"
+    ]
+
+
+def _empty_public_contracts() -> tuple[dict[str, object], dict[str, object]]:
+    return (
+        {"contract_version": 1, "endpoint": "/mcp", "protocol": "mcp", "tools": {}},
+        {"openapi": "3.1.0", "paths": {}, "components": {"schemas": {}}},
+    )
+
+
+def _schema_correction_entry(
+    checker: ModuleType,
+    *,
+    identifier: str,
+    target: str,
+    pointer: str,
+    value: object,
+) -> dict[str, object]:
+    return {
+        "id": identifier,
+        "boundary": "mcp",
+        "target": target,
+        "schema_pointer": pointer,
+        "change_kind": "one_of_added",
+        "base_value_sha256": None,
+        "revision_value_sha256": checker._canonical_sha256(value),
+        "owner": "scholens-platform",
+        "recorded_on": "2026-08-24",
+        "reason": "The runtime validator already enforced this exact constraint.",
+        "runtime_evidence": (
+            "server/tests/test_workspace_research_outputs.py::"
+            "test_update_annotation_thread_runtime_matches_exactly_one_schema"
+        ),
+    }
+
+
+def test_schema_corrections_are_exact_and_transition_bound() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    base_mcp, http = _empty_public_contracts()
+    base_mcp["tools"] = {
+        "update_annotation_thread": {"input_schema": {"type": "object"}}
+    }
+    revision_mcp = json.loads(json.dumps(base_mcp))
+    one_of = [{"required": ["color"]}, {"required": ["status"]}]
+    revision_mcp["tools"]["update_annotation_thread"]["input_schema"]["oneOf"] = one_of
+    empty_registry = {"contract_version": 1, "entries": []}
+    entry = _schema_correction_entry(
+        checker,
+        identifier="mcp-update-annotation-thread-exactly-one",
+        target="update_annotation_thread",
+        pointer="#/tools/update_annotation_thread/input_schema/oneOf",
+        value=one_of,
+    )
+    registry = {"contract_version": 1, "entries": [entry]}
+
+    assert (
+        checker.schema_correction_failures(
+            base_registry=empty_registry,
+            registry=registry,
+            base_mcp=base_mcp,
+            revision_mcp=revision_mcp,
+            base_http=http,
+            revision_http=http,
+        )
+        == []
+    )
+
+    mismatched = json.loads(json.dumps(registry))
+    mismatched["entries"][0]["revision_value_sha256"] = "0" * 64
+    assert checker.schema_correction_failures(
+        base_registry=empty_registry,
+        registry=mismatched,
+        base_mcp=base_mcp,
+        revision_mcp=revision_mcp,
+        base_http=http,
+        revision_http=http,
+    ) == [
+        "schema correction revision digest mismatch: mcp "
+        "update_annotation_thread "
+        "#/tools/update_annotation_thread/input_schema/oneOf (one_of_added)"
+    ]
+
+    assert checker.schema_correction_failures(
+        base_registry=empty_registry,
+        registry=registry,
+        base_mcp=revision_mcp,
+        revision_mcp=revision_mcp,
+        base_http=http,
+        revision_http=http,
+    ) == [
+        "new schema correction does not match the current transition: "
+        "mcp-update-annotation-thread-exactly-one"
+    ]
+
+
+def test_schema_correction_checker_rejects_unregistered_unique_items() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    base_mcp, http = _empty_public_contracts()
+    base_mcp["tools"] = {
+        "remove_library_papers": {
+            "input_schema": {
+                "type": "object",
+                "properties": {"document_ids": {"type": "array"}},
+            }
+        }
+    }
+    revision_mcp = json.loads(json.dumps(base_mcp))
+    revision_mcp["tools"]["remove_library_papers"]["input_schema"]["properties"][
+        "document_ids"
+    ]["uniqueItems"] = True
+    registry = {"contract_version": 1, "entries": []}
+
+    assert checker.schema_correction_failures(
+        base_registry=registry,
+        registry=registry,
+        base_mcp=base_mcp,
+        revision_mcp=revision_mcp,
+        base_http=http,
+        revision_http=http,
+    ) == [
+        "unregistered restrictive request schema change: mcp "
+        "remove_library_papers "
+        "#/tools/remove_library_papers/input_schema/properties/document_ids/"
+        "uniqueItems (unique_items_enabled)"
+    ]
+
+
+def test_repository_schema_correction_registry_is_machine_readable() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    registry = json.loads(
+        (ROOT / "server/contracts/schema-corrections.json").read_text(encoding="utf-8")
+    )
+
+    assert checker.correction_registry_failures(registry) == []
+
+
+def test_schema_correction_evidence_requires_an_exact_pytest_node() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    entry = _schema_correction_entry(
+        checker,
+        identifier="mcp-update-annotation-thread-exactly-one",
+        target="update_annotation_thread",
+        pointer="#/tools/update_annotation_thread/input_schema/oneOf",
+        value=[{"required": ["color"]}, {"required": ["status"]}],
+    )
+    entry["runtime_evidence"] = (
+        "server/tests/test_workspace_research_outputs.py::"
+        "test_update_annotation_thread_runtime_matches_exactly_one"
+    )
+
+    assert checker.correction_registry_failures(
+        {"contract_version": 1, "entries": [entry]}
+    ) == ["schema correction entry 0 has unverifiable runtime_evidence"]
+
+
+def test_mcp_openapi_renderer_includes_resource_contracts() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    contract = {
+        "contract_version": 1,
+        "tools": {},
+        "resources": {
+            "scholens://library": {
+                "name": "library",
+                "mime_type": "application/json",
+                "output_schema": {
+                    "$defs": {"Paper": {"type": "object"}},
+                    "type": "object",
+                    "properties": {"paper": {"$ref": "#/$defs/Paper"}},
+                },
+            }
+        },
+    }
+
+    rendered = checker.render_openapi(contract)
+
+    response = rendered["paths"]["/resources/static/library"]["get"]["responses"]["200"]
+    schema = response["content"]["application/json"]["schema"]
+    assert schema["properties"]["paper"] == {
+        "$ref": "#/components/schemas/resource_static_library_output_Paper"
+    }
 
 
 def test_mcp_openapi_renderer_rewrites_local_schema_definitions() -> None:
@@ -226,6 +481,61 @@ def test_deprecation_registry_is_machine_readable() -> None:
     )
 
     assert checker.validation_failures(registry) == []
+
+
+def test_bounded_mcp_replacements_preserve_owned_legacy_read_contracts() -> None:
+    contract = public_mcp_contract()
+    registry = json.loads(
+        (ROOT / "server/contracts/deprecations.json").read_text(encoding="utf-8")
+    )
+    expected_replacements = {
+        "get_paper": "get_paper_page",
+        "get_library_paper": "get_library_paper_page",
+        "get_annotation_thread": "get_annotation_thread_page",
+        "get_research_output": "get_research_output_page",
+        "list_library_papers": "list_library_paper_summaries",
+        "list_research_outputs": "list_research_output_summaries",
+    }
+    registered = {
+        entry["target"]: entry["replacement"]
+        for entry in registry["entries"]
+        if entry["boundary"] == "mcp" and entry["state"] == "deprecated"
+    }
+
+    assert expected_replacements.items() <= registered.items()
+    assert {
+        name: contract["tools"][name]["replacement_tool"]
+        for name in expected_replacements
+    } == expected_replacements
+    assert expected_replacements.keys() | set(expected_replacements.values()) <= set(
+        contract["tools"]
+    )
+    assert set(contract["tools"]["get_paper"]["input_schema"]["properties"]) == {
+        "document_id"
+    }
+    assert set(
+        contract["tools"]["get_annotation_thread"]["input_schema"]["properties"]
+    ) == {"thread_id"}
+    assert set(
+        contract["tools"]["get_research_output"]["input_schema"]["properties"]
+    ) == {"item_id"}
+    assert {
+        "DocumentResponse",
+        "ResearchItemResponse",
+        "ResearchOutputList",
+    } <= {
+        definition
+        for name in expected_replacements
+        for definition in contract["tools"][name]["output_schema"].get("$defs", {})
+    }
+    legacy_list = contract["tools"]["list_research_outputs"]["input_schema"]
+    assert legacy_list["properties"]["kinds"]["maxItems"] == 4
+    assert legacy_list["$defs"]["ResearchItemKind"]["enum"] == [
+        "annotation_thread",
+        "citation",
+        "audio_overview",
+        "data_table",
+    ]
 
 
 def test_deprecation_registry_rejects_unowned_or_short_lived_compatibility() -> None:

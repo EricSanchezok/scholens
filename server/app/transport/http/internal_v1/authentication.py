@@ -6,12 +6,106 @@ import hashlib
 import hmac
 import os
 import time
+from typing import TypeVar
+
+from scholens_job_contracts import MAX_JOBS_CALLBACK_BODY_BYTES
+
 from app.bootstrap.container import build_job_callback_protection
 from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.shared.domain import AppError, FailureKind
-from app.transport.http.observability import ensure_request_id
 from app.transport.http.internal_v1.references import job_delivery_reference
+from app.transport.http.observability import ensure_request_id
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
+
+
+_CallbackModel = TypeVar("_CallbackModel", bound=BaseModel)
+_CALLBACK_OBJECT = TypeAdapter(dict[str, object])
+
+
+def _declared_body_size(request: Request) -> int | None:
+    value = request.headers.get("content-length")
+    if value is None:
+        return None
+    try:
+        size = int(value)
+    except ValueError as exc:
+        raise AppError(
+            code="jobs_callback_size_invalid",
+            message="Jobs callback Content-Length is invalid",
+            kind=FailureKind.INVALID_ARGUMENT,
+        ) from exc
+    if size < 0:
+        raise AppError(
+            code="jobs_callback_size_invalid",
+            message="Jobs callback Content-Length is invalid",
+            kind=FailureKind.INVALID_ARGUMENT,
+        )
+    return size
+
+
+def _require_bounded_callback_size(size: int) -> None:
+    if size > MAX_JOBS_CALLBACK_BODY_BYTES:
+        raise AppError(
+            code="jobs_callback_too_large",
+            message="Jobs callback exceeds the accepted body size",
+            kind=FailureKind.PAYLOAD_TOO_LARGE,
+            details={"max_bytes": MAX_JOBS_CALLBACK_BODY_BYTES},
+        )
+
+
+async def _read_bounded_callback_body(request: Request) -> bytes:
+    chunks = bytearray()
+    async for chunk in request.stream():
+        _require_bounded_callback_size(len(chunks) + len(chunk))
+        chunks.extend(chunk)
+    body = bytes(chunks)
+    # Preserve the bounded bytes for the route's post-authentication parser.
+    # No callback route declares a FastAPI body field: doing so would make
+    # FastAPI consume the unbounded request before this dependency executes.
+    request._body = body
+    request.state.verified_jobs_callback_body = body
+    return body
+
+
+def _validation_error(error: ValidationError, *, body: bytes) -> RequestValidationError:
+    errors = []
+    for item in error.errors():
+        normalized = dict(item)
+        normalized["loc"] = ("body", *item.get("loc", ()))
+        errors.append(normalized)
+    return RequestValidationError(errors, body=body)
+
+
+def _verified_callback_body(request: Request) -> bytes:
+    body = getattr(request.state, "verified_jobs_callback_body", None)
+    if not isinstance(body, bytes):
+        raise RuntimeError("Jobs callback body was not verified")
+    return body
+
+
+def parse_callback_model(
+    request: Request,
+    model: type[_CallbackModel],
+) -> _CallbackModel:
+    """Parse only the bounded bytes authenticated by ``verify_jobs_webhook``."""
+
+    body = _verified_callback_body(request)
+    try:
+        return model.model_validate_json(body)
+    except ValidationError as exc:
+        raise _validation_error(exc, body=body) from exc
+
+
+def parse_callback_object(request: Request) -> dict[str, object]:
+    """Parse an authenticated generic completion payload as a JSON object."""
+
+    body = _verified_callback_body(request)
+    try:
+        return _CALLBACK_OBJECT.validate_json(body)
+    except ValidationError as exc:
+        raise _validation_error(exc, body=body) from exc
 
 
 async def verify_jobs_webhook(
@@ -44,7 +138,10 @@ async def verify_jobs_webhook(
             kind=FailureKind.UNAUTHENTICATED,
         )
 
-    body = await request.body()
+    declared_size = _declared_body_size(request)
+    if declared_size is not None:
+        _require_bounded_callback_size(declared_size)
+    body = await _read_bounded_callback_body(request)
     query = request.url.query
     target = request.url.path + (f"?{query}" if query else "")
     canonical = "\n".join(

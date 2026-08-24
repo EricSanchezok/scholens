@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Literal
 from typing import Protocol
 from uuid import UUID
 
@@ -18,6 +20,7 @@ from app.modules.operation_journal.domain import (
 )
 from app.modules.papers.domain import normalize_idempotency_key
 from app.shared.application import Actor, OperationContext
+from pydantic import BaseModel, ConfigDict
 
 PAPER_INGESTED = OperationAction("paper.ingested")
 
@@ -64,6 +67,30 @@ class PreparedPaperInput:
     source_kind: str
 
 
+class IngestionCancellationState(BaseModel):
+    """Complete stable impact facts for cancelling one PDF ingestion."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: UUID
+    status: Literal["pending", "running", "cancelled"]
+    job_updated_at: datetime
+    reservation_id: UUID | None
+    reservation_updated_at: datetime | None
+    document_id: UUID | None
+    project_id: UUID | None
+    library_reference_created: bool
+    project_reference_created: bool
+    library_membership_id: UUID | None
+    project_membership_id: UUID | None
+    document_gc_will_be_evaluated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class IngestionCancellationPlan:
+    state: IngestionCancellationState
+
+
 class PdfInputValidator(Protocol):
     def validate(self, *, content: bytes, source: str) -> None: ...
 
@@ -107,6 +134,13 @@ class PaperIngestionGateway(Protocol):
 
     def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource: ...
 
+    def plan_cancel(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+    ) -> IngestionCancellationPlan: ...
+
     def cancel(
         self,
         *,
@@ -114,6 +148,7 @@ class PaperIngestionGateway(Protocol):
         job_id: UUID,
         correlation_id: UUID,
         origin_operation_id: UUID,
+        plan: IngestionCancellationPlan | None = None,
     ) -> bool: ...
 
 
@@ -257,18 +292,30 @@ class IngestPaper:
     def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource:
         return self._gateway.retry_source(actor=actor, job_id=job_id)
 
+    def plan_cancel(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+    ) -> IngestionCancellationPlan:
+        return self._gateway.plan_cancel(actor=actor, job_id=job_id)
+
     def cancel(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         job_id: UUID,
+        plan: IngestionCancellationPlan | None = None,
     ) -> bool:
+        if plan is None:
+            plan = self.plan_cancel(actor=actor, job_id=job_id)
         changed = self._gateway.cancel(
             actor=actor,
             job_id=job_id,
             correlation_id=operation.trace.correlation_id,
             origin_operation_id=operation.trace.operation_id,
+            plan=plan,
         )
         if changed:
             self._journal.append(

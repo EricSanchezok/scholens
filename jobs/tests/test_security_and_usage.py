@@ -12,7 +12,12 @@ from scholens_observability import current_context
 
 from src.observability import _task_postrun, _task_prerun
 from src.token_usage import collect_token_usage, record_token_usage
-from src.webhook_signing import callback_base_url, post_signed_json
+from src.webhook_signing import (
+    CallbackPayloadInvalid,
+    CallbackPayloadTooLarge,
+    callback_base_url,
+    post_signed_json,
+)
 
 
 def test_job_task_context_restores_durable_causality_headers() -> None:
@@ -100,6 +105,45 @@ def test_jobs_webhook_signature_covers_method_target_nonce_and_body(
         headers["X-Jobs-Signature"]
         == hmac.new(b"s" * 32, canonical, hashlib.sha256).hexdigest()
     )
+
+
+def test_jobs_webhook_rejects_oversized_wire_body_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholens_job_contracts import callbacks
+
+    monkeypatch.setattr(callbacks, "MAX_JOBS_CALLBACK_BODY_BYTES", 8)
+    monkeypatch.setenv("JOBS_WEBHOOK_SIGNING_SECRET", "s" * 32)
+
+    with (
+        patch("src.webhook_signing.requests.post") as post,
+        pytest.raises(CallbackPayloadTooLarge, match="jobs_callback_too_large"),
+    ):
+        post_signed_json(
+            "https://api.example/internal/v1/jobs/job-1/complete",
+            {"value": "too large"},
+            timeout=5,
+        )
+
+    post.assert_not_called()
+
+
+def test_jobs_webhook_rejects_non_finite_json_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JOBS_WEBHOOK_SIGNING_SECRET", "s" * 32)
+
+    with (
+        patch("src.webhook_signing.requests.post") as post,
+        pytest.raises(CallbackPayloadInvalid, match="jobs_callback_invalid"),
+    ):
+        post_signed_json(
+            "https://api.example/internal/v1/jobs/job-1/complete",
+            {"duration": float("nan")},
+            timeout=5,
+        )
+
+    post.assert_not_called()
 
 
 def test_production_jobs_callback_uses_worker_owned_server_authority(

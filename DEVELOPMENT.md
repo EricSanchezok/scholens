@@ -353,6 +353,36 @@ PDF job when its persisted result object key differs from its canonical
 Document. Both accept `--batch-size N`; rerun the dry-run after each applied
 batch and inspect unresolved samples before taking any manual action.
 
+The Unicode replacement-character repair is a separate, consumer-first
+maintenance workflow. Never run it from daily startup and never run it before
+the deployed Jobs workers recognize `repair_pdf_text`:
+
+```bash
+cd server
+uv run --frozen --no-sync scholens maintenance reprocess-replacement-character-documents \
+  --actor-email admin@example.com --batch-size 25 --json
+uv run --frozen --no-sync scholens maintenance reprocess-replacement-character-documents \
+  --actor-email admin@example.com --batch-size 25 --apply --yes --json
+```
+
+The command defaults to 25 documents and rejects batches above 50. One
+invocation keyset-scans a bounded candidate window, holds candidate row locks
+with `SKIP LOCKED` only in apply mode, loads canonical text one document at a
+time, and enforces 32 MiB per-document and 64 MiB total text-work budgets.
+Operate serially, record the returned new repair Job IDs, inspect them with
+`scholens jobs show <job-id> --json`, and rerun dry-run only after the batch is
+terminal. Pending/running work is idempotent, completed outcomes close their
+source generation, applied outcomes close the Document revision, and only
+failed or cancelled outcomes retry, with a maximum of three digest-bound attempts. The
+ordinary requester Job API deliberately cannot list, get, wait for, cancel, or
+retry these maintenance Jobs. The worker fetches MinerU credentials through its
+job-scoped internal URL and uses the Document queue, so do not increase worker
+concurrency or copy credentials into CLI arguments. To stop or roll back the
+operation, stop scheduling new batches; the callback retains the prior
+canonical content and artifacts for every failed, unsafe, or non-improving
+repair. No database migration or production data mutation is part of ordinary
+development verification.
+
 Useful read-only diagnostics include:
 
 ```bash

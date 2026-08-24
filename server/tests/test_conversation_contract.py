@@ -3,6 +3,16 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.orm import Session
+
+from app.bootstrap.adapters.conversation_chat_data import (
+    SqlAlchemyConversationChatData,
+)
+from app.bootstrap.adapters.conversation_lifecycle import (
+    SqlAlchemyConversationGateway,
+)
+from app.bootstrap.adapters.conversation_repository import conversation_repository
 from app.database.models import (
     Conversation,
     ConversationContextDocument,
@@ -10,44 +20,35 @@ from app.database.models import (
     ConversationResponse,
     ConversationTurn,
 )
-from app.shared.domain import AppError, FailureKind, WorkspacePermission
 from app.main import app
-from app.bootstrap.adapters.conversation_repository import conversation_repository
-from app.bootstrap.adapters.conversation_lifecycle import (
-    SqlAlchemyConversationGateway,
-)
-from app.bootstrap.adapters.conversation_chat_data import (
-    SqlAlchemyConversationChatData,
-)
 from app.modules.conversations.application.chat import ConversationChatScope
 from app.modules.conversations.application.contracts.conversations import (
     ConversationBranchSelectionRequest,
     ConversationCreateRequest,
     ConversationListRequest,
-    LibraryPaperContext,
     ConversationMoveRequest,
-    SelectedPaperContext,
     ConversationUpdateRequest,
+    LibraryPaperContext,
+    SelectedPaperContext,
+)
+from app.modules.conversations.application.contracts.trace import ConversationTrace
+from app.modules.conversations.application.contracts.turns import (
+    ConversationAssistantItem,
+    ConversationTurnBranchCreateRequest,
 )
 from app.modules.conversations.application.conversations import (
     ConversationChange,
     ConversationListPosition,
     ConversationPage,
-    ConversationTurnsPage,
     Conversations,
+    ConversationTurnsPage,
 )
-from app.modules.conversations.application.contracts.turns import (
-    ConversationAssistantItem,
-    ConversationTurnBranchCreateRequest,
-)
-from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.presenters import serialize_turns
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
-from app.shared.application import Actor, SignedCursorCodec
 from app.modules.operation_journal.application import OperationJournal
+from app.shared.application import Actor, SignedCursorCodec
+from app.shared.domain import AppError, FailureKind, WorkspacePermission
 from app.shared.domain.enums import ConversationScopeType
-from sqlalchemy.orm import Session
-from pydantic import ValidationError
 
 
 def _current_user() -> Actor:
@@ -1407,7 +1408,7 @@ def test_paper_context_snapshot_only_loads_anchor_full_text(
     }
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat_data.document_repository.find_accessible",
-        lambda _db, *, document_id, user: papers.get(document_id),
+        lambda _db, *, document_id, **_kwargs: papers.get(document_id),
     )
     db = MagicMock(spec=Session)
     db.execute.return_value.all.return_value = []

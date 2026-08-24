@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.modules.papers.application.contracts.search import LibraryPaperCollection
 from app.modules.projects.application.contracts import ProjectPaperListResponse
+from app.modules.projects.application.projects import ProjectPaperSummaryList
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -15,6 +16,7 @@ from app.shared.application import (
     RequestReference,
 )
 from app.tooling.contracts import ToolExecutionContext
+from app.tooling.project_summary_projection import PROJECT_PAPER_LIST_MAX_PAGE_ITEMS
 from app.tooling.workspace_contracts import ListProjectPapersInput
 from app.tooling.workspace_handlers import WorkspaceToolHandlers
 
@@ -41,7 +43,7 @@ def _context() -> ToolExecutionContext:
     )
 
 
-def test_mcp_project_paper_listing_requests_neither_file_nor_preview_urls() -> None:
+def test_mcp_project_paper_listing_uses_summary_producer_without_url_loading() -> None:
     handler = WorkspaceToolHandlers(
         executor=MagicMock(),
         ingestion=MagicMock(),
@@ -50,7 +52,13 @@ def test_mcp_project_paper_listing_requests_neither_file_nor_preview_urls() -> N
         cursor_secret="project-url-loading-test-secret",
     )
     capabilities = MagicMock()
-    capabilities.projects.documents.return_value = ProjectPaperListResponse(items=[])
+    capabilities.projects.document_summaries.return_value = ProjectPaperSummaryList(
+        value=ProjectPaperListResponse(items=[]),
+        content_truncated=False,
+    )
+    capabilities.projects.documents.side_effect = AssertionError(
+        "full Project-paper producer must not run"
+    )
     project_id = uuid4()
     context = _context()
     arguments = ListProjectPapersInput(project_id=project_id)
@@ -61,13 +69,12 @@ def test_mcp_project_paper_listing_requests_neither_file_nor_preview_urls() -> N
         arguments,
     )
 
-    capabilities.projects.documents.assert_called_once_with(
+    capabilities.projects.document_summaries.assert_called_once_with(
         actor=context.actor,
         project_id=project_id,
-        load_urls=False,
-        load_preview_urls=False,
         query=None,
         sort=arguments.sort,
         cursor=None,
-        limit=20,
+        limit=PROJECT_PAPER_LIST_MAX_PAGE_ITEMS,
     )
+    capabilities.projects.documents.assert_not_called()

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import uuid
 import hashlib
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.helpers.postgres import sanitize_for_postgres
+from sqlalchemy import false, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session, load_only, selectinload
+
 from app.database.models import (
     AuthUser,
     Document,
@@ -19,21 +22,24 @@ from app.database.models import (
     ProjectPaper,
     UploadReservation,
 )
-from app.shared.domain import AppError, FailureKind
+from app.helpers.postgres import sanitize_for_postgres
+from app.modules.papers.application.contracts.documents import (
+    DocumentUpdate,
+    LibraryPaperUpdateRequest,
+)
 from app.modules.papers.domain import normalize_doi
 from app.modules.papers.infrastructure.access import (
     get_document_access,
     require_document_access,
 )
-from app.modules.papers.application.contracts.documents import (
-    DocumentUpdate,
-    LibraryPaperUpdateRequest,
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_LIBRARY_RESPONSE_COLUMNS,
+    DOCUMENT_PUBLIC_SHARE_COLUMNS,
+    DOCUMENT_RESPONSE_COLUMNS,
+    DocumentColumns,
 )
 from app.shared.application import Actor
-from sqlalchemy import select, update
-from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, selectinload
+from app.shared.domain import AppError, FailureKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +62,8 @@ class PublicLibraryPaper:
 
 @dataclass(frozen=True, slots=True)
 class UpdatedLibraryPaper:
-    entry: LibraryPaper
+    library_entry_id: uuid.UUID
+    document_id: uuid.UUID
     changed: bool
 
 
@@ -68,8 +75,13 @@ class DocumentRepository:
         document_id: object,
         user: Actor,
         update_last_accessed: bool = False,
+        document_columns: DocumentColumns = DOCUMENT_RESPONSE_COLUMNS,
     ) -> Document | None:
-        """Return a Document only through an explicit user access check."""
+        """Return an authorized Document with an explicit bounded column profile.
+
+        Metadata is the safe default. Consumers of parsed content must pass one
+        of the content profiles from ``document_loading`` deliberately.
+        """
         try:
             parsed_id = uuid.UUID(str(document_id))
         except (TypeError, ValueError):
@@ -78,6 +90,7 @@ class DocumentRepository:
             db,
             document_id=parsed_id,
             user_id=user.id,
+            document_columns=document_columns,
         )
         if access is None:
             return None
@@ -170,6 +183,13 @@ class DocumentRepository:
         return db.scalars(
             select(Document)
             .join(LibraryPaper, LibraryPaper.document_id == Document.id)
+            .options(
+                load_only(
+                    Document.id,
+                    Document.s3_object_key,
+                    raiseload=True,
+                )
+            )
             .where(
                 LibraryPaper.user_id == user_id,
                 func.lower(Document.doi).like(f"%{escaped}", escape="\\"),
@@ -181,7 +201,10 @@ class DocumentRepository:
             db.scalars(
                 select(LibraryPaper)
                 .options(
-                    selectinload(LibraryPaper.document),
+                    selectinload(LibraryPaper.document).load_only(
+                        *DOCUMENT_LIBRARY_RESPONSE_COLUMNS,
+                        raiseload=True,
+                    ),
                     selectinload(LibraryPaper.tags),
                 )
                 .where(LibraryPaper.user_id == user_id)
@@ -223,7 +246,10 @@ class DocumentRepository:
         statement = (
             select(LibraryPaper)
             .options(
-                selectinload(LibraryPaper.document),
+                selectinload(LibraryPaper.document).load_only(
+                    *DOCUMENT_LIBRARY_RESPONSE_COLUMNS,
+                    raiseload=True,
+                ),
                 selectinload(LibraryPaper.tags),
             )
             .where(
@@ -242,6 +268,31 @@ class DocumentRepository:
             )
         return entry
 
+    def require_library_paper_id_by_document(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        user_id: int,
+        for_update: bool = False,
+    ) -> uuid.UUID:
+        """Resolve a Library mutation target without hydrating relationships."""
+
+        statement = select(LibraryPaper.id).where(
+            LibraryPaper.document_id == document_id,
+            LibraryPaper.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        entry_id = db.scalar(statement)
+        if entry_id is None:
+            raise AppError(
+                code="library_paper_not_found",
+                message="Library paper not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return entry_id
+
     def update_library_paper(
         self,
         db: Session,
@@ -250,44 +301,57 @@ class DocumentRepository:
         user_id: int,
         request: LibraryPaperUpdateRequest,
     ) -> UpdatedLibraryPaper:
-        entry = self.require_library_paper_by_document(
-            db,
-            document_id=document_id,
-            user_id=user_id,
-            for_update=True,
-        )
-        changed = False
-        if request.status is not None and entry.status != request.status.value:
-            entry.status = request.status.value
-            changed = True
+        change_checks = []
+        if request.status is not None:
+            change_checks.append(
+                LibraryPaper.status.is_distinct_from(request.status.value)
+            )
+        metadata_overrides: dict[str, object] | None = None
         if request.metadata_overrides is not None:
             metadata_overrides = request.metadata_overrides.model_dump(
                 mode="json",
                 exclude_none=True,
             )
-            if entry.metadata_overrides != metadata_overrides:
-                entry.metadata_overrides = metadata_overrides
-                changed = True
-        entry.last_accessed_at = datetime.now(timezone.utc)
-        db.flush()
-        db.refresh(entry)
-        return UpdatedLibraryPaper(entry=entry, changed=changed)
-
-    def delete_library_paper(
-        self,
-        db: Session,
-        *,
-        document_id: uuid.UUID,
-        user_id: int,
-    ) -> None:
-        entry = self.require_library_paper_by_document(
-            db,
-            document_id=document_id,
-            user_id=user_id,
-            for_update=True,
+            change_checks.append(
+                LibraryPaper.metadata_overrides.is_distinct_from(metadata_overrides)
+            )
+        changed_expression = or_(*change_checks) if change_checks else false()
+        row = db.execute(
+            select(
+                LibraryPaper.id.label("library_entry_id"),
+                LibraryPaper.document_id,
+                changed_expression.label("changed"),
+            )
+            .where(
+                LibraryPaper.document_id == document_id,
+                LibraryPaper.user_id == user_id,
+            )
+            .with_for_update()
+        ).one_or_none()
+        if row is None:
+            raise AppError(
+                code="library_paper_not_found",
+                message="Library paper not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        values: dict[str, object] = {
+            "last_accessed_at": datetime.now(timezone.utc),
+        }
+        if request.status is not None:
+            values["status"] = request.status.value
+        if metadata_overrides is not None:
+            values["metadata_overrides"] = metadata_overrides
+        db.execute(
+            update(LibraryPaper)
+            .where(LibraryPaper.id == row.library_entry_id)
+            .values(**values)
         )
-        db.delete(entry)
         db.flush()
+        return UpdatedLibraryPaper(
+            library_entry_id=row.library_entry_id,
+            document_id=row.document_id,
+            changed=bool(row.changed),
+        )
 
     def rotate_public_share(
         self,
@@ -296,15 +360,21 @@ class DocumentRepository:
         document_id: uuid.UUID,
         user_id: int,
     ) -> str:
-        entry = self.require_library_paper_by_document(
+        entry_id = self.require_library_paper_id_by_document(
             db,
             document_id=document_id,
             user_id=user_id,
             for_update=True,
         )
         token = secrets.token_urlsafe(32)
-        entry.share_token_hash = hashlib.sha256(token.encode()).hexdigest()
-        entry.is_public = True
+        db.execute(
+            update(LibraryPaper)
+            .where(LibraryPaper.id == entry_id)
+            .values(
+                share_token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                is_public=True,
+            )
+        )
         db.flush()
         return token
 
@@ -315,18 +385,45 @@ class DocumentRepository:
         document_id: uuid.UUID,
         user_id: int,
     ) -> bool:
-        entry = self.require_library_paper_by_document(
+        entry_id = self.require_library_paper_id_by_document(
             db,
             document_id=document_id,
             user_id=user_id,
             for_update=True,
         )
-        if not entry.is_public and entry.share_token_hash is None:
-            return False
-        entry.share_token_hash = None
-        entry.is_public = False
+        changed_id = db.scalar(
+            update(LibraryPaper)
+            .where(
+                LibraryPaper.id == entry_id,
+                or_(
+                    LibraryPaper.is_public.is_(True),
+                    LibraryPaper.share_token_hash.is_not(None),
+                ),
+            )
+            .values(share_token_hash=None, is_public=False)
+            .returning(LibraryPaper.id)
+        )
         db.flush()
-        return True
+        return changed_id is not None
+
+    def require_public_share_document_id(
+        self,
+        db: Session,
+        *,
+        token: str,
+    ) -> uuid.UUID:
+        token_hash = self._public_share_token_hash(token)
+        document_id = db.scalar(
+            select(LibraryPaper.document_id)
+            .where(
+                LibraryPaper.share_token_hash == token_hash,
+                LibraryPaper.is_public.is_(True),
+            )
+            .with_for_update(of=LibraryPaper)
+        )
+        if document_id is None:
+            raise self._public_paper_not_found()
+        return document_id
 
     def require_public_share(
         self,
@@ -334,18 +431,20 @@ class DocumentRepository:
         *,
         token: str,
     ) -> PublicLibraryPaper:
-        if not token or len(token) > 512:
-            raise AppError(
-                code="public_paper_not_found",
-                message="Public paper not found",
-                kind=FailureKind.NOT_FOUND,
-            )
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        token_hash = self._public_share_token_hash(token)
         entry = db.scalar(
             select(LibraryPaper)
             .options(
-                selectinload(LibraryPaper.document),
-                selectinload(LibraryPaper.user),
+                selectinload(LibraryPaper.document).load_only(
+                    *DOCUMENT_PUBLIC_SHARE_COLUMNS,
+                    raiseload=True,
+                ),
+                selectinload(LibraryPaper.user).load_only(
+                    AuthUser.id,
+                    AuthUser.display_name,
+                    AuthUser.email,
+                    raiseload=True,
+                ),
             )
             .where(
                 LibraryPaper.share_token_hash == token_hash,
@@ -353,15 +452,25 @@ class DocumentRepository:
             )
         )
         if entry is None:
-            raise AppError(
-                code="public_paper_not_found",
-                message="Public paper not found",
-                kind=FailureKind.NOT_FOUND,
-            )
+            raise self._public_paper_not_found()
         return PublicLibraryPaper(
             entry=entry,
             document=entry.document,
             owner=entry.user,
+        )
+
+    @staticmethod
+    def _public_share_token_hash(token: str) -> str:
+        if not token or len(token) > 512:
+            raise DocumentRepository._public_paper_not_found()
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    @staticmethod
+    def _public_paper_not_found() -> AppError:
+        return AppError(
+            code="public_paper_not_found",
+            message="Public paper not found",
+            kind=FailureKind.NOT_FOUND,
         )
 
     def get_by_sha256(

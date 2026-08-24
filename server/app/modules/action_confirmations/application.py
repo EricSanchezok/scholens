@@ -13,8 +13,9 @@ from app.modules.action_confirmations.contracts import (
     ConfirmationChallenge,
 )
 from app.shared.application import Actor, Clock, ConversationOrigin, OperationContext
+from app.shared.application.json_values import normalize_json_value
 from app.shared.domain import AppError, FailureKind, JsonValue
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 CONFIRMATION_TTL = timedelta(minutes=10)
 _JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
@@ -26,11 +27,15 @@ def hash_confirmation_value(value: str) -> str:
 
 def confirmation_digest(value: object) -> str:
     """Return one canonical digest for confirmation arguments or live state."""
-    if isinstance(value, BaseModel):
-        value = value.model_dump(mode="json")
-    normalized = _JSON_VALUE.validate_python(value)
+    normalized = normalize_json_value(value)
     return hashlib.sha256(
-        json.dumps(normalized, separators=(",", ":"), sort_keys=True).encode()
+        json.dumps(
+            normalized,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
     ).hexdigest()
 
 

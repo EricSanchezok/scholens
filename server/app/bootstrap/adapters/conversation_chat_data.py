@@ -5,52 +5,58 @@ from __future__ import annotations
 import uuid
 from typing import Literal, cast
 
+from pydantic import TypeAdapter
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from app.bootstrap.adapters.conversation_access import conversation_policy
 from app.bootstrap.adapters.conversation_repository import conversation_repository
 from app.bootstrap.adapters.research_repository import research_repository
-from app.database.models import Conversation
-from app.database.models import Document, Project, ProjectPaper
+from app.database.models import Conversation, Document, Project, ProjectPaper
 from app.llm.token_credits import has_token_credits
 from app.modules.conversations.application.chat import (
     ChatHistoryMessage,
     ChatPaperSnapshot,
     ChatProjectSnapshot,
     ConversationBranchPreparation,
-    ConversationContextSnapshot,
-    ConversationGenerationPreparation,
     ConversationChatDataGateway,
     ConversationChatScope,
+    ConversationContextSnapshot,
+    ConversationGenerationPreparation,
     ConversationTurnCompletion,
     ConversationTurnStart,
     MentionScope,
     PersistedChatResponse,
 )
-from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
+from app.modules.conversations.application.contracts.contexts import (
+    AnnotationThreadTurnContext,
+)
+from app.modules.conversations.application.contracts.conversations import PaperContext
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.application.contracts.turns import (
     ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
 )
-from app.modules.conversations.application.contracts.conversations import PaperContext
-from app.modules.conversations.application.contracts.contexts import (
-    AnnotationThreadTurnContext,
-)
-from app.modules.conversations.application.contracts.trace import ConversationTrace
+from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
-from app.modules.papers.infrastructure.repository import document_repository
-from app.modules.papers.infrastructure.access import accessible_document_condition
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     PaperCollection,
     SelectedPaperCollection,
 )
+from app.modules.papers.infrastructure.access import accessible_document_condition
+from app.modules.papers.infrastructure.document_loading import (
+    DOCUMENT_CHAT_CONTEXT_COLUMNS,
+)
+from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.application import Actor
-from app.shared.domain import AppError, FailureKind, JsonValue
-from app.shared.domain import normalize_workspace_permissions
+from app.shared.domain import (
+    AppError,
+    FailureKind,
+    JsonValue,
+    normalize_workspace_permissions,
+)
 from app.shared.domain.enums import ConversationScopeType
-from sqlalchemy.orm import Session
-from sqlalchemy import func, select
-from pydantic import TypeAdapter
-
 
 _PAPER_CONTEXT: TypeAdapter[PaperContext] = TypeAdapter(PaperContext)
 
@@ -122,6 +128,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 self._session,
                 document_id=document_id,
                 user=actor,
+                document_columns=DOCUMENT_CHAT_CONTEXT_COLUMNS,
             )
             if paper is None:
                 continue

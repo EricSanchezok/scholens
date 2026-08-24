@@ -4213,6 +4213,8 @@
             "anyOf": [
               {
                 "items": {
+                  "maxLength": 500,
+                  "minLength": 1,
                   "type": "string"
                 },
                 "maxItems": 100,
@@ -4242,6 +4244,8 @@
             "anyOf": [
               {
                 "items": {
+                  "maxLength": 500,
+                  "minLength": 1,
                   "type": "string"
                 },
                 "maxItems": 100,
@@ -7296,6 +7300,7 @@
           "end_offset": {
             "description": "Exclusive zero-based character offset after the selected quote.",
             "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
             "title": "End Offset",
             "type": "integer"
           },
@@ -7309,6 +7314,7 @@
           "page_number": {
             "anyOf": [
               {
+                "maximum": 2147483647.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -7321,6 +7327,7 @@
           },
           "start_offset": {
             "description": "Inclusive zero-based character offset in canonical parsed text.",
+            "maximum": 2147483647.0,
             "minimum": 0.0,
             "title": "Start Offset",
             "type": "integer"
@@ -7339,6 +7346,7 @@
         "properties": {
           "page_number": {
             "description": "One-based PDF page containing this rectangle segment.",
+            "maximum": 2147483647.0,
             "minimum": 1.0,
             "title": "Page Number",
             "type": "integer"
@@ -7373,6 +7381,7 @@
           },
           "page_number": {
             "description": "One-based PDF page containing the first supplied segment.",
+            "maximum": 2147483647.0,
             "minimum": 1.0,
             "title": "Page Number",
             "type": "integer"
@@ -9792,6 +9801,42 @@
       },
       "UpdateAnnotationThreadRequest": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "color": {
+                "description": "Replacement highlight color.",
+                "not": {
+                  "type": "null"
+                }
+              },
+              "status": {
+                "description": "Must be null when color is changed.",
+                "type": "null"
+              }
+            },
+            "required": [
+              "color"
+            ]
+          },
+          {
+            "properties": {
+              "color": {
+                "description": "Must be null when status is changed.",
+                "type": "null"
+              },
+              "status": {
+                "description": "Replacement discussion status.",
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        ],
         "properties": {
           "color": {
             "anyOf": [

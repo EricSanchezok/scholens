@@ -169,6 +169,22 @@ class PaperSearchResponse(BaseModel):
     semantic_index_coverage: float = Field(default=0, ge=0, le=1)
 
 
+class PaperSearchCandidate(BaseModel):
+    """Bounded scalar row used only by composite stored-knowledge search."""
+
+    document_id: UUID
+    title: str | None
+    abstract: str | None
+    created_at: datetime
+    last_accessed_at: datetime
+    snippets: list[PaperSearchSnippet] = Field(default_factory=list, max_length=3)
+
+
+class PaperSearchCandidatePage(BaseModel):
+    items: list[PaperSearchCandidate]
+    total: int = Field(ge=0)
+
+
 class PaperSearchStats(BaseModel):
     total_papers: int
     searchable_items: int

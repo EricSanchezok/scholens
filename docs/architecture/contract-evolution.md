@@ -37,6 +37,29 @@ A contract change is never disguised as a refactor. A security or active data
 integrity incident is the only emergency exception; it requires an incident
 record, explicit owner approval, consumer communication, and follow-up tests.
 
+### Correcting an inaccurate published schema
+
+A generated schema may occasionally be less restrictive than the request
+validator that was already deployed—for example, when a Pydantic model
+validator enforced a relationship that JSON Schema did not express. Aligning
+the schema with that existing runtime boundary is a correction, not permission
+to narrow accepted requests. Each HTTP or MCP correction must be registered in
+`server/contracts/schema-corrections.json` with its exact operation or tool,
+JSON pointer, old-value state, new-value SHA-256, owner, rationale, and a
+deterministic runtime-evidence test.
+
+The evidence reference must resolve to an exact top-level pytest node under
+`server/tests/`; substring-only or comment-only references are rejected. The
+dependency-free compatibility lane validates that structure, while the Server
+lane collects and executes the referenced test as part of its complete suite.
+
+The compatibility job supplements the pinned `oasdiff` release by detecting
+restrictive request keywords it does not reliably report, then accepts only an
+exact registry match. Correction entries are immutable tombstones, and a new
+entry is valid only in the transition that introduces its matching generated
+schema change. If the previous runtime accepted the request, the change is not
+a correction: retain the legacy behavior or publish a replacement boundary.
+
 ## Database lifecycle
 
 Applied migration files are immutable: do not edit, rename, delete, reorder, or

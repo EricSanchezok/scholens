@@ -524,6 +524,79 @@ def test_cancel_journals_only_when_gateway_changes_state() -> None:
     assert str(journal.entries[0]["action"]) == "job.failed"
 
 
+def test_gateway_cancellation_plan_discloses_membership_cleanup_and_applies_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    job_id = uuid4()
+    document_id = uuid4()
+    project_id = uuid4()
+    library_membership_id = uuid4()
+    project_membership_id = uuid4()
+    job = SimpleNamespace(
+        id=job_id,
+        status="running",
+        updated_at=now,
+        document_id=document_id,
+        project_id=project_id,
+        completed_at=None,
+        lease_expires_at=now,
+        progress_code="parsing",
+    )
+    reservation = SimpleNamespace(
+        id=job_id,
+        updated_at=now,
+        reference_created_library=True,
+        reference_created_project=True,
+        reference_created=False,
+    )
+    db = MagicMock()
+    db.scalar.side_effect = [
+        job,
+        reservation,
+        library_membership_id,
+        project_membership_id,
+    ]
+    db.get.return_value = job
+    schedule_gc = MagicMock()
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_gc.schedule_document_gc",
+        schedule_gc,
+    )
+    gateway = SqlPaperIngestionGateway(db=db)
+
+    plan = gateway.plan_cancel(actor=_actor(), job_id=job_id)
+
+    assert plan.state.library_membership_id == library_membership_id
+    assert plan.state.project_membership_id == project_membership_id
+    assert plan.state.document_gc_will_be_evaluated is True
+    assert gateway.cancel(
+        actor=_actor(),
+        job_id=job_id,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        plan=plan,
+    )
+    assert db.execute.call_count == 2
+    assert job.status == "cancelled"
+    assert job.lease_expires_at is None
+    assert job.progress_code is None
+    schedule_gc.assert_called_once()
+
+
+def test_gateway_cancellation_plan_uses_one_not_found_code_for_hidden_jobs() -> None:
+    db = MagicMock()
+    db.scalar.return_value = None
+
+    with pytest.raises(AppError) as error:
+        SqlPaperIngestionGateway(db=db).plan_cancel(
+            actor=_actor(),
+            job_id=uuid4(),
+        )
+
+    assert error.value.code == "paper_ingestion_job_not_found"
+
+
 def test_gateway_retry_source_inherits_add_to_library_from_original_reservation() -> (
     None
 ):

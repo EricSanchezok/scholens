@@ -1,9 +1,45 @@
 """Shared, service-neutral background-job contracts."""
 
+from scholens_job_contracts.callbacks import (
+    MAX_JOBS_CALLBACK_BODY_BYTES,
+    MAX_PDF_CALLBACK_PAGE_OFFSET_MAP_BYTES,
+    MAX_PDF_CALLBACK_RAW_CONTENT_BYTES,
+    callback_json_bytes,
+    require_callback_body_size,
+    require_pdf_callback_content_size,
+)
+from scholens_job_contracts.pdf_quality import (
+    PDF_TEXT_MAX_CONTENT_RATIO,
+    PDF_TEXT_MIN_CONTENT_RATIO,
+    PDF_TEXT_MIN_EVIDENCE_COVERAGE,
+    UNICODE_REPLACEMENT_CHARACTER,
+    UNICODE_REPLACEMENT_WARNING_CODE,
+    PDFTextCandidateAssessment,
+    assess_pdf_text_candidate,
+    replacement_character_count,
+    retains_pdf_text_evidence,
+)
+from scholens_job_contracts.pdf_repair import (
+    PDF_TEXT_REPAIR_MAX_ATTEMPTS,
+    PDF_TEXT_REPAIR_TASK_NAME,
+    PDFTextRepairTaskKwargs,
+    PDFTextRepairTaskRequest,
+)
 from scholens_job_contracts.queues import (
     JOB_QUEUE_NAMES,
     JOBS_WORKER_QUEUE_NAMES,
     JobQueue,
+)
+from scholens_job_contracts.storage_cleanup import (
+    MAX_STORAGE_DELETE_BATCH_JSON_BYTES,
+    MAX_STORAGE_DELETE_KEY_UTF8_BYTES,
+    MAX_STORAGE_DELETE_KEYS_PER_BATCH,
+    STORAGE_DELETE_ALLOWED_PREFIXES,
+    chunk_storage_delete_keys,
+    require_storage_delete_batch,
+    require_storage_delete_key,
+    storage_delete_batch_digest,
+    storage_delete_batch_json_bytes,
 )
 from scholens_job_contracts.zotero import (
     MAX_ZOTERO_CALLBACK_BYTES,
@@ -15,9 +51,37 @@ from scholens_job_contracts.zotero import (
 )
 
 __all__ = [
+    "MAX_JOBS_CALLBACK_BODY_BYTES",
+    "MAX_PDF_CALLBACK_PAGE_OFFSET_MAP_BYTES",
+    "MAX_PDF_CALLBACK_RAW_CONTENT_BYTES",
+    "callback_json_bytes",
+    "require_callback_body_size",
+    "require_pdf_callback_content_size",
     "JOB_QUEUE_NAMES",
     "JOBS_WORKER_QUEUE_NAMES",
     "JobQueue",
+    "PDF_TEXT_REPAIR_MAX_ATTEMPTS",
+    "PDF_TEXT_REPAIR_TASK_NAME",
+    "PDFTextRepairTaskKwargs",
+    "PDFTextRepairTaskRequest",
+    "PDF_TEXT_MAX_CONTENT_RATIO",
+    "PDF_TEXT_MIN_CONTENT_RATIO",
+    "PDF_TEXT_MIN_EVIDENCE_COVERAGE",
+    "PDFTextCandidateAssessment",
+    "UNICODE_REPLACEMENT_CHARACTER",
+    "UNICODE_REPLACEMENT_WARNING_CODE",
+    "assess_pdf_text_candidate",
+    "replacement_character_count",
+    "retains_pdf_text_evidence",
+    "MAX_STORAGE_DELETE_BATCH_JSON_BYTES",
+    "MAX_STORAGE_DELETE_KEYS_PER_BATCH",
+    "MAX_STORAGE_DELETE_KEY_UTF8_BYTES",
+    "STORAGE_DELETE_ALLOWED_PREFIXES",
+    "chunk_storage_delete_keys",
+    "require_storage_delete_batch",
+    "require_storage_delete_key",
+    "storage_delete_batch_digest",
+    "storage_delete_batch_json_bytes",
     "MAX_ZOTERO_CALLBACK_BYTES",
     "ZOTERO_CALLBACK_HEARTBEAT_SECONDS",
     "ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS",

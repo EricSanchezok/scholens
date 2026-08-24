@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from app.database.models import (
     DurableJob,
@@ -19,13 +20,27 @@ from app.shared.domain import AppError, FailureKind
 from app.modules.jobs.domain import (
     DEFAULT_CALLBACK_LEASE,
     DEFAULT_JOB_LEASE,
+    MAINTENANCE_JOB_VISIBILITY,
     can_complete_job,
     can_fail_job,
     can_recover_job,
 )
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
+from sqlalchemy.sql.base import ExecutableOption
+from sqlalchemy.sql.elements import ColumnElement
+
+
+def requester_visible_job() -> ColumnElement[bool]:
+    """Exclude internal maintenance work from requester-facing job surfaces."""
+
+    return cast(
+        ColumnElement[bool],
+        DurableJob.payload["job_visibility"]
+        .as_string()
+        .is_distinct_from(MAINTENANCE_JOB_VISIBILITY),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +86,23 @@ class ReservedJobDispatch:
 
 class JobRepository:
     @staticmethod
+    def _status_columns() -> ExecutableOption:
+        """Load only fields that belong in a public durable-status snapshot."""
+
+        return load_only(
+            DurableJob.id,
+            DurableJob.operation,
+            DurableJob.document_id,
+            DurableJob.project_id,
+            DurableJob.status,
+            DurableJob.progress_code,
+            DurableJob.error_code,
+            DurableJob.created_at,
+            DurableJob.started_at,
+            DurableJob.completed_at,
+        )
+
+    @staticmethod
     def find_by_idempotency_key(
         db: Session,
         *,
@@ -92,7 +124,8 @@ class JobRepository:
         limit: int = 100,
     ) -> list[DurableJob]:
         statement = select(DurableJob).where(
-            DurableJob.requested_by_id == requested_by_id
+            DurableJob.requested_by_id == requested_by_id,
+            requester_visible_job(),
         )
         if project_id is not None:
             statement = statement.where(DurableJob.project_id == project_id)
@@ -103,6 +136,60 @@ class JobRepository:
         if statuses is not None:
             statement = statement.where(
                 DurableJob.status.in_(status.value for status in statuses)
+            )
+        return list(
+            db.scalars(
+                statement.order_by(
+                    DurableJob.created_at.desc(), DurableJob.id.desc()
+                ).limit(limit)
+            ).all()
+        )
+
+    @classmethod
+    def list_statuses_for_requester(
+        cls,
+        db: Session,
+        *,
+        requested_by_id: int,
+        project_id: uuid.UUID | None = None,
+        document_id: uuid.UUID | None = None,
+        operation: JobOperation | None = None,
+        statuses: tuple[JobStatus, ...] | None = None,
+        before_created_at: datetime | None = None,
+        before_id: uuid.UUID | None = None,
+        limit: int,
+    ) -> list[DurableJob]:
+        if (before_created_at is None) != (before_id is None):
+            raise ValueError("job keyset requires both created_at and id")
+        if limit <= 0:
+            raise ValueError("job status page limit must be positive")
+        statement = (
+            select(DurableJob)
+            .options(cls._status_columns())
+            .where(
+                DurableJob.requested_by_id == requested_by_id,
+                requester_visible_job(),
+            )
+        )
+        if project_id is not None:
+            statement = statement.where(DurableJob.project_id == project_id)
+        if document_id is not None:
+            statement = statement.where(DurableJob.document_id == document_id)
+        if operation is not None:
+            statement = statement.where(DurableJob.operation == operation.value)
+        if statuses is not None:
+            statement = statement.where(
+                DurableJob.status.in_(status.value for status in statuses)
+            )
+        if before_created_at is not None and before_id is not None:
+            statement = statement.where(
+                or_(
+                    DurableJob.created_at < before_created_at,
+                    and_(
+                        DurableJob.created_at == before_created_at,
+                        DurableJob.id < before_id,
+                    ),
+                )
             )
         return list(
             db.scalars(
@@ -203,6 +290,7 @@ class JobRepository:
             select(DurableJob).where(
                 DurableJob.id == job_id,
                 DurableJob.requested_by_id == requested_by_id,
+                requester_visible_job(),
             )
         )
         if job is None:
@@ -225,6 +313,35 @@ class JobRepository:
                 select(DurableJob).where(
                     DurableJob.id.in_(job_ids),
                     DurableJob.requested_by_id == requested_by_id,
+                    requester_visible_job(),
+                )
+            ).all()
+        )
+        jobs_by_id = {job.id: job for job in jobs}
+        if len(jobs_by_id) != len(set(job_ids)):
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return [jobs_by_id[job_id] for job_id in job_ids]
+
+    @classmethod
+    def require_many_statuses_for_requester(
+        cls,
+        db: Session,
+        *,
+        job_ids: tuple[uuid.UUID, ...],
+        requested_by_id: int,
+    ) -> list[DurableJob]:
+        jobs = list(
+            db.scalars(
+                select(DurableJob)
+                .options(cls._status_columns())
+                .where(
+                    DurableJob.id.in_(job_ids),
+                    DurableJob.requested_by_id == requested_by_id,
+                    requester_visible_job(),
                 )
             ).all()
         )
@@ -642,6 +759,7 @@ class JobRepository:
             .where(
                 DurableJob.id == job_id,
                 DurableJob.requested_by_id == requested_by_id,
+                requester_visible_job(),
             )
             .with_for_update()
         )
@@ -781,5 +899,6 @@ __all__ = [
     "JobRepository",
     "PersistedJob",
     "ReservedJobDispatch",
+    "requester_visible_job",
     "job_repository",
 ]

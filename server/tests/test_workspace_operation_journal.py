@@ -260,7 +260,8 @@ def test_project_cleanup_jobs_are_journaled_only_when_created() -> None:
     document_gc_job_id = uuid4()
     gateway = MagicMock()
     gateway.delete.return_value = ProjectDeletion(
-        created_cleanup_job_ids=delete_job_ids
+        created_cleanup_job_count=len(delete_job_ids),
+        created_cleanup_job_ids=iter(delete_job_ids),
     )
     gateway.remove_document.return_value = ProjectPaperRemoval(
         created_gc_job_id=document_gc_job_id
@@ -300,6 +301,12 @@ def test_library_tag_replacement_uses_library_aggregate_and_skips_noop() -> None
     journal, store = _journal()
     tags = LibraryTags(
         cast(LibraryTagGateway, gateway),
+        cursors=SignedCursorCodec(
+            "library-tag-journal-test-secret",
+            revision="library-tags-v1",
+            error_code="library_tag_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
     actor = _actor()
@@ -353,13 +360,15 @@ def test_workspace_commands_require_provenance_but_queries_do_not() -> None:
             "get",
             "members",
             "invitations",
+            "invitations_page",
+            "invitation",
             "documents",
             "pending_uploads",
             "document_download",
             "projects_for_document",
         },
         PaperLibrary: {"list", "get", "get_public"},
-        LibraryTags: {"list"},
+        LibraryTags: {"list", "list_page", "get"},
     }
 
     for service, method_names in commands.items():

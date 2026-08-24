@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 import json
 from collections.abc import Mapping, Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from app.modules.papers.application.contracts.documents import (
@@ -46,6 +46,7 @@ from app.shared.application.operation_context import OperationContext
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchItemKind
 from app.shared.domain.enums import PaperStatus
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LibraryPageDirection(StrEnum):
@@ -57,6 +58,7 @@ class LibraryPageDirection(StrEnum):
 class LibraryPagePosition:
     key: str
     id: UUID
+    kind: Literal["ingestion", "paper"] = "paper"
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +67,23 @@ class LibraryPaperPage:
     positions: list[LibraryPagePosition]
     has_more: bool
     total_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryPaperSummaryPage:
+    """Durable Library rows projected to bounded scalar metadata in SQL."""
+
+    items: list[LibraryPaperListEntry]
+    positions: list[LibraryPagePosition]
+    has_more: bool
+    total_count: int
+    content_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryPaperSummaryList:
+    value: LibraryPaperListResponse
+    content_truncated: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +106,7 @@ class PublicShare:
 class LibraryPaperUpdateResult:
     response: LibraryPaperResponse
     changed: bool
+    content_truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,8 +116,52 @@ class LibraryPaperAttachment:
 
 
 @dataclass(frozen=True, slots=True)
+class LibraryPaperPageAccess:
+    library_entry_id: UUID
+    document_id: UUID
+    revision: str
+    access_url: str | None
+    durable_json_utf8_upper_bound: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class LibraryPaperRemoval:
     created_gc_job_id: UUID | None
+
+
+class LibraryPaperConfirmationState(BaseModel):
+    """Stable sharing fields that deliberately exclude signed presentation URLs."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    library_entry_id: UUID
+    document_id: UUID
+    document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    display_title: str
+    is_public: bool
+    share_token_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryPaperConfirmationPlan:
+    state: LibraryPaperConfirmationState
+
+
+class LibraryPaperRemovalItemState(LibraryPaperConfirmationState):
+    personal_annotation_thread_count: int = Field(ge=0)
+    personal_annotation_comment_count: int = Field(ge=0)
+    personal_annotation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class LibraryPaperRemovalState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[LibraryPaperRemovalItemState, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryPaperRemovalPlan:
+    state: LibraryPaperRemovalState
 
 
 class PaperLibraryGateway(Protocol):
@@ -112,7 +176,22 @@ class PaperLibraryGateway(Protocol):
         limit: int,
         direction: LibraryPageDirection,
         position: LibraryPagePosition | None,
+        include_active_ingestions: bool = True,
+        maximum_retained_bytes: int | None = None,
     ) -> LibraryPaperPage: ...
+
+    def list_summaries(
+        self,
+        *,
+        user_id: int,
+        query: str | None,
+        tag_ids: tuple[UUID, ...],
+        statuses: tuple[PaperStatus, ...],
+        sort: LibraryPaperSort,
+        limit: int,
+        direction: LibraryPageDirection,
+        position: LibraryPagePosition | None,
+    ) -> LibraryPaperSummaryPage: ...
 
     def paper_count(self, *, user_id: int) -> int: ...
 
@@ -120,7 +199,37 @@ class PaperLibraryGateway(Protocol):
 
     def get(self, *, user_id: int, document_id: UUID) -> LibraryPaperResponse: ...
 
+    def get_revision(
+        self, *, user_id: int, document_id: UUID
+    ) -> LibraryPaperPageAccess: ...
+
+    def get_retained_size(
+        self, *, user_id: int, document_id: UUID
+    ) -> LibraryPaperPageAccess: ...
+
+    def confirmation_plan(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+    ) -> LibraryPaperConfirmationPlan: ...
+
+    def removal_plan(
+        self,
+        *,
+        user_id: int,
+        document_ids: tuple[UUID, ...],
+    ) -> LibraryPaperRemovalPlan: ...
+
     def update(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        request: LibraryPaperUpdateRequest,
+    ) -> LibraryPaperUpdateResult: ...
+
+    def update_summary(
         self,
         *,
         user_id: int,
@@ -152,6 +261,8 @@ class PaperLibraryGateway(Protocol):
 
     def public_share(self, *, share_token: str) -> PublicShare: ...
 
+    def resolve_public_document_id(self, *, share_token: str) -> UUID: ...
+
     def find_entry_id(self, *, user_id: int, document_id: UUID) -> UUID | None: ...
 
     def attach(
@@ -173,6 +284,7 @@ class LibraryOutputsGateway(Protocol):
         limit: int,
         direction: LibraryPageDirection,
         position: LibraryPagePosition | None,
+        maximum_payload_json_bytes: int | None = None,
     ) -> LibraryOutputPage: ...
 
     def count(self, *, user_id: int) -> int: ...
@@ -210,21 +322,23 @@ class PaperLibrary:
         sort: LibraryPaperSort = LibraryPaperSort.ADDED_DESC,
         cursor: str | None = None,
         limit: int = 20,
+        include_active_ingestions: bool = True,
+        maximum_retained_bytes: int | None = None,
     ) -> LibraryPaperListResponse:
-        normalized_query = query.strip() if query and query.strip() else None
-        normalized_tags = tuple(sorted(set(tag_ids), key=str))
-        normalized_statuses = tuple(
-            sorted(set(statuses), key=lambda value: value.value)
-        )
-        direction, position = self._decode_cursor(
+        (
+            normalized_query,
+            normalized_tags,
+            normalized_statuses,
+            cursor_filters,
+            direction,
+            position,
+        ) = self._paper_list_request(
             actor=actor,
-            collection="papers",
-            filters={
-                "q": normalized_query,
-                "tag_ids": [str(tag_id) for tag_id in normalized_tags],
-                "statuses": [status.value for status in normalized_statuses],
-                "sort": sort.value,
-            },
+            query=query,
+            tag_ids=tag_ids,
+            statuses=statuses,
+            sort=sort,
+            include_active_ingestions=include_active_ingestions,
             cursor=cursor,
         )
         page = self._gateway.list(
@@ -236,18 +350,15 @@ class PaperLibrary:
             limit=limit,
             direction=direction,
             position=position,
+            include_active_ingestions=include_active_ingestions,
+            maximum_retained_bytes=maximum_retained_bytes,
         )
         return LibraryPaperListResponse(
             items=page.items,
             previous_cursor=self._previous_cursor(
                 actor=actor,
                 collection="papers",
-                filters={
-                    "q": normalized_query,
-                    "tag_ids": [str(tag_id) for tag_id in normalized_tags],
-                    "statuses": [status.value for status in normalized_statuses],
-                    "sort": sort.value,
-                },
+                filters=cursor_filters,
                 page=page,
                 direction=direction,
                 had_position=position is not None,
@@ -255,17 +366,122 @@ class PaperLibrary:
             next_cursor=self._next_cursor(
                 actor=actor,
                 collection="papers",
-                filters={
-                    "q": normalized_query,
-                    "tag_ids": [str(tag_id) for tag_id in normalized_tags],
-                    "statuses": [status.value for status in normalized_statuses],
-                    "sort": sort.value,
-                },
+                filters=cursor_filters,
                 page=page,
                 direction=direction,
                 had_position=position is not None,
             ),
             total_count=page.total_count,
+        )
+
+    def list_summaries(
+        self,
+        *,
+        actor: Actor,
+        query: str | None = None,
+        tag_ids: tuple[UUID, ...] = (),
+        statuses: tuple[PaperStatus, ...] = (),
+        sort: LibraryPaperSort = LibraryPaperSort.ADDED_DESC,
+        cursor: str | None = None,
+        limit: int = 5,
+    ) -> LibraryPaperSummaryList:
+        """Return a durable, cursor-compatible Library summary page."""
+
+        (
+            normalized_query,
+            normalized_tags,
+            normalized_statuses,
+            cursor_filters,
+            direction,
+            position,
+        ) = self._paper_list_request(
+            actor=actor,
+            query=query,
+            tag_ids=tag_ids,
+            statuses=statuses,
+            sort=sort,
+            include_active_ingestions=False,
+            cursor=cursor,
+        )
+        page = self._gateway.list_summaries(
+            user_id=actor.id,
+            query=normalized_query,
+            tag_ids=normalized_tags,
+            statuses=normalized_statuses,
+            sort=sort,
+            limit=limit,
+            direction=direction,
+            position=position,
+        )
+        value = LibraryPaperListResponse(
+            items=page.items,
+            previous_cursor=self._previous_cursor(
+                actor=actor,
+                collection="papers",
+                filters=cursor_filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+            ),
+            next_cursor=self._next_cursor(
+                actor=actor,
+                collection="papers",
+                filters=cursor_filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+            ),
+            total_count=page.total_count,
+        )
+        return LibraryPaperSummaryList(
+            value=value,
+            content_truncated=page.content_truncated,
+        )
+
+    def _paper_list_request(
+        self,
+        *,
+        actor: Actor,
+        query: str | None,
+        tag_ids: tuple[UUID, ...],
+        statuses: tuple[PaperStatus, ...],
+        sort: LibraryPaperSort,
+        include_active_ingestions: bool,
+        cursor: str | None,
+    ) -> tuple[
+        str | None,
+        tuple[UUID, ...],
+        tuple[PaperStatus, ...],
+        dict[str, object],
+        LibraryPageDirection,
+        LibraryPagePosition | None,
+    ]:
+        normalized_query = query.strip() if query and query.strip() else None
+        normalized_tags = tuple(sorted(set(tag_ids), key=str))
+        normalized_statuses = tuple(
+            sorted(set(statuses), key=lambda value: value.value)
+        )
+        cursor_filters: dict[str, object] = {
+            "q": normalized_query,
+            "tag_ids": [str(tag_id) for tag_id in normalized_tags],
+            "statuses": [status.value for status in normalized_statuses],
+            "sort": sort.value,
+        }
+        if not include_active_ingestions:
+            cursor_filters["entry_scope"] = "durable_papers"
+        direction, position = self._decode_cursor(
+            actor=actor,
+            collection="papers",
+            filters=cursor_filters,
+            cursor=cursor,
+        )
+        return (
+            normalized_query,
+            normalized_tags,
+            normalized_statuses,
+            cursor_filters,
+            direction,
+            position,
         )
 
     def list_outputs(
@@ -277,6 +493,7 @@ class PaperLibrary:
         sort: LibraryOutputSort = LibraryOutputSort.UPDATED_DESC,
         cursor: str | None = None,
         limit: int = 20,
+        maximum_payload_json_bytes: int | None = None,
     ) -> LibraryOutputListResponse:
         normalized_query = query.strip() if query and query.strip() else None
         normalized_kinds = tuple(sorted(set(kinds), key=lambda value: value.value))
@@ -299,6 +516,7 @@ class PaperLibrary:
             limit=limit,
             direction=direction,
             position=position,
+            maximum_payload_json_bytes=maximum_payload_json_bytes,
         )
         return LibraryOutputListResponse(
             items=page.items,
@@ -335,6 +553,44 @@ class PaperLibrary:
     def get(self, *, actor: Actor, document_id: UUID) -> LibraryPaperResponse:
         return self._gateway.get(user_id=actor.id, document_id=document_id)
 
+    def authorize_revision(
+        self, *, actor: Actor, document_id: UUID
+    ) -> LibraryPaperPageAccess:
+        return self._gateway.get_revision(
+            user_id=actor.id,
+            document_id=document_id,
+        )
+
+    def authorize_retained_size(
+        self, *, actor: Actor, document_id: UUID
+    ) -> LibraryPaperPageAccess:
+        return self._gateway.get_retained_size(
+            user_id=actor.id,
+            document_id=document_id,
+        )
+
+    def confirmation_plan(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+    ) -> LibraryPaperConfirmationPlan:
+        return self._gateway.confirmation_plan(
+            user_id=actor.id,
+            document_id=document_id,
+        )
+
+    def removal_plan(
+        self,
+        *,
+        actor: Actor,
+        document_ids: Sequence[UUID],
+    ) -> LibraryPaperRemovalPlan:
+        return self._gateway.removal_plan(
+            user_id=actor.id,
+            document_ids=tuple(document_ids),
+        )
+
     def update(
         self,
         *,
@@ -349,19 +605,55 @@ class PaperLibrary:
             request=request,
         )
         if result.changed:
-            self._journal.append(
+            self._record_update(
                 actor=actor,
                 operation=operation,
-                action=LIBRARY_PAPER_UPDATED,
-                resources=(
-                    ResourceRef(type="document", id=str(document_id)),
-                    ResourceRef(
-                        type="library_paper",
-                        id=str(result.response.library_entry_id),
-                    ),
-                ),
+                document_id=document_id,
+                library_entry_id=result.response.library_entry_id,
             )
         return result.response
+
+    def update_summary(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        document_id: UUID,
+        request: LibraryPaperUpdateRequest,
+    ) -> LibraryPaperUpdateResult:
+        """Update a Library row and return the SQL-bounded MCP projection."""
+
+        result = self._gateway.update_summary(
+            user_id=actor.id,
+            document_id=document_id,
+            request=request,
+        )
+        if result.changed:
+            self._record_update(
+                actor=actor,
+                operation=operation,
+                document_id=document_id,
+                library_entry_id=result.response.library_entry_id,
+            )
+        return result
+
+    def _record_update(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        document_id: UUID,
+        library_entry_id: UUID,
+    ) -> None:
+        self._journal.append(
+            actor=actor,
+            operation=operation,
+            action=LIBRARY_PAPER_UPDATED,
+            resources=(
+                ResourceRef(type="document", id=str(document_id)),
+                ResourceRef(type="library_paper", id=str(library_entry_id)),
+            ),
+        )
 
     def share(
         self,
@@ -483,14 +775,30 @@ class PaperLibrary:
         if cursor is None:
             return LibraryPageDirection.FORWARD, None
         try:
-            direction, key, item_id = self._cursors.decode_keyset(
-                cursor=cursor,
-                fingerprint=self._cursor_binding(actor, collection, filters),
-                arity=3,
+            try:
+                direction, kind, key, item_id = self._cursors.decode_keyset(
+                    cursor=cursor,
+                    fingerprint=self._cursor_binding(actor, collection, filters),
+                    arity=4,
+                )
+            except AppError as current_error:
+                try:
+                    direction, key, item_id = self._cursors.decode_keyset(
+                        cursor=cursor,
+                        fingerprint=self._cursor_binding(actor, collection, filters),
+                        arity=3,
+                    )
+                except AppError:
+                    raise current_error
+                kind = "paper"
+            if kind not in {"ingestion", "paper"}:
+                raise ValueError("unknown Library page position kind")
+            position_kind: Literal["ingestion", "paper"] = (
+                "ingestion" if kind == "ingestion" else "paper"
             )
             return (
                 LibraryPageDirection(direction),
-                LibraryPagePosition(key=key, id=UUID(item_id)),
+                LibraryPagePosition(key=key, id=UUID(item_id), kind=position_kind),
             )
         except (TypeError, ValueError) as error:
             raise AppError(
@@ -510,7 +818,12 @@ class PaperLibrary:
     ) -> str:
         return self._cursors.encode_keyset(
             fingerprint=self._cursor_binding(actor, collection, filters),
-            values=(direction.value, position.key, str(position.id)),
+            values=(
+                direction.value,
+                position.kind,
+                position.key,
+                str(position.id),
+            ),
         )
 
     def _previous_cursor(
@@ -519,7 +832,7 @@ class PaperLibrary:
         actor: Actor,
         collection: str,
         filters: Mapping[str, object],
-        page: LibraryPaperPage | LibraryOutputPage,
+        page: LibraryPaperPage | LibraryPaperSummaryPage | LibraryOutputPage,
         direction: LibraryPageDirection,
         had_position: bool,
     ) -> str | None:
@@ -546,7 +859,7 @@ class PaperLibrary:
         actor: Actor,
         collection: str,
         filters: Mapping[str, object],
-        page: LibraryPaperPage | LibraryOutputPage,
+        page: LibraryPaperPage | LibraryPaperSummaryPage | LibraryOutputPage,
         direction: LibraryPageDirection,
         had_position: bool,
     ) -> str | None:
@@ -605,21 +918,21 @@ class PaperLibrary:
         operation: OperationContext,
         share_token: str,
     ) -> CollectPublicPaperResponse:
-        shared = self._gateway.public_share(share_token=share_token)
+        document_id = self._gateway.resolve_public_document_id(share_token=share_token)
         existing_id = self._gateway.find_entry_id(
             user_id=actor.id,
-            document_id=shared.document_id,
+            document_id=document_id,
         )
         if existing_id is not None:
             return CollectPublicPaperResponse(
-                document_id=shared.document_id,
+                document_id=document_id,
                 library_entry_id=existing_id,
                 already_exists=True,
             )
-        self._capacity.require(actor=actor, document_id=shared.document_id)
+        self._capacity.require(actor=actor, document_id=document_id)
         attached = self._gateway.attach(
             user_id=actor.id,
-            document_id=shared.document_id,
+            document_id=document_id,
         )
         if attached.created:
             self._journal.append(
@@ -627,7 +940,7 @@ class PaperLibrary:
                 operation=operation,
                 action=LIBRARY_PAPER_COLLECTED,
                 resources=(
-                    ResourceRef(type="document", id=str(shared.document_id)),
+                    ResourceRef(type="document", id=str(document_id)),
                     ResourceRef(
                         type="library_paper",
                         id=str(attached.library_entry_id),
@@ -635,7 +948,7 @@ class PaperLibrary:
                 ),
             )
         return CollectPublicPaperResponse(
-            document_id=shared.document_id,
+            document_id=document_id,
             library_entry_id=attached.library_entry_id,
             already_exists=not attached.created,
         )

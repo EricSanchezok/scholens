@@ -145,6 +145,13 @@ remain authoritative, and orphan cleanup is scheduled outside the request
 transaction. The same removal transaction deletes annotation threads created
 by that user with personal audience and the removed Document as their target.
 It never deletes Project-audience threads or another user's annotations.
+Batch removal takes row locks in the canonical dependency order `Document` →
+`LibraryPaper` → `ResearchItem` → `AnnotationThread` → `AnnotationComment`, with
+UUID/primary-key ordering inside each relation. Its confirmation state streams
+only IDs and revision timestamps into per-Document counts and a rolling digest;
+it never materializes comment bodies or the complete annotation graph. The
+confirmed mutation retains those locks through membership deletion and orphan
+GC scheduling, so the preview and mutation share one live-state transaction.
 
 `PaperTag` owns a user-scoped label name. Renaming or deleting it is authorized
 against that owner; deletion cascades only its Library Paper assignments.

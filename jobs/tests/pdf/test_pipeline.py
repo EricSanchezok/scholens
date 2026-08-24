@@ -262,6 +262,34 @@ def test_digital_pdf_uses_pymupdf4llm_full(
     assert f"documents/{'a' * 64}/canonical.md" in uploaded
 
 
+def test_repair_artifacts_are_versioned_without_overwriting_canonical_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uploaded: list[str] = []
+    _patch_s3(monkeypatch, uploaded)
+
+    result = asyncio.run(
+        process_pdf_file(
+            _digital_pdf(),
+            f"documents/{'8' * 64}/source.pdf",
+            "4fcb77cc-2dc3-4c8f-b33d-85e2c196ad68",
+            status_callback=lambda _status: None,
+            skip_metadata_extraction=True,
+            repair_revision="unicode-replacement-v1",
+        )
+    )
+
+    prefix = (
+        f"documents/{'8' * 64}/repairs/unicode-replacement-v1/"
+        "4fcb77cc-2dc3-4c8f-b33d-85e2c196ad68"
+    )
+    assert result.success
+    assert result.preview_s3_key is None
+    assert result.parser_markdown_s3_key == f"{prefix}/canonical.md"
+    assert f"documents/{'8' * 64}/canonical.md" not in uploaded
+    assert uploaded == [f"{prefix}/canonical.md"]
+
+
 def test_pymupdf4llm_failure_falls_back_to_markitdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -292,6 +320,94 @@ def test_pymupdf4llm_failure_falls_back_to_markitdown(
     assert result.parser_backend == "markitdown"
     assert result.parser_quality == "text_only"
     assert result.parser_warning_code == "markitdown_fallback"
+
+
+def test_unicode_replacement_triggers_clean_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = "shared paper evidence about multilingual retrieval. " * 80
+    contaminated = ParsedDocument(
+        markdown=evidence + "damaged \ufffd equation",
+        page_offset_map={1: [0, len(evidence) + 18]},
+        backend=ParserBackend.PYMUPDF4LLM,
+        quality=ParserQuality.FULL,
+        parser_version="primary-test",
+    )
+    clean_fallback = ParsedDocument(
+        markdown=evidence + "repaired λ equation",
+        page_offset_map={1: [0, len(evidence) + 19]},
+        backend=ParserBackend.MARKITDOWN,
+        quality=ParserQuality.TEXT_ONLY,
+        parser_version="fallback-test",
+        warning_code="markitdown_fallback",
+    )
+    monkeypatch.setattr(
+        "src.pdf.pipeline.extract_markdown_pymupdf4llm",
+        lambda _path, **_: contaminated,
+    )
+    monkeypatch.setattr(
+        "src.pdf.pipeline.extract_markdown_markitdown",
+        lambda _path, **_: clean_fallback,
+    )
+    _patch_s3(monkeypatch, [])
+    _patch_metadata(monkeypatch, "Fallback paper")
+
+    result = asyncio.run(
+        process_pdf_file(
+            _digital_pdf(),
+            f"documents/{'f' * 64}/source.pdf",
+            "job-1",
+            status_callback=lambda _status: None,
+        )
+    )
+
+    assert result.success
+    assert result.raw_content == clean_fallback.markdown
+    assert result.parser_backend == "markitdown"
+    assert result.parser_quality == "text_only"
+    assert result.parser_warning_code == "markitdown_fallback"
+
+
+def test_contaminated_mineru_output_is_preserved_and_downgraded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _ContaminatedMinerUClient(_FakeMinerUClient):
+        async def parse_file(
+            self,
+            _pdf_bytes: bytes,
+            *,
+            data_id: str,
+            deadline: float | None = None,
+        ) -> ParsedDocument:
+            del data_id, deadline
+            source = _full_mineru_document()
+            return ParsedDocument(
+                markdown=source.markdown + "\ufffd",
+                page_offset_map=source.page_offset_map,
+                backend=source.backend,
+                quality=source.quality,
+                parser_version=source.parser_version,
+                archive_bytes=source.archive_bytes,
+            )
+
+    monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _ContaminatedMinerUClient)
+    _patch_s3(monkeypatch, [])
+    _patch_metadata(monkeypatch, "Scanned paper")
+
+    result = asyncio.run(
+        process_pdf_file(
+            _scanned_pdf(),
+            f"documents/{'9' * 64}/source.pdf",
+            "job-1",
+            status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
+        )
+    )
+
+    assert result.success
+    assert result.raw_content is not None and "\ufffd" in result.raw_content
+    assert result.parser_quality == "text_only"
+    assert result.parser_warning_code == "unicode_replacement_detected"
 
 
 def test_local_failure_rescues_via_mineru_with_archive(
@@ -527,3 +643,46 @@ def test_pdf_processing_result_rejects_half_success() -> None:
 
     with pytest.raises(ValueError, match="error code"):
         PDFProcessingResult(success=False, job_id="job-1")
+
+
+def test_pdf_processing_result_rejects_parser_fields_above_shared_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholens_job_contracts import callbacks
+
+    monkeypatch.setattr(callbacks, "MAX_PDF_CALLBACK_RAW_CONTENT_BYTES", 8)
+
+    with pytest.raises(ValueError, match="raw_content_too_large"):
+        PDFProcessingResult(
+            success=True,
+            job_id="job-1",
+            raw_content="论文论",
+            page_offset_map={1: [0, 3]},
+            parser_backend="pymupdf4llm",
+            parser_quality="full",
+            parser_version="test",
+        )
+
+
+@pytest.mark.parametrize(
+    "page_offset_map",
+    [
+        {0: [0, 1]},
+        {1: [0]},
+        {1: [False, 1]},
+        {1: [0, 2], 2: [1, 3]},
+    ],
+)
+def test_pdf_processing_result_rejects_invalid_page_offsets(
+    page_offset_map: dict[int, list[int]],
+) -> None:
+    with pytest.raises(ValueError, match="page_offset_map_invalid"):
+        PDFProcessingResult(
+            success=True,
+            job_id="job-1",
+            raw_content="abc",
+            page_offset_map=page_offset_map,
+            parser_backend="pymupdf4llm",
+            parser_quality="full",
+            parser_version="test",
+        )

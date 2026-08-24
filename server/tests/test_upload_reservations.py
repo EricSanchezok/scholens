@@ -165,14 +165,15 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
     project_id = uuid4()
     project = Project(id=project_id, title="Shared corpus", owner_id=91)
     db = MagicMock()
-    db.scalar.side_effect = [project, None, 0, 3]
+    db.scalar.side_effect = [None, 0, 3]
     requester = MagicMock(id=17)
     durable_job = _durable_job(requester_id=17, project_id=project_id)
     patches = _quota_patches()
 
     with (
         patch(
-            "app.bootstrap.adapters.upload_reservations.require_project_permission"
+            "app.bootstrap.adapters.upload_reservations.require_project_permission_for_update",
+            return_value=SimpleNamespace(project=project),
         ) as permission,
         patch(
             "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
@@ -299,10 +300,13 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
     document_id = uuid4()
     project = Project(id=project_id, title="Full project", owner_id=91)
     db = MagicMock()
-    db.scalar.side_effect = [project, document_id, 0, 0, 300]
+    db.scalar.side_effect = [document_id, 0, 0, 300]
     patches = _quota_patches()
     with (
-        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.require_project_permission_for_update",
+            return_value=SimpleNamespace(project=project),
+        ),
         patch(
             "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
             return_value=0,
@@ -464,7 +468,10 @@ def test_idempotency_key_rejects_changed_library_intent() -> None:
     db.get.return_value = reservation
 
     with (
-        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.require_project_permission_for_update",
+            return_value=SimpleNamespace(project=project),
+        ),
         patch("app.bootstrap.adapters.upload_reservations.lock_account_resource_quota"),
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.find_by_idempotency_key",
@@ -499,6 +506,12 @@ def _run_transfer(
 ) -> tuple[MagicMock, MagicMock]:
     db = MagicMock()
     db.scalar.side_effect = [1, 0]
+    reservations_by_id = {
+        reservation.id: reservation for reservation, _job in active_rows
+    }
+    db.get.side_effect = lambda model, item_id: (
+        reservations_by_id.get(item_id) if model is UploadReservation else None
+    )
     completed_documents = MagicMock(
         side_effect=[old_documents or [], new_documents or []]
     )
@@ -678,13 +691,16 @@ def test_project_upload_with_add_to_library_false_skips_library_billing() -> Non
     project_id = uuid4()
     project = Project(id=project_id, title="Shared corpus", owner_id=91)
     db = MagicMock()
-    db.scalar.side_effect = [project, None, 0, 3]
+    db.scalar.side_effect = [None, 0, 3]
     requester = MagicMock(id=17)
     durable_job = _durable_job(requester_id=17, project_id=project_id)
     patches = _quota_patches()
 
     with (
-        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.require_project_permission_for_update",
+            return_value=SimpleNamespace(project=project),
+        ),
         patch(
             "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
             return_value=0,
@@ -728,13 +744,16 @@ def test_owner_uploading_to_own_project_is_not_library_billed_twice() -> None:
     project_id = uuid4()
     project = Project(id=project_id, title="Own project", owner_id=17)
     db = MagicMock()
-    db.scalar.side_effect = [project, None, 0, 3]
+    db.scalar.side_effect = [None, 0, 3]
     requester = MagicMock(id=17)
     durable_job = _durable_job(requester_id=17, project_id=project_id)
     patches = _quota_patches()
 
     with (
-        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.require_project_permission_for_update",
+            return_value=SimpleNamespace(project=project),
+        ),
         patch(
             "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
             return_value=0,

@@ -6,7 +6,7 @@ import os
 
 from celery import Celery
 from dotenv import load_dotenv
-from scholens_job_contracts import JobQueue
+from scholens_job_contracts import JobQueue, PDF_TEXT_REPAIR_TASK_NAME
 
 from src.observability import configure_jobs_observability
 from src.pdf import validate_pdf_runtime_configuration
@@ -67,6 +67,7 @@ celery_app.conf.update(
     task_default_queue=JobQueue.MAINTENANCE,
     task_routes={
         "upload_and_process_file": {"queue": JobQueue.DOCUMENT},
+        PDF_TEXT_REPAIR_TASK_NAME: {"queue": JobQueue.DOCUMENT},
         "postprocess_pdf": {"queue": JobQueue.DOCUMENT},
         "generate_document_reflow": {"queue": JobQueue.DOCUMENT},
         "generate_audio_overview": {"queue": JobQueue.RESEARCH},

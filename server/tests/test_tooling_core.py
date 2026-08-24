@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TypeVar
@@ -37,9 +38,13 @@ from app.tooling import (
     ToolDispatcher,
     ToolExecutionKind,
     ToolOutcome,
+    ToolOutcomeFinalizer,
     ToolProfile,
+    serialize_tool_success,
 )
+from app.tooling.contracts import DEFAULT_TOOL_OUTPUT_BYTES
 from app.tooling.invocations import ToolInvocationGateway
+from app.tooling.results import persisted_tool_outcome, restore_tool_outcome
 from app.tooling.workspace import (
     CONVERSATION_TOOL_PROFILE,
     MCP_TOOL_PROFILE,
@@ -300,7 +305,9 @@ async def test_async_query_dispatches_without_invocation_persistence() -> None:
         context: ToolExecutionContext,
         arguments: BaseModel,
         invocation_key: str,
+        finalize_outcome: ToolOutcomeFinalizer,
     ) -> ToolOutcome:
+        del finalize_outcome
         parsed = Arguments.model_validate(arguments)
         calls.append((parsed.value, invocation_key))
         return ToolOutcome(payload={"value": parsed.value})
@@ -336,6 +343,82 @@ async def test_async_query_dispatches_without_invocation_persistence() -> None:
     assert executor.queries == 0
     assert executor.commands == 0
     assert capabilities.tool_invocations.items == {}
+
+
+@pytest.mark.asyncio
+async def test_workflow_finalizer_projects_once_before_atomic_receipt() -> None:
+    capabilities = Capabilities(MemoryInvocationGateway())
+    executor = Executor(capabilities)
+    projector_calls: list[str] = []
+
+    def projector(outcome: ToolOutcome) -> ToolOutcome:
+        parsed = Arguments.model_validate(outcome.payload)
+        projector_calls.append(parsed.value)
+        return replace(outcome, payload={"value": f"{parsed.value}-projected"})
+
+    async def workflow(
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+        invocation_key: str,
+        finalize_outcome: ToolOutcomeFinalizer,
+    ) -> ToolOutcome:
+        parsed = Arguments.model_validate(arguments)
+
+        def transact(current: Capabilities) -> ToolOutcome:
+            current.writes += 1
+            outcome = finalize_outcome(ToolOutcome(payload={"value": parsed.value}))
+            current.tool_invocations.complete(
+                actor_id=context.actor.id,
+                operation_id=context.operation.trace.operation_id,
+                invocation_key=invocation_key,
+                tool_name="atomic_workflow",
+                arguments_hash="test-hash",
+                result=persisted_tool_outcome(outcome),
+            )
+            return outcome
+
+        return executor.command(transact)
+
+    definition = ToolDefinition[Capabilities](
+        name="atomic_workflow",
+        description="atomic workflow",
+        input_model=Arguments,
+        output_model=Arguments,
+        execution=ToolExecutionKind.WORKFLOW,
+        required_permission=WorkspacePermission.WRITE,
+        persist_result=False,
+        outcome_projector=projector,
+        workflow_handler=workflow,
+    )
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation",
+                    tool_names=frozenset({"atomic_workflow"}),
+                )
+            ],
+        ),
+        executor=executor,
+    )
+    context = _context()
+
+    outcome = await dispatcher.dispatch(
+        name="atomic_workflow",
+        raw_arguments={"value": "raw"},
+        context=context,
+        access=_access(),
+    )
+
+    assert outcome.payload == {"value": "raw-projected"}
+    assert projector_calls == ["raw"]
+    assert capabilities.writes == 1
+    stored = capabilities.tool_invocations.items[
+        (context.actor.id, f"{context.invocation_id}:atomic_workflow")
+    ][2]
+    assert isinstance(stored, dict)
+    assert stored["payload"] == {"value": "raw-projected"}
 
 
 @pytest.mark.asyncio
@@ -413,6 +496,376 @@ async def test_command_dispatch_is_persistently_replayed() -> None:
         )
     assert conflict.value.code == "tool_invocation_conflict"
     assert capabilities.writes == 1
+
+
+@pytest.mark.asyncio
+async def test_outcome_projector_sanitizes_fresh_and_legacy_replayed_results() -> None:
+    def write(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del context
+        capabilities.writes += 1
+        parsed = Arguments.model_validate(arguments)
+        return ToolOutcome(
+            payload={"value": parsed.value, "raw_content": "fresh-secret"},
+            action={"kind": "write", "result": {"secret": "fresh-secret"}},
+        )
+
+    def project(outcome: ToolOutcome) -> ToolOutcome:
+        return replace(
+            outcome,
+            payload={"value": "safe"},
+            action={"kind": "write"},
+        )
+
+    definition = ToolDefinition[Capabilities](
+        name="projected_tool",
+        description="projected write",
+        input_model=Arguments,
+        output_model=Arguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.WRITE,
+        outcome_projector=project,
+        handler=write,
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation", tool_names=frozenset({"projected_tool"})
+                )
+            ],
+        ),
+        executor=Executor(capabilities),
+    )
+    context = _context()
+
+    first = await dispatcher.dispatch(
+        name="projected_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+    ledger_key = (context.actor.id, f"{context.invocation_id}:projected_tool")
+    stored_name, stored_hash, _stored_result = capabilities.tool_invocations.items[
+        ledger_key
+    ]
+    capabilities.tool_invocations.items[ledger_key] = (
+        stored_name,
+        stored_hash,
+        {
+            "payload": {
+                "value": "legacy",
+                "raw_content": "legacy-secret" * 100_000,
+            },
+            "sources": [],
+            "artifacts": [],
+            "action": {
+                "kind": "write",
+                "result": {"secret": "legacy-secret" * 100_000},
+            },
+            "resource_links": [],
+        },
+    )
+    replayed = await dispatcher.dispatch(
+        name="projected_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+
+    assert first.payload == {"value": "safe"}
+    assert replayed.payload == {"value": "safe"}
+    assert replayed.action == {"kind": "write"}
+    assert (
+        serialize_tool_success(replayed).call_tool_result_utf8_bytes
+        <= DEFAULT_TOOL_OUTPUT_BYTES
+    )
+    assert capabilities.writes == 1
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_a_result_over_its_utf8_byte_budget() -> None:
+    outcome = ToolOutcome(payload={"value": "界" * 16})
+    canonical_payload_bytes = len(
+        json.dumps(
+            {
+                "result": outcome.payload,
+                "sources": [],
+                "artifacts": [],
+                "action": None,
+                "resource_links": [],
+            },
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    definition = ToolDefinition[Capabilities](
+        name="bounded_tool",
+        description="bounded query",
+        input_model=Arguments,
+        execution=ToolExecutionKind.QUERY,
+        required_permission=WorkspacePermission.READ,
+        max_output_bytes=canonical_payload_bytes + 1,
+        replacement_tool="bounded_tool_page",
+        handler=lambda capabilities, context, arguments: outcome,
+    )
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [ToolProfile(name="conversation", tool_names=frozenset({"bounded_tool"}))],
+        ),
+        executor=Executor(Capabilities(MemoryInvocationGateway())),
+    )
+
+    with pytest.raises(AppError) as error:
+        await dispatcher.dispatch(
+            name="bounded_tool",
+            raw_arguments={"value": "ignored"},
+            context=_context(),
+            access=_access(),
+        )
+
+    assert error.value.code == "tool_result_budget_exceeded"
+    assert error.value.kind is FailureKind.INTERNAL
+    assert error.value.retryable is False
+    assert error.value.details == {
+        "tool": "bounded_tool",
+        "max_output_bytes": canonical_payload_bytes + 1,
+        "replacement_tool": "bounded_tool_page",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        ToolOutcome(payload={"score": float("nan")}),
+        ToolOutcome(payload={}, artifacts=[{"score": float("inf")}]),
+        ToolOutcome(payload={}, action={"score": float("-inf")}),
+        ToolOutcome(
+            payload={},
+            sources=(
+                DocumentSourceCandidate(
+                    document_id=UUID("11111111-1111-1111-1111-111111111111"),
+                    excerpt="evidence",
+                    locator={"score": float("nan")},
+                ),
+            ),
+        ),
+        ToolOutcome(payload={"value": "\ud800"}),
+        ToolOutcome(payload={"\udfff": "invalid key"}),
+    ],
+)
+async def test_dispatcher_rejects_non_json_values_anywhere_in_a_success(
+    outcome: ToolOutcome,
+) -> None:
+    definition = ToolDefinition[Capabilities](
+        name="strict_result",
+        description="strict result",
+        input_model=Arguments,
+        execution=ToolExecutionKind.QUERY,
+        required_permission=WorkspacePermission.READ,
+        handler=lambda capabilities, context, arguments: outcome,
+    )
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [ToolProfile(name="conversation", tool_names=frozenset({"strict_result"}))],
+        ),
+        executor=Executor(Capabilities(MemoryInvocationGateway())),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await dispatcher.dispatch(
+            name="strict_result",
+            raw_arguments={"value": "ignored"},
+            context=_context(),
+            access=_access(),
+        )
+
+    assert exc_info.value.code == "tool_result_invalid"
+    assert exc_info.value.details == {"tool": "strict_result"}
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_nonfinite_tool_arguments_before_execution() -> None:
+    class NumericArguments(BaseModel):
+        value: float
+
+    executed = False
+
+    def handle(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del capabilities, context, arguments
+        nonlocal executed
+        executed = True
+        return ToolOutcome(payload={})
+
+    definition = ToolDefinition[Capabilities](
+        name="strict_arguments",
+        description="strict arguments",
+        input_model=NumericArguments,
+        execution=ToolExecutionKind.QUERY,
+        required_permission=WorkspacePermission.READ,
+        handler=handle,
+    )
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation",
+                    tool_names=frozenset({"strict_arguments"}),
+                )
+            ],
+        ),
+        executor=Executor(Capabilities(MemoryInvocationGateway())),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await dispatcher.dispatch(
+            name="strict_arguments",
+            raw_arguments={"value": float("nan")},
+            context=_context(),
+            access=_access(),
+        )
+
+    assert exc_info.value.code == "tool_arguments_invalid"
+    assert executed is False
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_unpaired_surrogate_argument_before_execution() -> (
+    None
+):
+    executed = False
+
+    def handle(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del capabilities, context, arguments
+        nonlocal executed
+        executed = True
+        return ToolOutcome(payload={})
+
+    definition = ToolDefinition[Capabilities](
+        name="strict_unicode_arguments",
+        description="strict unicode arguments",
+        input_model=Arguments,
+        execution=ToolExecutionKind.QUERY,
+        required_permission=WorkspacePermission.READ,
+        handler=handle,
+    )
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation",
+                    tool_names=frozenset({"strict_unicode_arguments"}),
+                )
+            ],
+        ),
+        executor=Executor(Capabilities(MemoryInvocationGateway())),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await dispatcher.dispatch(
+            name="strict_unicode_arguments",
+            raw_arguments={"value": "\ud800"},
+            context=_context(),
+            access=_access(),
+        )
+
+    assert exc_info.value.code == "tool_arguments_invalid"
+    assert executed is False
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_a_nonfinite_persisted_replay() -> None:
+    def write(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del context, arguments
+        capabilities.writes += 1
+        return ToolOutcome(payload={"value": "safe"})
+
+    definition = ToolDefinition[Capabilities](
+        name="strict_replay",
+        description="strict replay",
+        input_model=Arguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.WRITE,
+        handler=write,
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [ToolProfile(name="conversation", tool_names=frozenset({"strict_replay"}))],
+        ),
+        executor=Executor(capabilities),
+    )
+    context = _context()
+    await dispatcher.dispatch(
+        name="strict_replay",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access("conversation", WorkspacePermission.WRITE),
+    )
+    ledger_key = (context.actor.id, f"{context.invocation_id}:strict_replay")
+    stored_name, stored_hash, _ = capabilities.tool_invocations.items[ledger_key]
+    capabilities.tool_invocations.items[ledger_key] = (
+        stored_name,
+        stored_hash,
+        {
+            "payload": {"score": float("nan")},
+            "sources": [],
+            "artifacts": [],
+            "action": None,
+            "resource_links": [],
+        },
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await dispatcher.dispatch(
+            name="strict_replay",
+            raw_arguments={"value": "same"},
+            context=context,
+            access=_access("conversation", WorkspacePermission.WRITE),
+        )
+
+    assert exc_info.value.code == "tool_invocation_result_invalid"
+    assert capabilities.writes == 1
+
+
+def test_restore_rejects_a_malformed_persisted_resource_link() -> None:
+    with pytest.raises(AppError) as exc_info:
+        restore_tool_outcome(
+            {
+                "payload": {},
+                "sources": [],
+                "artifacts": [],
+                "action": None,
+                "resource_links": [{}],
+            }
+        )
+
+    assert exc_info.value.code == "tool_invocation_result_invalid"
+    assert exc_info.value.kind is FailureKind.DEPENDENCY_FAILURE
 
 
 @pytest.mark.asyncio
@@ -529,8 +982,8 @@ def test_workspace_profiles_share_one_canonical_definition_set() -> None:
     assert set(conversation_by_name) - set(mcp_by_name) == {"wait_for_jobs"}
     assert "STOP" not in conversation_by_name
     assert "read_file" not in conversation_by_name
-    assert len(conversation_by_name) == 57
-    assert len(mcp_by_name) == 57
+    assert len(conversation_by_name) == 63
+    assert len(mcp_by_name) == 63
     assert mcp_by_name["resolve_paper_citation"].execution is ToolExecutionKind.WORKFLOW
     for name in set(conversation_by_name) & set(mcp_by_name):
         conversation_tool = conversation_by_name[name]

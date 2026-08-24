@@ -29,7 +29,9 @@ class _Jobs:
         self._transitions = transitions
         self.calls: list[tuple[UUID, ...]] = []
 
-    def get_many(self, *, actor: Actor, job_ids: tuple[UUID, ...]) -> list[JobResponse]:
+    def get_many_statuses(
+        self, *, actor: Actor, job_ids: tuple[UUID, ...]
+    ) -> list[JobResponse]:
         assert actor.id == 7
         self.calls.append(job_ids)
         return [
@@ -103,6 +105,7 @@ async def test_wait_for_one_returns_immediately_when_terminal() -> None:
     assert result.wait.outcome == "completed"
     assert result.wait.next_action == "use_result"
     assert result.wait.elapsed_ms == 0
+    assert result.result is None
     assert jobs.calls == [(job_id,)]
 
 

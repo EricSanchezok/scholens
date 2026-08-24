@@ -69,6 +69,9 @@ change what the accepted record decided.
 - [ADR 0035: Installable Web App as the first mobile distribution boundary](./0035-installable-web-app-mobile-distribution.md)
 - [ADR 0036: Validated Conversation final output](./0036-validated-conversation-final-output.md)
 - [ADR 0037: Registry intake without a second UI system](./0037-registry-intake-without-a-second-ui-system.md)
+- [ADR 0038: Bounded MCP public projections and lossless continuation](./0038-bounded-mcp-public-projections.md)
+- [ADR 0039: Versioned PDF text repair without destructive re-ingestion](./0039-versioned-pdf-text-repair.md)
+- [ADR 0040: Versioned migration for bounded MCP reads](./0040-versioned-mcp-bounded-read-migration.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

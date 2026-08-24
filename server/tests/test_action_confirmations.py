@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from enum import StrEnum
+from uuid import UUID, uuid4
 
 import pytest
 from app.modules.action_confirmations.application import (
@@ -25,6 +26,7 @@ from app.shared.application import (
     RequestReference,
 )
 from app.shared.domain import AppError, JsonValue
+from pydantic import BaseModel
 
 
 @dataclass
@@ -114,6 +116,112 @@ def _impact() -> ActionImpact:
         consequences=["Project-scoped annotations are removed."],
         affected_resources=["project:example"],
     )
+
+
+class ConfirmationStateKind(StrEnum):
+    PROJECT = "project"
+
+
+class ConfirmationStateModel(BaseModel):
+    id: UUID
+    updated_at: datetime
+    kind: ConfirmationStateKind
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            {"project_id": "example"},
+            "2dad970e6bb0c8122308e99ebf340a86b0711eeb775f75f7337c6394e6c8e1dc",
+        ),
+        (
+            {"revision": 3},
+            "59adfccabbcc7c0fdfae1b37b93f057a55f041e04476756bda7c37d565d1bf1c",
+        ),
+        (
+            ConfirmationStateModel(
+                id=UUID("11111111-1111-1111-1111-111111111111"),
+                updated_at=datetime(2026, 8, 24, tzinfo=UTC),
+                kind=ConfirmationStateKind.PROJECT,
+            ),
+            "f2b0ca00892ddb2440c7e18be44739bb0992aa84f3a884093e06fc455d371e9e",
+        ),
+    ],
+)
+def test_confirmation_digest_preserves_existing_golden_values(
+    value: object,
+    expected: str,
+) -> None:
+    assert confirmation_digest(value) == expected
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        pytest.param(
+            {
+                "project": ConfirmationStateModel(
+                    id=UUID("11111111-1111-1111-1111-111111111111"),
+                    updated_at=datetime(2026, 8, 24, tzinfo=UTC),
+                    kind=ConfirmationStateKind.PROJECT,
+                ),
+                "email": "collaborator@example.com",
+            },
+            id="create-project-invitation",
+        ),
+        pytest.param(
+            {
+                "project": ConfirmationStateModel(
+                    id=UUID("11111111-1111-1111-1111-111111111111"),
+                    updated_at=datetime(2026, 8, 24, tzinfo=UTC),
+                    kind=ConfirmationStateKind.PROJECT,
+                ),
+                "target": ConfirmationStateModel(
+                    id=UUID("22222222-2222-2222-2222-222222222222"),
+                    updated_at=datetime(2026, 8, 24, 1, tzinfo=UTC),
+                    kind=ConfirmationStateKind.PROJECT,
+                ),
+            },
+            id="transfer-project-ownership",
+        ),
+        pytest.param(
+            {
+                "project": ConfirmationStateModel(
+                    id=UUID("11111111-1111-1111-1111-111111111111"),
+                    updated_at=datetime(2026, 8, 24, tzinfo=UTC),
+                    kind=ConfirmationStateKind.PROJECT,
+                ),
+                "threads": [
+                    ConfirmationStateModel(
+                        id=UUID("33333333-3333-3333-3333-333333333333"),
+                        updated_at=datetime(2026, 8, 24, 2, tzinfo=UTC),
+                        kind=ConfirmationStateKind.PROJECT,
+                    )
+                ],
+            },
+            id="remove-paper-from-project",
+        ),
+        pytest.param(
+            [
+                ConfirmationStateModel(
+                    id=UUID("44444444-4444-4444-4444-444444444444"),
+                    updated_at=datetime(2026, 8, 24, 3, tzinfo=UTC),
+                    kind=ConfirmationStateKind.PROJECT,
+                )
+            ],
+            id="remove-library-papers",
+        ),
+    ],
+)
+def test_confirmation_digest_supports_nested_live_state_models(
+    state: object,
+) -> None:
+    first = confirmation_digest(state)
+    second = confirmation_digest(state)
+
+    assert first == second
+    assert len(first) == 64
 
 
 def test_confirmation_is_hashed_bound_and_single_use() -> None:

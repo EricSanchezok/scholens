@@ -160,13 +160,16 @@ def _repair_command(
     command_name: str,
     method_name: str,
     help_text: str,
+    *,
+    max_batch_size: int = 5000,
+    default_batch_size: int = 100,
 ) -> click.Command:
     @click.command(command_name, cls=OutputGroup.command_class, help=help_text)
     @click.option("--actor-email", required=True, callback=email_callback)
     @click.option(
         "--batch-size",
-        type=click.IntRange(1, 5000),
-        default=100,
+        type=click.IntRange(1, max_batch_size),
+        default=default_batch_size,
         show_default=True,
         help="Maximum rows processed in this invocation and transaction.",
     )
@@ -205,6 +208,17 @@ maintenance_group.add_command(
         "fix-annotation-offsets",
         "fix_annotation_offsets",
         "Repair annotation anchors whose offsets do not cover the quote",
+    )
+)
+
+
+maintenance_group.add_command(
+    _repair_command(
+        "reprocess-replacement-character-documents",
+        "reprocess_unicode_replacement_documents",
+        "Enqueue targeted repair for documents containing Unicode replacement characters",
+        max_batch_size=50,
+        default_batch_size=25,
     )
 )
 
