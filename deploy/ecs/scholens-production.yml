@@ -3456,6 +3456,72 @@ Resources:
             Expression: backlog/IF(FILL(running,0)<1,1,FILL(running,0))
             Label: BacklogPerTask
             ReturnData: true
+  ResearchColdStartScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-research-cold-start
+      PolicyType: StepScaling
+      ScalingTargetId:
+        Ref: ResearchWorkerScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 900
+        MetricAggregationType: Maximum
+        StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          ScalingAdjustment: 1
+  ResearchColdStartAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-research-cold-start
+      AlarmDescription: Start the first Research worker when one queued job appears
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-research
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: ResearchColdStartScaling
+  MaintenanceColdStartScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-maintenance-cold-start
+      PolicyType: StepScaling
+      ScalingTargetId:
+        Ref: MaintenanceWorkerScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 900
+        MetricAggregationType: Maximum
+        StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          ScalingAdjustment: 1
+  MaintenanceColdStartAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-maintenance-cold-start
+      AlarmDescription: Start the first Maintenance worker when one queued job appears
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-maintenance
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: MaintenanceColdStartScaling
   ZoteroSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
