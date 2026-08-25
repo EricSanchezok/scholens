@@ -649,7 +649,11 @@ repaired by a forward revision or an explicitly approved database recovery opera
   ECS task while generation is active so browser detachment and ordinary deployments do
   not terminate accepted work. Scale-out has a 30-second cooldown; scale-in waits 15
   minutes. Document remains at 1–8 tasks; Research and Maintenance scale from zero to 6 and
-  2 tasks respectively, with a five-minute wake-up objective. Every worker places its first
+  2 tasks respectively, with a five-minute wake-up objective. A one-minute SQS cold-start
+  alarm adds the first task when a single visible Research or Maintenance message appears;
+  its 15-minute cooldown prevents the already-low target-tracking alarm from immediately
+  undoing that wake-up. Backlog-per-task target tracking continues to own subsequent
+  scale-out and normal scale-in. Every worker places its first
   running task on Fargate On-Demand and prefers Fargate Spot at a 3:1 weight for scale-out.
   Jobs workers retain their 45-minute visibility timeout.
 - Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency

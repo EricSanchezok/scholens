@@ -868,6 +868,38 @@ def test_worker_minimums_and_metric_math_support_scale_to_zero() -> None:
         assert expression == "backlog/IF(FILL(running,0)<1,1,FILL(running,0))"
 
 
+def test_zero_minimum_workers_have_single_message_cold_start_pulses() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+
+    for worker, queue in (
+        ("Research", "scholens-production-research"),
+        ("Maintenance", "scholens-production-maintenance"),
+    ):
+        policy = resources[f"{worker}ColdStartScaling"]["Properties"]
+        assert policy["PolicyType"] == "StepScaling"
+        assert policy["ScalingTargetId"] == {"Ref": f"{worker}WorkerScalableTarget"}
+        assert policy["StepScalingPolicyConfiguration"] == {
+            "AdjustmentType": "ChangeInCapacity",
+            "Cooldown": 900,
+            "MetricAggregationType": "Maximum",
+            "StepAdjustments": [
+                {"MetricIntervalLowerBound": 0, "ScalingAdjustment": 1}
+            ],
+        }
+
+        alarm = resources[f"{worker}ColdStartAlarm"]["Properties"]
+        assert alarm["Namespace"] == "AWS/SQS"
+        assert alarm["MetricName"] == "ApproximateNumberOfMessagesVisible"
+        assert alarm["Dimensions"] == [{"Name": "QueueName", "Value": queue}]
+        assert alarm["Statistic"] == "Maximum"
+        assert alarm["Period"] == 60
+        assert alarm["EvaluationPeriods"] == alarm["DatapointsToAlarm"] == 1
+        assert alarm["Threshold"] == 1
+        assert alarm["ComparisonOperator"] == "GreaterThanOrEqualToThreshold"
+        assert alarm["TreatMissingData"] == "notBreaching"
+        assert alarm["AlarmActions"] == [{"Ref": f"{worker}ColdStartScaling"}]
+
+
 def test_conversation_capacity_and_rollout_order_match_latency_slo() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
 
