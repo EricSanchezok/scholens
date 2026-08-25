@@ -842,14 +842,40 @@ def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
         assert minimum[2] == maximum[2] == 0
 
 
+def test_worker_minimums_and_metric_math_support_scale_to_zero() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+
+    expected = {
+        "Conversation": 1,
+        "Document": 1,
+        "Research": 0,
+        "Maintenance": 0,
+    }
+    for worker, minimum in expected.items():
+        service = resources[f"{worker}WorkerService"]["Properties"]
+        target = resources[f"{worker}WorkerScalableTarget"]["Properties"]
+        policy = resources[f"{worker}BacklogScaling"]["Properties"][
+            "TargetTrackingScalingPolicyConfiguration"
+        ]
+        expression = next(
+            metric["Expression"]
+            for metric in policy["CustomizedMetricSpecification"]["Metrics"]
+            if metric["Id"] == "backlogpertask"
+        )
+
+        assert service["DesiredCount"] == {"Fn::If": ["RunApplication", minimum, 0]}
+        assert target["MinCapacity"] == {"Fn::If": ["RunApplication", minimum, 0]}
+        assert expression == "backlog/IF(FILL(running,0)<1,1,FILL(running,0))"
+
+
 def test_conversation_capacity_and_rollout_order_match_latency_slo() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
 
     service = resources["ConversationWorkerService"]["Properties"]
-    assert service["DesiredCount"] == {"Fn::If": ["RunApplication", 2, 0]}
+    assert service["DesiredCount"] == {"Fn::If": ["RunApplication", 1, 0]}
 
     target = resources["ConversationWorkerScalableTarget"]["Properties"]
-    assert target["MinCapacity"] == {"Fn::If": ["RunApplication", 2, 0]}
+    assert target["MinCapacity"] == {"Fn::If": ["RunApplication", 1, 0]}
     assert target["MaxCapacity"] == {"Fn::If": ["RunApplication", 6, 0]}
 
     tracking = resources["ConversationBacklogScaling"]["Properties"][
@@ -1248,18 +1274,16 @@ def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
         ] == {"Enable": True, "Rollback": True}
 
     for name in (
+        "ConversationWorkerService",
         "DocumentWorkerService",
         "ResearchWorkerService",
         "MaintenanceWorkerService",
     ):
         providers = services[name]["Properties"]["CapacityProviderStrategy"]
-        assert {entry["CapacityProvider"] for entry in providers} == {
-            "FARGATE",
-            "FARGATE_SPOT",
-        }
-    assert services["ConversationWorkerService"]["Properties"][
-        "CapacityProviderStrategy"
-    ] == [{"CapacityProvider": "FARGATE", "Weight": 1}]
+        assert providers == [
+            {"CapacityProvider": "FARGATE", "Base": 1, "Weight": 1},
+            {"CapacityProvider": "FARGATE_SPOT", "Weight": 3},
+        ]
     conversation_task = resources["ConversationWorkerTaskDefinition"]["Properties"]
     assert conversation_task["TaskRoleArn"] == {"Fn::GetAtt": ["ApiTaskRole", "Arn"]}
     conversation_container = next(

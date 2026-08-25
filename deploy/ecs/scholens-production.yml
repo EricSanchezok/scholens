@@ -2861,14 +2861,17 @@ Resources:
       DesiredCount:
         Fn::If:
         - RunApplication
-        - 2
+        - 1
         - 0
       EnableECSManagedTags: true
       EnableExecuteCommand: false
       PropagateTags: SERVICE
       CapacityProviderStrategy:
       - CapacityProvider: FARGATE
+        Base: 1
         Weight: 1
+      - CapacityProvider: FARGATE_SPOT
+        Weight: 3
       DeploymentConfiguration:
         MinimumHealthyPercent: 100
         MaximumPercent: 200
@@ -2948,7 +2951,7 @@ Resources:
       DesiredCount:
         Fn::If:
         - RunApplication
-        - 1
+        - 0
         - 0
       EnableECSManagedTags: true
       EnableExecuteCommand: false
@@ -2993,7 +2996,7 @@ Resources:
       DesiredCount:
         Fn::If:
         - RunApplication
-        - 1
+        - 0
         - 0
       EnableECSManagedTags: true
       EnableExecuteCommand: false
@@ -3193,7 +3196,7 @@ Resources:
       MinCapacity:
         Fn::If:
         - RunApplication
-        - 2
+        - 1
         - 0
       MaxCapacity:
         Fn::If:
@@ -3245,7 +3248,7 @@ Resources:
       MinCapacity:
         Fn::If:
         - RunApplication
-        - 1
+        - 0
         - 0
       MaxCapacity:
         Fn::If:
@@ -3271,7 +3274,7 @@ Resources:
       MinCapacity:
         Fn::If:
         - RunApplication
-        - 1
+        - 0
         - 0
       MaxCapacity:
         Fn::If:
@@ -3321,7 +3324,7 @@ Resources:
                     - Name
             ReturnData: false
           - Id: backlogpertask
-            Expression: backlog/IF(running<1,1,running)
+            Expression: backlog/IF(FILL(running,0)<1,1,FILL(running,0))
             Label: BacklogPerTask
             ReturnData: true
   DocumentBacklogScaling:
@@ -3364,7 +3367,7 @@ Resources:
                     - Name
             ReturnData: false
           - Id: backlogpertask
-            Expression: backlog/IF(running<1,1,running)
+            Expression: backlog/IF(FILL(running,0)<1,1,FILL(running,0))
             Label: BacklogPerTask
             ReturnData: true
   ResearchBacklogScaling:
@@ -3407,7 +3410,7 @@ Resources:
                     - Name
             ReturnData: false
           - Id: backlogpertask
-            Expression: backlog/IF(running<1,1,running)
+            Expression: backlog/IF(FILL(running,0)<1,1,FILL(running,0))
             Label: BacklogPerTask
             ReturnData: true
   MaintenanceBacklogScaling:
@@ -3450,7 +3453,7 @@ Resources:
                     - Name
             ReturnData: false
           - Id: backlogpertask
-            Expression: backlog/IF(running<1,1,running)
+            Expression: backlog/IF(FILL(running,0)<1,1,FILL(running,0))
             Label: BacklogPerTask
             ReturnData: true
   ZoteroSchedule:
