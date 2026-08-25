@@ -56,8 +56,8 @@ Every release updates the runtime stack with digest-qualified images. It owns:
 - one public IPv4 ALB with TLS, WAF, and separate Web/API target groups;
 - canonical Web and FastAPI services, each with two on-demand Fargate tasks at steady
   state;
-- document, research, and maintenance Celery services with one on-demand base task and
-  Fargate Spot for scale-out;
+- dedicated Conversation, document, research, and maintenance worker services with the first
+  running task on Fargate On-Demand and Fargate Spot preferred for scale-out;
 - a private Cloud Map `A` record for worker callbacks, registered directly from each API
   task's `awsvpc` ENI; the ECS service registry therefore carries only the registry ARN,
   while `/internal/v1` is never on the ALB;
@@ -642,13 +642,16 @@ repaired by a forward revision or an explicitly approved database recovery opera
   `sslmode=verify-full`. Before adopting a production SLA, the platform owner must review
   capacity and upgrade it to Multi-AZ; public accessibility must also receive a separate
   platform security review.
-- Workers scale on SQS backlog per running task. The on-demand Conversation service keeps
-  two tasks warm, scales 2–6 with concurrency one, and targets no more than 0.25 visible
+- Workers scale on SQS backlog per running task. Missing `RunningTaskCount` data is filled with
+  zero so a newly active queue can scale a service from zero. Conversation keeps one task warm,
+  scales 1–6 with concurrency one, and targets no more than 0.25 visible
   messages per running task. It uses a 60-minute queue visibility timeout and protects its
   ECS task while generation is active so browser detachment and ordinary deployments do
   not terminate accepted work. Scale-out has a 30-second cooldown; scale-in waits 15
-  minutes. Jobs workers retain their 45-minute visibility and use Fargate Spot only for
-  scale-out.
+  minutes. Document remains at 1–8 tasks; Research and Maintenance scale from zero to 6 and
+  2 tasks respectively, with a five-minute wake-up objective. Every worker places its first
+  running task on Fargate On-Demand and prefers Fargate Spot at a 3:1 weight for scale-out.
+  Jobs workers retain their 45-minute visibility timeout.
 - Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency
   failures, shared-avatar read failures, diagnostic snapshot write failures, and unhealthy
   target alarms publish to the Scholens SNS topic. The dependency and diagnostic alarms use the
