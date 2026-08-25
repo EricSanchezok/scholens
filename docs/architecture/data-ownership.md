@@ -387,7 +387,10 @@ records and schedules their physical objects for deletion.
 
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;
-it does not reset or overwrite the failed job.
+it does not reset or overwrite the failed job. Removing a failed ingestion from
+Library timestamps its `UploadReservation` as dismissed, disables another retry
+from that source, and schedules reference-safe Document cleanup without changing
+the failed Job status or error code.
 
 An ingestion operation owns its reservation, source identity, DurableJob, and
 dispatch outbox record. Server commits those records together before returning

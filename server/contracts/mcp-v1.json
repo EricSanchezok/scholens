@@ -5544,7 +5544,7 @@
         "read_only": false
       },
       "confirmation_policy": "required",
-      "description": "Use when the user explicitly wants a pending or running ingestion stopped. Do not use when the job is completed or merely slow. Returns an impact preview, then a cancellation receipt. Next: confirm the exact job UUID before retrying.",
+      "description": "Use when the user explicitly wants a pending or running ingestion stopped, or a failed ingestion removed from Library. Do not use when the job is completed, merely slow, or the failed source may still be retried. Returns an impact preview, then a cancellation or removal receipt. Next: confirm the exact job UUID and disclosed cleanup before continuing.",
       "execution": "workflow",
       "input_schema": {
         "additionalProperties": false,

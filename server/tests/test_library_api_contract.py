@@ -661,6 +661,20 @@ def test_library_list_includes_an_unattached_upload_reservation() -> None:
     assert page.items[0].ingestion.id == reservation.id
     assert page.items[0].ingestion.display_name == "still-processing.pdf"
     assert len(page.positions) == 2
+    reservation_statements = [
+        str(invocation.args[0])
+        for invocation in [
+            *db.scalar.call_args_list,
+            *db.execute.call_args_list,
+            *db.scalars.call_args_list,
+        ]
+        if "upload_reservations" in str(invocation.args[0])
+    ]
+    assert len(reservation_statements) == 3
+    assert all(
+        "upload_reservations.dismissed_at IS NULL" in statement
+        for statement in reservation_statements
+    )
 
 
 def test_library_summary_counts_active_and_failed_ingestions() -> None:
@@ -683,6 +697,7 @@ def test_library_summary_counts_active_and_failed_ingestions() -> None:
     assert attention_count == 3
     statement = str(db.execute.call_args.args[0])
     assert "upload_reservations.superseded_by_id IS NULL" in statement
+    assert "upload_reservations.dismissed_at IS NULL" in statement
     assert "jobs.project_id IS NULL" in statement
 
 

@@ -1279,7 +1279,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Cancel Pdf Ingestion */
+        /**
+         * Cancel Pdf Ingestion
+         * @description Cancel an active ingestion or dismiss a failed ingestion from Library.
+         */
         delete: operations["cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete"];
         options?: never;
         head?: never;

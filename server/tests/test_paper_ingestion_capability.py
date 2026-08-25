@@ -18,7 +18,12 @@ from app.helpers.ai_limits import AILimitExceeded
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
-from app.modules.papers.application.ingestion import AcceptedIngestion, IngestPaper
+from app.modules.papers.application.ingestion import (
+    AcceptedIngestion,
+    IngestPaper,
+    IngestionCancellationPlan,
+    IngestionCancellationState,
+)
 from app.modules.papers.application.upload_sessions import PaperUploadRecord
 from app.shared.application import (
     Actor,
@@ -510,6 +515,25 @@ async def test_upload_session_releases_lease_when_version_read_is_unavailable() 
 def test_cancel_journals_only_when_gateway_changes_state() -> None:
     gateway = MagicMock()
     gateway.cancel.return_value = True
+    job_id = uuid4()
+    now = datetime.now(UTC)
+    gateway.plan_cancel.return_value = IngestionCancellationPlan(
+        state=IngestionCancellationState(
+            job_id=job_id,
+            status="running",
+            job_updated_at=now,
+            reservation_id=job_id,
+            reservation_updated_at=now,
+            dismissed_at=None,
+            document_id=uuid4(),
+            project_id=None,
+            library_reference_created=False,
+            project_reference_created=False,
+            library_membership_id=None,
+            project_membership_id=None,
+            document_gc_will_be_evaluated=False,
+        )
+    )
     journal = FakeJournal()
     ingestion = IngestPaper(
         validator=MagicMock(),
@@ -517,11 +541,44 @@ def test_cancel_journals_only_when_gateway_changes_state() -> None:
         gateway=gateway,
         journal=journal,  # type: ignore[arg-type]
     )
+    assert ingestion.cancel(actor=_actor(), operation=_operation(), job_id=job_id)
+    assert len(journal.entries) == 1
+    assert str(journal.entries[0]["action"]) == "job.cancelled"
+
+
+def test_failed_ingestion_removal_journals_dismissal_without_a_second_failure() -> None:
+    gateway = MagicMock()
+    gateway.cancel.return_value = True
     job_id = uuid4()
+    now = datetime.now(UTC)
+    gateway.plan_cancel.return_value = IngestionCancellationPlan(
+        state=IngestionCancellationState(
+            job_id=job_id,
+            status="failed",
+            job_updated_at=now,
+            reservation_id=job_id,
+            reservation_updated_at=now,
+            dismissed_at=None,
+            document_id=uuid4(),
+            project_id=None,
+            library_reference_created=False,
+            project_reference_created=False,
+            library_membership_id=None,
+            project_membership_id=None,
+            document_gc_will_be_evaluated=True,
+        )
+    )
+    journal = FakeJournal()
+    ingestion = IngestPaper(
+        validator=MagicMock(),
+        limits=MagicMock(),
+        gateway=gateway,
+        journal=journal,  # type: ignore[arg-type]
+    )
 
     assert ingestion.cancel(actor=_actor(), operation=_operation(), job_id=job_id)
     assert len(journal.entries) == 1
-    assert str(journal.entries[0]["action"]) == "job.failed"
+    assert str(journal.entries[0]["action"]) == "paper.ingestion_dismissed"
 
 
 def test_gateway_cancellation_plan_discloses_membership_cleanup_and_applies_it(
@@ -546,6 +603,7 @@ def test_gateway_cancellation_plan_discloses_membership_cleanup_and_applies_it(
     reservation = SimpleNamespace(
         id=job_id,
         updated_at=now,
+        dismissed_at=None,
         reference_created_library=True,
         reference_created_project=True,
         reference_created=False,
@@ -584,6 +642,91 @@ def test_gateway_cancellation_plan_discloses_membership_cleanup_and_applies_it(
     schedule_gc.assert_called_once()
 
 
+def test_gateway_dismisses_failed_ingestion_without_rewriting_failure_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(UTC)
+    job_id = uuid4()
+    document_id = uuid4()
+    job = SimpleNamespace(
+        id=job_id,
+        status="failed",
+        updated_at=now,
+        document_id=document_id,
+        project_id=None,
+        error_code="mineru_content_insufficient",
+    )
+    reservation = SimpleNamespace(
+        id=job_id,
+        updated_at=now,
+        dismissed_at=None,
+        reference_created_library=True,
+        reference_created_project=False,
+        reference_created=False,
+    )
+    db = MagicMock()
+    db.scalar.side_effect = [job, reservation, None]
+    db.get.side_effect = [job, reservation]
+    schedule_gc = MagicMock()
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_gc.schedule_document_gc",
+        schedule_gc,
+    )
+    gateway = SqlPaperIngestionGateway(db=db)
+
+    plan = gateway.plan_cancel(actor=_actor(), job_id=job_id)
+
+    assert plan.state.status == "failed"
+    assert plan.state.dismissed_at is None
+    assert gateway.cancel(
+        actor=_actor(),
+        job_id=job_id,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        plan=plan,
+    )
+    assert reservation.dismissed_at is not None
+    assert job.status == "failed"
+    assert job.error_code == "mineru_content_insufficient"
+    assert db.execute.call_count == 0
+    schedule_gc.assert_called_once()
+
+
+def test_gateway_failed_ingestion_dismissal_is_idempotent() -> None:
+    now = datetime.now(UTC)
+    job_id = uuid4()
+    job = SimpleNamespace(
+        id=job_id,
+        status="failed",
+        updated_at=now,
+        document_id=None,
+        project_id=None,
+    )
+    reservation = SimpleNamespace(
+        id=job_id,
+        updated_at=now,
+        dismissed_at=now,
+        reference_created_library=False,
+        reference_created_project=False,
+        reference_created=False,
+    )
+    db = MagicMock()
+    db.scalar.side_effect = [job, reservation]
+    gateway = SqlPaperIngestionGateway(db=db)
+
+    plan = gateway.plan_cancel(actor=_actor(), job_id=job_id)
+
+    assert not gateway.cancel(
+        actor=_actor(),
+        job_id=job_id,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        plan=plan,
+    )
+    db.get.assert_not_called()
+    db.flush.assert_not_called()
+
+
 def test_gateway_cancellation_plan_uses_one_not_found_code_for_hidden_jobs() -> None:
     db = MagicMock()
     db.scalar.return_value = None
@@ -609,6 +752,7 @@ def test_gateway_retry_source_inherits_add_to_library_from_original_reservation(
         display_name="paper.pdf",
         source_kind="upload",
         add_to_library=False,
+        dismissed_at=None,
     )
     db.scalar.return_value = original
     db.get.return_value = reservation
@@ -625,13 +769,37 @@ def test_gateway_retry_source_inherits_add_to_library_from_original_reservation(
     assert source.content_sha256 == "ab" * 32
 
 
+def test_gateway_retry_rejects_a_dismissed_failed_ingestion() -> None:
+    original_job_id = uuid4()
+    original = SimpleNamespace(id=original_job_id, project_id=None)
+    reservation = SimpleNamespace(dismissed_at=datetime.now(UTC))
+    db = MagicMock()
+    db.get.return_value = reservation
+
+    with patch(
+        "app.bootstrap.adapters.paper_ingestion.SqlPaperIngestionGateway._require_failed",
+        return_value=original,
+    ):
+        with pytest.raises(AppError) as error:
+            SqlPaperIngestionGateway(db=db).retry_source(
+                actor=_actor(),
+                job_id=original_job_id,
+            )
+
+    assert error.value.code == "paper_ingestion_retry_not_allowed"
+
+
 def test_gateway_accept_retry_overrides_client_add_to_library_from_reservation() -> (
     None
 ):
     db = MagicMock()
     original_job_id = uuid4()
     original = SimpleNamespace(id=original_job_id, project_id=None)
-    original_reservation = SimpleNamespace(id=original_job_id, add_to_library=False)
+    original_reservation = SimpleNamespace(
+        id=original_job_id,
+        add_to_library=False,
+        dismissed_at=None,
+    )
     db.scalar.return_value = original
     db.get.side_effect = [original_reservation, None]
 

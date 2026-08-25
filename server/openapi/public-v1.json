@@ -17292,6 +17292,7 @@
     },
     "/api/v1/paper-ingestions/{job_id}": {
       "delete": {
+        "description": "Cancel an active ingestion or dismiss a failed ingestion from Library.",
         "operationId": "cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete",
         "parameters": [
           {
