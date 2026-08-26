@@ -2757,7 +2757,7 @@ Resources:
       DesiredCount:
         Fn::If:
         - RunApplication
-        - 2
+        - 1
         - 0
       EnableECSManagedTags: true
       EnableExecuteCommand: false
@@ -3046,7 +3046,7 @@ Resources:
       MinCapacity:
         Fn::If:
         - RunApplication
-        - 2
+        - 1
         - 0
       MaxCapacity:
         Fn::If:

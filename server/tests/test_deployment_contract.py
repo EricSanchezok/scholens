@@ -842,6 +842,17 @@ def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
         assert minimum[2] == maximum[2] == 0
 
 
+def test_web_capacity_scales_from_one_to_six_tasks() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+
+    service = resources["WebService"]["Properties"]
+    target = resources["WebScalableTarget"]["Properties"]
+
+    assert service["DesiredCount"] == {"Fn::If": ["RunApplication", 1, 0]}
+    assert target["MinCapacity"] == {"Fn::If": ["RunApplication", 1, 0]}
+    assert target["MaxCapacity"] == {"Fn::If": ["RunApplication", 6, 0]}
+
+
 def test_worker_minimums_and_metric_math_support_scale_to_zero() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
 

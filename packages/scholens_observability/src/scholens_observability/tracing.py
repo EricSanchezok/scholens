@@ -13,6 +13,7 @@ from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExp
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import DropAggregation, View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -28,6 +29,24 @@ _LOCK = Lock()
 _CONFIGURED = False
 _TRACER_PROVIDER: TracerProvider | None = None
 _METER_PROVIDER: MeterProvider | None = None
+
+_DROPPED_HTTP_SERVER_METRICS = (
+    "http.server.duration",
+    "http.server.request.duration",
+    "http.server.request.size",
+    "http.server.request.body.size",
+    "http.server.response.size",
+    "http.server.response.body.size",
+    "http.server.active_requests",
+)
+
+
+def _metric_views() -> tuple[View, ...]:
+    """Drop duplicate auto-instrumentation while retaining Scholens RED metrics."""
+    return tuple(
+        View(instrument_name=name, aggregation=DropAggregation())
+        for name in _DROPPED_HTTP_SERVER_METRICS
+    )
 
 
 class _ReservoirRatioSampler(Sampler):
@@ -102,7 +121,9 @@ def configure_telemetry(
             OTLPMetricExporter(endpoint=endpoint, insecure=True)
         )
         meter_provider = MeterProvider(
-            resource=resource, metric_readers=[metric_reader]
+            resource=resource,
+            metric_readers=[metric_reader],
+            views=_metric_views(),
         )
         trace.set_tracer_provider(tracer_provider)
         metrics.set_meter_provider(meter_provider)

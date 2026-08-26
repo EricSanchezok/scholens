@@ -54,8 +54,8 @@ failed initial-creation rollback; successfully created keys remain retained.
 Every release updates the runtime stack with digest-qualified images. It owns:
 
 - one public IPv4 ALB with TLS, WAF, and separate Web/API target groups;
-- canonical Web and FastAPI services, each with two on-demand Fargate tasks at steady
-  state;
+- canonical Web and FastAPI services, with one Web task and two API tasks at
+  steady state;
 - dedicated Conversation, document, research, and maintenance worker services with the first
   running task on Fargate On-Demand and Fargate Spot preferred for scale-out;
 - a private Cloud Map `A` record for worker callbacks, registered directly from each API
@@ -627,7 +627,7 @@ repaired by a forward revision or an explicitly approved database recovery opera
 
 ## Capacity and failure handling
 
-- Web scales 2–6 and API scales 2–3 on CPU, memory, and ALB request targets.
+- Web scales 1–6 and API scales 2–3 on CPU, memory, and ALB request targets.
 - API is capped at three tasks for the shared RDS budget; each of its two Gunicorn workers
   uses a two-connection pool with one overflow slot. The shared RDS connection alarm is a
   separate early-warning gate, not permission to exceed that task cap.
