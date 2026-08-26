@@ -12,6 +12,13 @@ OpenTelemetry setup, custom spans, and bounded diagnostic snapshots.
   credentials, raw provider payloads, and sensitive URLs are not log data.
 - Metric attributes remain low-cardinality; entity IDs belong in traces or
   diagnostic context rather than metric dimensions.
+- The shared `MeterProvider` drops duplicate OpenTelemetry HTTP server duration,
+  request/response size, and active-request instruments under both legacy and
+  stable semantic names. Scholens' normalized-route `scholens.http.requests`
+  and `scholens.http.duration` RED metrics remain authoritative and exported.
+- HTTP client, database-pool, queue, tool, LLM, error, and stream-failure
+  metrics remain exported. Metric views do not change trace sampling, trace
+  attributes, logs, or diagnostic snapshots.
 - Snapshot persistence is best effort and bounded. Product behavior must not
   depend on telemetry delivery.
 - Snapshot writers use a caller-owned prefix that must match the workload's
