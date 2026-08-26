@@ -199,9 +199,12 @@ canonical lifecycle at `queued`, after which `parsing`, `extracting`, `indexing`
 and `finalizing` update that row without changing its identity or layout.
 Completed ingestion becomes a normal paper row. Failed ingestion preserves its
 source, filename, failed lifecycle stage, stable safe error code, Retry, and
-remove/cancel actions. The header separates successful Paper count from active
-or failed import count and calls out failures that require attention; processing
-rows are never counted as successful Papers.
+remove/cancel actions. Removing a failed ingestion dismisses its Library row
+and disables another retry from that preserved source while retaining the
+immutable failed Job for audit; active cancellation remains a separate
+cooperative terminal transition. The header separates successful Paper count
+from active or failed import count and calls out failures that require
+attention; processing rows are never counted as successful Papers.
 
 PDF parsing is local-first. A scanned document, or a digital document whose
 local engines fail, may require the user's MinerU connection. A missing or

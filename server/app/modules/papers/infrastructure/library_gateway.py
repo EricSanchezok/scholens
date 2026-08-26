@@ -761,6 +761,7 @@ class SqlAlchemyPaperLibraryGateway:
                     ]
                 ),
                 UploadReservation.superseded_by_id.is_(None),
+                UploadReservation.dismissed_at.is_(None),
                 or_(
                     DurableJob.document_id.is_(None),
                     ~exists(
@@ -989,6 +990,7 @@ class SqlAlchemyPaperLibraryGateway:
                         ]
                     ),
                     UploadReservation.superseded_by_id.is_(None),
+                    UploadReservation.dismissed_at.is_(None),
                 )
                 .order_by(DurableJob.created_at.desc(), DurableJob.id.desc())
             ).all()
@@ -1156,6 +1158,7 @@ class SqlAlchemyPaperLibraryGateway:
                     ]
                 ),
                 UploadReservation.superseded_by_id.is_(None),
+                UploadReservation.dismissed_at.is_(None),
             )
             .group_by(DurableJob.status)
         ).all()

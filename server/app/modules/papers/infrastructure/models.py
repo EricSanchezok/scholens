@@ -122,6 +122,10 @@ class UploadReservation(Base):
         ForeignKey("upload_reservations.id", ondelete="SET NULL"),
         nullable=True,
     )
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     job: Mapped["DurableJob"] = relationship(
         "DurableJob",
         foreign_keys=[id],

@@ -124,6 +124,7 @@ async def cancel_pdf_ingestion(
     operation: OperationContext = Depends(get_required_operation),
     ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
 ) -> Response:
+    """Cancel an active ingestion or dismiss a failed ingestion from Library."""
     await ingestion.cancel(
         actor=current_user,
         operation=operation,

@@ -3540,20 +3540,33 @@ class WorkspaceToolHandlers:
                 job_id=parsed.job_id,
             )
             state = plan.state
-            if state.status == "cancelled":
+            if state.status == "cancelled" or state.dismissed_at is not None:
+                action = (
+                    "paper_ingestion_removed"
+                    if state.status == "failed"
+                    else "paper_ingestion_cancelled"
+                )
                 return (
                     finalize_and_complete(
                         self._completed(
-                            action="paper_ingestion_cancelled",
+                            action=action,
                             affected_resources=[f"job:{parsed.job_id}"],
                             changed=False,
                         )
                     ),
                     persist_receipt,
                 )
-            consequences = [
-                "Processing stops and reserved capacity is released after the database cancellation commits."
-            ]
+            failed = state.status == "failed"
+            consequences = (
+                [
+                    "Remove the failed ingestion from Library and prevent another retry from its preserved source.",
+                    "Keep the durable failed job and error code as immutable audit history.",
+                ]
+                if failed
+                else [
+                    "Processing stops and reserved capacity is released after the database cancellation commits."
+                ]
+            )
             if state.library_membership_id is not None:
                 consequences.append(
                     "Remove the personal Library membership created by this ingestion."
@@ -3578,8 +3591,16 @@ class WorkspaceToolHandlers:
                 action="cancel_paper_ingestion",
                 state=state,
                 impact=ActionImpact(
-                    title="Cancel paper ingestion",
-                    summary=f"Stop ingestion job {parsed.job_id}.",
+                    title=(
+                        "Remove failed paper ingestion"
+                        if failed
+                        else "Cancel paper ingestion"
+                    ),
+                    summary=(
+                        f"Remove failed ingestion job {parsed.job_id} from Library."
+                        if failed
+                        else f"Stop ingestion job {parsed.job_id}."
+                    ),
                     consequences=consequences,
                     affected_resources=affected_resources,
                 ),
@@ -3595,7 +3616,11 @@ class WorkspaceToolHandlers:
             return (
                 finalize_and_complete(
                     self._completed(
-                        action="paper_ingestion_cancelled",
+                        action=(
+                            "paper_ingestion_removed"
+                            if failed
+                            else "paper_ingestion_cancelled"
+                        ),
                         affected_resources=affected_resources,
                         changed=changed,
                     )

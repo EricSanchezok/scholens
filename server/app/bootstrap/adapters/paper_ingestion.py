@@ -296,9 +296,7 @@ class SqlPaperIngestionGateway:
         durable_key: str | None = None
         if retry_of is not None:
             original = self._require_failed(actor=actor, job_id=retry_of, lock=True)
-            original_reservation = self._db.get(UploadReservation, original.id)
-            if original_reservation is None:
-                self._not_found()
+            original_reservation = self._require_retry_reservation(original)
             add_to_library = resolve_add_to_library(
                 original_reservation.add_to_library,
                 project_id=original.project_id,
@@ -370,9 +368,7 @@ class SqlPaperIngestionGateway:
 
     def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource:
         original = self._require_failed(actor=actor, job_id=job_id, lock=False)
-        reservation = self._db.get(UploadReservation, original.id)
-        if reservation is None:
-            self._not_found()
+        reservation = self._require_retry_reservation(original)
         return RetrySource(
             job_id=original.id,
             content_sha256=reservation.content_sha256,
@@ -412,6 +408,7 @@ class SqlPaperIngestionGateway:
                     job_updated_at=job.updated_at,
                     reservation_id=None,
                     reservation_updated_at=None,
+                    dismissed_at=None,
                     document_id=job.document_id,
                     project_id=job.project_id,
                     library_reference_created=False,
@@ -421,10 +418,15 @@ class SqlPaperIngestionGateway:
                     document_gc_will_be_evaluated=False,
                 )
             )
-        if not can_cancel_job(JobStatus(job.status)):
+        if job.status != JobStatus.FAILED.value and not can_cancel_job(
+            JobStatus(job.status)
+        ):
             raise AppError(
                 code="paper_ingestion_cancel_not_allowed",
-                message="Only pending or running paper ingestions can be cancelled",
+                message=(
+                    "Only pending or running paper ingestions can be cancelled, "
+                    "and only failed ingestions can be removed"
+                ),
                 kind=FailureKind.CONFLICT,
             )
         reservation = self._db.scalar(
@@ -468,11 +470,16 @@ class SqlPaperIngestionGateway:
             state=IngestionCancellationState(
                 job_id=job.id,
                 status=(
-                    "pending" if job.status == JobStatus.PENDING.value else "running"
+                    "pending"
+                    if job.status == JobStatus.PENDING.value
+                    else (
+                        "running" if job.status == JobStatus.RUNNING.value else "failed"
+                    )
                 ),
                 job_updated_at=job.updated_at,
                 reservation_id=reservation.id,
                 reservation_updated_at=reservation.updated_at,
+                dismissed_at=reservation.dismissed_at,
                 document_id=job.document_id,
                 project_id=job.project_id,
                 library_reference_created=library_created,
@@ -507,11 +514,11 @@ class SqlPaperIngestionGateway:
         state = plan.state
         if state.job_id != job_id:
             raise RuntimeError("paper_ingestion_cancel_plan_mismatch")
+        if state.status == JobStatus.CANCELLED.value or state.dismissed_at is not None:
+            return False
         job = self._db.get(DurableJob, job_id)
         if job is None:
             self._not_found()
-        if state.status == JobStatus.CANCELLED.value:
-            return False
         if job.status != state.status:
             raise RuntimeError("paper_ingestion_cancel_plan_not_locked")
         if state.library_membership_id is not None:
@@ -537,12 +544,32 @@ class SqlPaperIngestionGateway:
                 origin_operation_id=origin_operation_id,
                 correlation_id=correlation_id,
             )
-        job.status = JobStatus.CANCELLED.value
-        job.completed_at = datetime.now(UTC)
-        job.lease_expires_at = None
-        job.progress_code = None
+        if state.status == JobStatus.FAILED.value:
+            if state.reservation_id is None:
+                raise RuntimeError("paper_ingestion_cancel_reservation_missing")
+            reservation = self._db.get(UploadReservation, state.reservation_id)
+            if reservation is None:
+                self._not_found()
+            reservation.dismissed_at = datetime.now(UTC)
+        else:
+            job.status = JobStatus.CANCELLED.value
+            job.completed_at = datetime.now(UTC)
+            job.lease_expires_at = None
+            job.progress_code = None
         self._db.flush()
         return True
+
+    def _require_retry_reservation(self, job: DurableJob) -> UploadReservation:
+        reservation = self._db.get(UploadReservation, job.id)
+        if reservation is None:
+            self._not_found()
+        if reservation.dismissed_at is not None:
+            raise AppError(
+                code="paper_ingestion_retry_not_allowed",
+                message="Removed paper ingestions cannot be retried",
+                kind=FailureKind.CONFLICT,
+            )
+        return reservation
 
     def _require_failed(
         self,

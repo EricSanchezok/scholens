@@ -901,9 +901,14 @@ Failed rows expose the preserved filename, bounded lifecycle stage, safe error
 code, Retry, and remove actions; provider diagnostics stay server-side. Browser
 content hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
 constraints remain authoritative for repeated and concurrent uploads. `DELETE
-/api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
-replay and ignore late worker callbacks. The worker reports bounded lifecycle
-stages and heartbeats, while the Server owns terminal timeout/failure policy.
+/api/v1/paper-ingestions/{job_id}` cancels a pending or running job and dismisses
+a failed ingestion from Library. Dismissal retains the immutable failed Job and
+error code, prevents another retry from its source, and excludes the reservation
+from Library rows and attention counts; cancelled jobs reject replay and ignore
+late worker callbacks. Both outcomes schedule reference-safe Document cleanup
+when this ingestion created the final membership. The worker reports bounded
+lifecycle stages and heartbeats, while the Server owns terminal timeout/failure
+policy.
 Production callback authorities fail closed at process startup and Jobs pins
 signed internal paths to its own validated Server base. A published PDF task
 that never claims its durable job is replaced once after the configured

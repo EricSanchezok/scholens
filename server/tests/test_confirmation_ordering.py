@@ -341,7 +341,8 @@ def _job(status: str) -> JobResponse:
 def _cancel_plan(
     *,
     job_id: UUID,
-    status: Literal["pending", "running", "cancelled"],
+    status: Literal["pending", "running", "failed", "cancelled"],
+    dismissed_at: datetime | None = None,
     project_id: UUID | None = None,
     library_membership_id: UUID | None = None,
     project_membership_id: UUID | None = None,
@@ -354,6 +355,7 @@ def _cancel_plan(
             job_updated_at=NOW,
             reservation_id=uuid4() if status != "cancelled" else None,
             reservation_updated_at=NOW if status != "cancelled" else None,
+            dismissed_at=dismissed_at,
             document_id=uuid4(),
             project_id=project_id,
             library_reference_created=library_membership_id is not None,
@@ -510,6 +512,30 @@ async def test_cancel_preview_discloses_membership_removal_and_document_gc() -> 
 
 
 @pytest.mark.asyncio
+async def test_remove_failed_ingestion_discloses_retry_and_audit_consequences() -> None:
+    handler = _handler()
+    capabilities = MagicMock()
+    arguments = CancelPaperIngestionInput(job_id=uuid4())
+    capabilities.paper_ingestion.plan_cancel.return_value = _cancel_plan(
+        job_id=arguments.job_id,
+        status="failed",
+        document_gc_will_be_evaluated=True,
+    )
+    capabilities.action_confirmations.issue.return_value = _confirmation_challenge()
+    handler._executor.command.side_effect = lambda fn: fn(capabilities)
+
+    await handler.cancel_paper_ingestion(
+        _context(), arguments, "remove-failed-preview", _finalize_outcome
+    )
+
+    impact = capabilities.action_confirmations.issue.call_args.kwargs["impact"]
+    assert impact.title == "Remove failed paper ingestion"
+    assert any("prevent another retry" in item for item in impact.consequences)
+    assert any("immutable audit history" in item for item in impact.consequences)
+    assert any("orphan cleanup" in item for item in impact.consequences)
+
+
+@pytest.mark.asyncio
 async def test_cancel_confirmed_mutation_replays_receipt_and_releases_again() -> None:
     handler = _handler()
     handler._ingestion.release_cancelled = AsyncMock()
@@ -589,6 +615,31 @@ async def test_cancel_cancelled_ingestion_is_idempotent_without_preview() -> Non
     assert outcome.action["action"] == "paper_ingestion_cancelled"
     assert outcome.action["changed"] is False
     assert outcome.action["affected_resources"] == [f"job:{arguments.job_id}"]
+    capabilities.action_confirmations.issue.assert_not_called()
+    capabilities.paper_ingestion.cancel.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_remove_dismissed_failed_ingestion_is_idempotent_without_preview() -> (
+    None
+):
+    handler = _handler()
+    arguments = CancelPaperIngestionInput(job_id=uuid4())
+    capabilities = MagicMock()
+    capabilities.paper_ingestion.plan_cancel.return_value = _cancel_plan(
+        job_id=arguments.job_id,
+        status="failed",
+        dismissed_at=NOW,
+    )
+    handler._executor.command.side_effect = lambda fn: fn(capabilities)
+
+    outcome = await handler.cancel_paper_ingestion(
+        _context(), arguments, "test", _finalize_outcome
+    )
+
+    assert outcome.action is not None
+    assert outcome.action["action"] == "paper_ingestion_removed"
+    assert outcome.action["changed"] is False
     capabilities.action_confirmations.issue.assert_not_called()
     capabilities.paper_ingestion.cancel.assert_not_called()
 

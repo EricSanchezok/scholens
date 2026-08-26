@@ -1034,10 +1034,13 @@ def build_workspace_tool_catalog(
             name="cancel_paper_ingestion",
             title="Cancel paper ingestion",
             description=_description(
-                use="the user explicitly wants a pending or running ingestion stopped",
-                avoid="the job is completed or merely slow",
-                result="an impact preview, then a cancellation receipt",
-                next_step="confirm the exact job UUID before retrying.",
+                use=(
+                    "the user explicitly wants a pending or running ingestion stopped, "
+                    "or a failed ingestion removed from Library"
+                ),
+                avoid="the job is completed, merely slow, or the failed source may still be retried",
+                result="an impact preview, then a cancellation or removal receipt",
+                next_step="confirm the exact job UUID and disclosed cleanup before continuing.",
             ),
             input_model=wc.CancelPaperIngestionInput,
             output_model=confirmed,

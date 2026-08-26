@@ -8,7 +8,7 @@ from typing import Literal
 from typing import Protocol
 from uuid import UUID
 
-from app.modules.jobs.application.actions import JOB_CREATED, JOB_FAILED
+from app.modules.jobs.application.actions import JOB_CANCELLED, JOB_CREATED, JOB_FAILED
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
@@ -23,6 +23,7 @@ from app.shared.application import Actor, OperationContext
 from pydantic import BaseModel, ConfigDict
 
 PAPER_INGESTED = OperationAction("paper.ingested")
+PAPER_INGESTION_DISMISSED = OperationAction("paper.ingestion_dismissed")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,10 +74,11 @@ class IngestionCancellationState(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     job_id: UUID
-    status: Literal["pending", "running", "cancelled"]
+    status: Literal["pending", "running", "failed", "cancelled"]
     job_updated_at: datetime
     reservation_id: UUID | None
     reservation_updated_at: datetime | None
+    dismissed_at: datetime | None
     document_id: UUID | None
     project_id: UUID | None
     library_reference_created: bool
@@ -318,10 +320,15 @@ class IngestPaper:
             plan=plan,
         )
         if changed:
+            action = (
+                PAPER_INGESTION_DISMISSED
+                if plan.state.status == "failed"
+                else JOB_CANCELLED
+            )
             self._journal.append(
                 actor=actor,
                 operation=operation,
-                action=JOB_FAILED,
+                action=action,
                 resources=(ResourceRef("job", str(job_id)),),
             )
         return changed
