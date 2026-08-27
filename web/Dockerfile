@@ -21,6 +21,7 @@ RUN test -n "$NEXT_PUBLIC_API_URL" \
     && node scripts/package-source-maps.mjs
 
 FROM ${NODE_IMAGE} AS runtime
+RUN apk add --no-cache "openssl>=3.5.8-r0"
 WORKDIR /app
 ENV HOSTNAME=0.0.0.0 \
     NODE_ENV=production \

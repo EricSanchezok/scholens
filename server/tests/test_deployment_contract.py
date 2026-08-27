@@ -1928,6 +1928,13 @@ def test_web_image_and_source_maps_share_one_buildkit_graph() -> None:
         assert generated_path in dockerignore.splitlines()
 
 
+def test_web_runtime_installs_the_patched_openssl_floor() -> None:
+    dockerfile = (ROOT / "web" / "Dockerfile").read_text(encoding="utf-8")
+    runtime_stage = dockerfile.split("FROM ${NODE_IMAGE} AS runtime", maxsplit=1)[1]
+
+    assert 'apk add --no-cache "openssl>=3.5.8-r0"' in runtime_stage
+
+
 def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
     statements = _policy_statements(resources["ApiTaskRole"])
