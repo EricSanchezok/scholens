@@ -49,6 +49,7 @@ RUN uv pip install --no-deps /app
 FROM ${PYTHON_IMAGE} AS runtime
 
 RUN apk add --no-cache ca-certificates libcurl py3-onnxruntime \
+        "openssl>=3.5.8-r0" \
         "sqlite-libs>=3.53.2-r0" \
     && adduser -D -u 1000 scholens
 
