@@ -72,6 +72,7 @@ PDF_PROGRESS_MARKERS = (
     # Match terminal and specific stages before broad provider status text.
     # "PDF processing complete" intentionally contains "processing".
     ("complete", "finalizing"),
+    ("finalizing", "finalizing"),
     ("extracting", "extracting_metadata"),
     ("read ", "extracting_metadata"),
     ("indexing", "indexing"),

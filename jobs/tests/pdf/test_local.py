@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pymupdf
 import pytest
+from scholens_job_contracts import require_pdf_callback_content_size
 
 from src.pdf.local import (
+    _project_page_offsets,
     analyze_pdf,
     build_text_last_resort,
     extract_markdown_markitdown,
@@ -161,7 +163,7 @@ def test_pymupdf4llm_extraction_is_full_with_exact_offsets(tmp_path) -> None:
 def test_markitdown_extraction_is_text_only_degraded(tmp_path) -> None:
     pdf_path = tmp_path / "paper.pdf"
     pdf_path.write_bytes(_native_text_pdf())
-    offsets = {1: [0, 10], 2: [11, 20]}
+    offsets = {1: [0, 10], 2: [10, 20]}
 
     result = extract_markdown_markitdown(
         str(pdf_path),
@@ -172,8 +174,40 @@ def test_markitdown_extraction_is_text_only_degraded(tmp_path) -> None:
     assert result.backend.value == "markitdown"
     assert result.quality.value == "text_only"
     assert result.warning_code == "markitdown_fallback"
-    assert result.page_offset_map == offsets
+    midpoint = len(result.markdown) // 2
+    assert result.page_offset_map == {
+        1: [0, midpoint],
+        2: [midpoint, len(result.markdown)],
+    }
+    require_pdf_callback_content_size(
+        raw_content=result.markdown,
+        page_offset_map=result.page_offset_map,
+    )
     assert "Scholens line" in result.markdown
+
+
+@pytest.mark.parametrize(
+    ("target_length", "expected"),
+    [
+        (5, {1: [0, 2], 3: [2, 5]}),
+        (10, {1: [0, 4], 3: [4, 10]}),
+        (20, {1: [0, 8], 3: [8, 20]}),
+    ],
+)
+def test_markitdown_offsets_are_projected_into_exact_target_content(
+    target_length: int,
+    expected: dict[int, list[int]],
+) -> None:
+    projected = _project_page_offsets(
+        {1: [0, 4], 3: [4, 10]},
+        target_length=target_length,
+    )
+
+    assert projected == expected
+    require_pdf_callback_content_size(
+        raw_content="x" * target_length,
+        page_offset_map=projected,
+    )
 
 
 def test_pymupdf4llm_rejects_unreadable_file(tmp_path) -> None:

@@ -239,6 +239,7 @@ def test_digital_pdf_uses_pymupdf4llm_full(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     uploaded: list[str] = []
+    statuses: list[str] = []
     _patch_s3(monkeypatch, uploaded)
     _patch_metadata(monkeypatch, "Digital paper")
 
@@ -247,7 +248,7 @@ def test_digital_pdf_uses_pymupdf4llm_full(
             _digital_pdf(),
             f"documents/{'a' * 64}/source.pdf",
             "job-1",
-            status_callback=lambda _status: None,
+            status_callback=statuses.append,
         )
     )
 
@@ -261,6 +262,7 @@ def test_digital_pdf_uses_pymupdf4llm_full(
     assert result.page_offset_map is not None
     assert set(result.page_offset_map) == {1, 2}
     assert f"documents/{'a' * 64}/canonical.md" in uploaded
+    assert statuses[-1] == "Finalizing PDF result"
 
 
 def test_repair_artifacts_are_versioned_without_overwriting_canonical_keys(
