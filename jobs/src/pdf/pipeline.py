@@ -357,6 +357,7 @@ async def process_pdf_file(
             if not metadata.title:
                 raise ValueError("AI metadata extraction returned no title")
 
+        status_callback("Finalizing PDF result")
         return PDFProcessingResult(
             success=True,
             metadata=metadata,

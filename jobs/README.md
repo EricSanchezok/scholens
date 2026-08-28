@@ -51,7 +51,8 @@ The PDF worker follows one explicit, local-first pipeline:
      offsets (primary engine);
      b. on failure, `markitdown` is tried as a second engine and is persisted
      as `text_only` because its output has no page boundaries (offsets are
-     approximated from the local page analysis); when the primary output
+     proportionally projected from the local page analysis into the exact
+     MarkItDown content length); when the primary output
      contains Unicode replacement characters, the fallback replaces it only
      if it reduces corruption, retains 80–125% of the substantive length, and
      matches at least 80% of a bounded semantic-evidence sample;
@@ -86,12 +87,13 @@ cannot accept.
 
 The worker also sends a signed stage projection and heartbeat at bounded
 intervals. Public progress is limited to `queued`, `parsing`, `extracting`,
-`indexing`, and `finalizing`; provider-specific payloads never become client
-state. The task checks Server-owned cancellation before and after expensive
-boundaries. Revocation uses `terminate=False`: pending work can be skipped, and
-running work exits cooperatively without killing a worker process. Soft and hard
-task limits bound the complete workflow so a lost provider response cannot
-leave a Library row processing forever.
+`indexing`, and `finalizing`; result assembly and callback-contract validation
+run in the finalizing stage, while provider-specific payloads never become
+client state. The task checks Server-owned cancellation before and after
+expensive boundaries. Revocation uses `terminate=False`: pending work can be
+skipped, and running work exits cooperatively without killing a worker process.
+Soft and hard task limits bound the complete workflow so a lost provider response
+cannot leave a Library row processing forever.
 
 The production image stores the pinned search model at
 `SCHOLENS_EMBEDDING_MODEL_PATH`. It never downloads a model at task execution

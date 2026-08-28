@@ -58,6 +58,49 @@ def _canonical_page_text(
     return "".join(chunks), offsets
 
 
+def _project_page_offsets(
+    source_offsets: dict[int, list[int]],
+    *,
+    target_length: int,
+) -> dict[int, list[int]]:
+    """Project source-text page boundaries into another text representation."""
+    if target_length <= 0 or not source_offsets:
+        raise ParserContentError("MarkItDown page offsets are unavailable")
+
+    ordered_offsets = sorted(source_offsets.items())
+    if any(
+        page_number <= 0 or len(bounds) != 2 for page_number, bounds in ordered_offsets
+    ):
+        raise ParserContentError("MarkItDown source page offsets are invalid")
+    source_length = max(bounds[1] for _, bounds in ordered_offsets)
+    if source_length <= 0:
+        raise ParserContentError("MarkItDown source page offsets are invalid")
+
+    projected: dict[int, list[int]] = {}
+    previous_source_end = 0
+    previous_target_end = 0
+    for page_number, bounds in ordered_offsets:
+        if (
+            bounds[0] < previous_source_end
+            or bounds[0] < 0
+            or bounds[1] < bounds[0]
+            or bounds[1] > source_length
+        ):
+            raise ParserContentError("MarkItDown source page offsets are invalid")
+
+        start = bounds[0] * target_length // source_length
+        end = bounds[1] * target_length // source_length
+        if start < previous_target_end or end < start or end > target_length:
+            raise ParserContentError("MarkItDown projected page offsets are invalid")
+        projected[page_number] = [start, end]
+        previous_source_end = bounds[1]
+        previous_target_end = end
+
+    if previous_target_end != target_length:
+        raise ParserContentError("MarkItDown projected page offsets are incomplete")
+    return projected
+
+
 def _render_preview(document: pymupdf.Document) -> bytes | None:
     try:
         pixmap = document[0].get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
@@ -183,10 +226,10 @@ def extract_markdown_markitdown(
 ) -> ParsedDocument:
     """Extract Markdown with a second engine, degraded to text_only offsets.
 
-    MarkItDown has no page-boundary metadata, so offsets are approximated from
-    the deterministic per-page text analysis. This is a degraded tier on
-    purpose: consumers that map offsets to pages may drift by at most one page,
-    and the `text_only` quality lets the UI warn about layout-dependent gaps.
+    MarkItDown has no page-boundary metadata, so deterministic PyMuPDF page
+    boundaries are proportionally projected into the produced Markdown. This
+    is a degraded tier on purpose: the `text_only` quality lets the UI warn
+    about layout-dependent gaps.
     """
     global _markitdown
     if _markitdown is None:
@@ -199,9 +242,14 @@ def extract_markdown_markitdown(
     if not markdown.strip():
         raise ParserContentError("MarkItDown produced no text")
 
+    page_offset_map = _project_page_offsets(
+        fallback_offsets,
+        target_length=len(markdown),
+    )
+
     return ParsedDocument(
         markdown=markdown,
-        page_offset_map=fallback_offsets,
+        page_offset_map=page_offset_map,
         backend=ParserBackend.MARKITDOWN,
         quality=ParserQuality.TEXT_ONLY,
         parser_version=parser_version,

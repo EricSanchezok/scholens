@@ -115,7 +115,7 @@ def test_progress_reporter_normalizes_stage_and_uses_short_timeout(
     response.close.assert_called_once_with()
 
 
-def test_progress_reporter_prioritizes_terminal_stage_over_processing_text(
+def test_progress_reporter_preserves_metadata_and_finalization_boundaries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     post = MagicMock(return_value=_response())
@@ -126,6 +126,12 @@ def test_progress_reporter_prioritizes_terminal_stage_over_processing_text(
     )
 
     reporter.update("Processing PDF file")
+    reporter.update("Extracting paper metadata")
+    assert _pdf_failure_code(reporter.stage) == "paper_ingestion_metadata_failed"
+
+    reporter.update("Finalizing PDF result")
+    assert _pdf_failure_code(reporter.stage) == "paper_ingestion_finalizing_failed"
+
     reporter.update("PDF processing complete!")
 
     assert post.call_args_list[-1].args[1] == {"progress_code": "finalizing"}
