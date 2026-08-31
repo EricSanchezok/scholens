@@ -17,7 +17,8 @@ from zoneinfo import ZoneInfo
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.database.product_analytics import track_event
-from app.llm.answer_packet import AnswerPacketBuilder, SourceRegistry
+from app.llm.answer_packet import AnswerPacketBuilder
+from app.llm.citation_normalizer import CitationNormalizer
 from app.llm.conversation_state import ConversationAgentState
 from app.llm.errors import classify_llm_error
 from app.llm.grounded_answer import (
@@ -28,8 +29,6 @@ from app.llm.grounded_answer import (
     inspect_grounded_answer,
 )
 from app.llm.pydantic_models import build_chat_model, profile_for_reasoning
-from app.llm.posthoc_citation import recover_posthoc_citations
-from app.llm.citation_adapters import citation_adapter_for
 from app.llm.token_credits import settle_token_usage
 from app.modules.conversations.application.chat import (
     ChatHistoryMessage,
@@ -127,11 +126,11 @@ _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
 _FINAL_OUTPUT_TOOL_NAME = "final_answer"
 _VISIBLE_CITATION_LABEL = re.compile(
-    r"\[A\d+(?:\s*,\s*A?\d+)*\]",
+    r"\[A?\d+(?:\s*,\s*A?\d+)*\]",
     re.IGNORECASE,
 )
 _VISIBLE_CITATION_PREFIX = re.compile(
-    r"\[(?:A(?:\d+(?:\s*,\s*A?\d+)*(?:\s*,\s*A?\d*)?)?)?",
+    r"\[(?:A?\d*(?:\s*,\s*A?\d*)*)?",
     re.IGNORECASE,
 )
 _PRIVATE_OUTPUT_TERMS = (
@@ -350,6 +349,9 @@ class _StreamedAssistantItem:
     packet: AnswerPacket
     references: ReferenceBundle | None
     metrics: GroundedAnswerMetrics
+    grounding_status: Literal["not_evaluated", "verified", "mixed", "unverified"] = (
+        "not_evaluated"
+    )
 
 
 @dataclass(slots=True)
@@ -519,6 +521,7 @@ class ScholensConversationAgent:
         )
 
         soft_citation_retries = 0
+        citation_normalizer = CitationNormalizer(provider=profile.provider)
 
         @agent.output_validator
         def validate_final_answer(
@@ -537,7 +540,7 @@ class ScholensConversationAgent:
                         "reason": reason,
                         "scope": ctx.deps.conversation_scope.scope_type.value,
                         "provider": profile.provider,
-                        "profile": profile.name.value,
+                        "model_profile": profile.name.value,
                     },
                 )
                 raise ModelRetry(message)
@@ -549,22 +552,12 @@ class ScholensConversationAgent:
                     "private citation or tool protocol instructions.",
                 )
             packet = self._answer_packet(ctx.deps)
-            adapter = citation_adapter_for(profile.provider)
-            normalized_attributions = adapter.normalize(
-                {
-                    "attributions": [
-                        item.model_dump(mode="json") for item in output.attributions
-                    ]
-                },
-                SourceRegistry.from_admitted_sources(packet.sources),
-                generated_text=output.answer,
-            )
-            inspection = inspect_grounded_answer(
+            inspection = citation_normalizer.normalize(
                 output.answer,
                 packet.sources,
                 nonce=nonce,
-                attributions=normalized_attributions or output.attributions,
-            )
+                attributions=output.attributions,
+            ).inspection
             if not inspection.visible_content.strip():
                 retry(
                     "empty_visible_answer",
@@ -653,7 +646,7 @@ class ScholensConversationAgent:
                     "scope": conversation_scope.scope_type.value,
                     "reason": classified.code,
                     "provider": profile.provider,
-                    "profile": profile.name.value,
+                    "model_profile": profile.name.value,
                 },
             )
             raise classified from exc
@@ -678,6 +671,7 @@ class ScholensConversationAgent:
         profile: Any,
     ) -> AsyncGenerator[ConversationAgentStreamEvent, None]:
         usage_settled = False
+        citation_normalizer = CitationNormalizer(provider=profile.provider)
         try:
             async with agent.iter(
                 request.user_query,
@@ -773,6 +767,7 @@ class ScholensConversationAgent:
                     inspection=inspection,
                     sequence=final_candidate.sequence,
                     profile=profile,
+                    citation_normalizer=citation_normalizer,
                 )
                 if final_item is None:
                     raise RuntimeError(
@@ -802,6 +797,7 @@ class ScholensConversationAgent:
                             packet=final_item.packet,
                             references=final_references,
                             metrics=final_item.metrics,
+                            grounding_status=final_item.grounding_status,
                         ),
                     )
                 self._settle_usage(
@@ -815,6 +811,7 @@ class ScholensConversationAgent:
                     packet=final_item.packet,
                     references=final_references,
                     metrics=final_item.metrics,
+                    grounding_status=final_item.grounding_status,
                 )
                 record_histogram(
                     "scholens.conversation.citation.available_sources",
@@ -840,7 +837,7 @@ class ScholensConversationAgent:
                         if summary
                         else "not_required",
                         "provider": profile.provider,
-                        "profile": profile.name.value,
+                        "model_profile": profile.name.value,
                     },
                 )
                 add_counter(
@@ -851,7 +848,7 @@ class ScholensConversationAgent:
                         if summary
                         else "not_required",
                         "provider": profile.provider,
-                        "profile": profile.name.value,
+                        "model_profile": profile.name.value,
                     },
                 )
                 if summary is not None:
@@ -861,7 +858,7 @@ class ScholensConversationAgent:
                             "scope": deps.conversation_scope.scope_type.value,
                             "status": summary.status,
                             "provider": profile.provider,
-                            "profile": profile.name.value,
+                            "model_profile": profile.name.value,
                         },
                     )
                     add_counter(
@@ -870,7 +867,7 @@ class ScholensConversationAgent:
                             "scope": deps.conversation_scope.scope_type.value,
                             "grounding_status": summary.grounding_status,
                             "provider": profile.provider,
-                            "profile": profile.name.value,
+                            "model_profile": profile.name.value,
                         },
                     )
                 if summary is not None and summary.status in {"partial", "unavailable"}:
@@ -880,7 +877,7 @@ class ScholensConversationAgent:
                             "scope": deps.conversation_scope.scope_type.value,
                             "reason": summary.status,
                             "provider": profile.provider,
-                            "profile": profile.name.value,
+                            "model_profile": profile.name.value,
                         },
                     )
                 if deps.citation_retry_count and summary is not None:
@@ -890,7 +887,7 @@ class ScholensConversationAgent:
                             "scope": deps.conversation_scope.scope_type.value,
                             "reason": summary.status,
                             "provider": profile.provider,
-                            "profile": profile.name.value,
+                            "model_profile": profile.name.value,
                         },
                     )
                 yield ConversationAgentResult(
@@ -1769,6 +1766,9 @@ Initial server-validated answer material:
         packet: AnswerPacket,
         references: ReferenceBundle | None,
         metrics: GroundedAnswerMetrics,
+        grounding_status: Literal[
+            "not_evaluated", "verified", "mixed", "unverified"
+        ] = "not_evaluated",
     ) -> ConversationTrace | None:
         entries: list[ConversationProgressEntry | ConversationActivity] = sorted(
             [*deps.progress_entries, *deps.activities.values()],
@@ -1779,6 +1779,7 @@ Initial server-validated answer material:
                 packet=packet,
                 references=references,
                 metrics=metrics,
+                grounding_status=grounding_status,
             )
             if packet.sources or packet.coverage.rejected_sources
             else None
@@ -1796,6 +1797,9 @@ Initial server-validated answer material:
         packet: AnswerPacket,
         references: ReferenceBundle | None,
         metrics: GroundedAnswerMetrics,
+        grounding_status: Literal[
+            "not_evaluated", "verified", "mixed", "unverified"
+        ] = "not_evaluated",
     ) -> ConversationCitationSummary:
         used_sources = len(references.sources) if references is not None else 0
         available_sources = len(packet.sources)
@@ -1814,12 +1818,10 @@ Initial server-validated answer material:
         else:
             status = "complete"
         if not available_sources:
-            grounding_status: Literal[
-                "not_evaluated", "verified", "mixed", "unverified"
-            ] = "not_evaluated"
-        elif metrics.unverified_claim_count:
+            grounding_status = "not_evaluated"
+        elif grounding_status == "not_evaluated" and metrics.unverified_claim_count:
             grounding_status = "mixed" if used_sources else "unverified"
-        else:
+        elif grounding_status == "not_evaluated":
             # Marker/native attribution links are provenance, not semantic
             # entailment. Keep this unevaluated until a bounded verifier proves
             # the claim, rather than overstating citation quality.
@@ -1872,16 +1874,15 @@ Initial server-validated answer material:
         sequence: int | None = None,
         posthoc: bool = True,
         profile: Any | None = None,
+        citation_normalizer: CitationNormalizer | None = None,
     ) -> _StreamedAssistantItem | None:
         if not inspection.visible_content.strip():
             return None
         item_sequence = sequence if sequence is not None else deps.allocate_sequence()
         selected_packet = packet or self._answer_packet(deps)
         if posthoc and selected_packet.sources and inspection.references is None:
-            recovered = recover_posthoc_citations(
-                inspection,
-                selected_packet.sources,
-            )
+            normalizer = citation_normalizer or CitationNormalizer(provider="deepseek")
+            recovered = normalizer.posthoc(inspection, selected_packet.sources)
             inspection = replace(
                 recovered.inspection,
                 posthoc_timed_out=recovered.timed_out,
@@ -1901,7 +1902,7 @@ Initial server-validated answer material:
                         **(
                             {
                                 "provider": profile.provider,
-                                "profile": profile.name.value,
+                                "model_profile": profile.name.value,
                             }
                             if profile is not None
                             else {}
@@ -1919,6 +1920,7 @@ Initial server-validated answer material:
                 else (ReferenceBundle() if selected_packet.sources else None)
             ),
             metrics=inspection.metrics,
+            grounding_status=inspection.grounding_status,
         )
 
     @staticmethod

@@ -517,16 +517,19 @@ supports the answer. One completed grounded-answer inspection supplies the
 sanitized text, valid references, trace counts, and publication state so those
 paths cannot parse the private protocol differently.
 
-Provider-native attribution is translated through a single adapter boundary for
-DeepSeek/OpenAI-compatible output, OpenAI annotations, Gemini grounding
-supports/chunks, Anthropic citation blocks, and Bedrock citation spans. Every
-adapter maps back to the current server-owned source registry; unknown provider
-identifiers are discarded. When native metadata is absent, bounded post-hoc
-claim alignment considers at most 24 claims and three source candidates per
-claim and emits only deterministic evidence matches. Similarity is a candidate
-ranker, never proof. The first implementation is synchronous and bounded; an
-optional future `citation_update` event may enrich a completed response without
-changing its answer.
+Provider-native attribution is translated through the unified
+`CitationNormalizer` boundary for DeepSeek/OpenAI-compatible output, OpenAI
+annotations, Gemini grounding supports/chunks, Anthropic citation blocks, and
+Bedrock citation spans. Every adapter maps back to the current server-owned
+source registry; unknown provider identifiers are discarded. When native
+metadata is absent, bounded post-hoc claim alignment considers at most 24
+claims and three source candidates per claim and emits only deterministic
+evidence matches. Similarity is a candidate ranker, never proof. An optional
+small verifier callback is invoked only for uncertain candidates and shares the
+two-second budget; verifier outcomes other than `SUPPORTED` remain unlinked.
+The first implementation is synchronous and bounded; an optional future
+`citation_update` event may enrich a completed response without changing its
+answer.
 
 Progress and final items use stable IDs and share a monotonic sequence with
 sanitized activity records. The persisted trace contains ordered progress and

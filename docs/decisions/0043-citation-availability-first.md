@@ -88,4 +88,7 @@ server-admitted keys; provider fixtures normalize or drop metadata safely; and
 SSE/persistence complete the response. Web tests cover source-panel states,
 refresh, replay, dark mode, and narrow layouts. Production acceptance tracks
 answer completion, soft/hard citation failures, coverage, precision, verifier
-timeouts, and latency separately for each model profile.
+timeouts, and latency separately for each model profile. The committed offline
+manifest is executable with `python -m evals.run_citation_resilience_eval`; it
+is deliberately redacted and checks structural precision independently from
+coverage.

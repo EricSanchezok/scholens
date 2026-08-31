@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 import unicodedata
+import re
 
 from app.modules.conversations.application.contracts.answer_packet import (
     AnswerSource,
@@ -15,20 +16,24 @@ from app.modules.conversations.application.contracts.answer_packet import (
     ReferenceBundle,
 )
 
+_CJK_TEXT = re.compile(r"[\u2e80-\u9fff\u3040-\u30ff\uac00-\ud7af]")
+
 
 def grounded_citation_instructions(nonce: str) -> str:
     """Instructions that remain valid while an agent discovers sources."""
 
     return (
-        "Tool results may include server-validated integer source_keys. When a "
+        "Tool results may include server-validated integer source_keys. Prefer the "
+        "structured attributions field: quote the exact visible passage and provide "
+        "every supplied key that supports it. For legacy compatibility, when a "
         "factual passage relies on those materials, append exactly one private "
         f"[[SCHOLENS_CITE:{nonce}:1]] marker after the passage, replacing 1 with "
         "every supplied key that supports it. Never cite a key absent from a tool "
         "result or the initial answer packet. Do not invent visible citation labels "
         "such as [A1] or [1], Markdown footnotes, a bibliography, URLs, or document "
-        "IDs; the product renders citations from the private markers. Never repeat "
-        "the private markers as prose. If no validated keys are supplied, do not emit "
-        "a citation marker."
+        "IDs; the product renders citations from structured attributions or private "
+        "markers. Never repeat the private markers as prose. If no validated keys "
+        "are supplied, do not emit a citation attribution or marker."
     )
 
 
@@ -51,6 +56,9 @@ class GroundedAnswerInspection:
     references: ReferenceBundle | None
     metrics: GroundedAnswerMetrics
     posthoc_timed_out: bool = False
+    grounding_status: Literal["not_evaluated", "verified", "mixed", "unverified"] = (
+        "not_evaluated"
+    )
 
     @property
     def has_citation_errors(self) -> bool:
@@ -239,13 +247,29 @@ class GroundedAnswerStreamParser:
             if span is None:
                 self._protocol_errors += 1
                 continue
-            self._annotations.append(
-                CitationAnnotation(
-                    start_offset=span[0],
-                    end_offset=span[1],
-                    source_keys=list(keys),
+            for index, previous in enumerate(self._annotations):
+                if previous.start_offset == span[0] and previous.end_offset == span[1]:
+                    merged_keys = list(dict.fromkeys([*previous.source_keys, *keys]))
+                    self._annotations[index] = previous.model_copy(
+                        update={"source_keys": merged_keys}
+                    )
+                    break
+                if max(previous.start_offset, span[0]) < min(
+                    previous.end_offset, span[1]
+                ):
+                    # Overlapping provider spans are ambiguous for inline
+                    # rendering. Keep the first deterministic span and drop
+                    # the later one without affecting the answer.
+                    self._protocol_errors += 1
+                    break
+            else:
+                self._annotations.append(
+                    CitationAnnotation(
+                        start_offset=span[0],
+                        end_offset=span[1],
+                        source_keys=list(keys),
+                    )
                 )
-            )
 
     def _annotate(self, raw_keys: str) -> None:
         try:
@@ -333,8 +357,16 @@ class GroundedAnswerStreamParser:
         return -1, False
 
 
-def _normalized_with_offsets(value: str) -> tuple[str, list[int]]:
-    """Return NFKC/whitespace-normalized text and original character offsets."""
+def _normalized_with_offsets(
+    value: str,
+    *,
+    casefold: bool = False,
+) -> tuple[str, list[int]]:
+    """Return normalized text and original character offsets.
+
+    Normalization is performed per original character so compatibility
+    expansions and case-fold expansions still map to a safe original span.
+    """
     output: list[str] = []
     offsets: list[int] = []
     pending_space = False
@@ -343,17 +375,20 @@ def _normalized_with_offsets(value: str) -> tuple[str, list[int]]:
     # (for example, ``ﬀ`` → ``ff``) still point back to a valid source span.
     for index, original_character in enumerate(value):
         for character in unicodedata.normalize("NFKC", original_character):
-            if character.isspace():
-                if output:
-                    pending_space = True
-                    pending_offset = index
-                continue
-            if pending_space:
-                output.append(" ")
-                offsets.append(pending_offset)
-                pending_space = False
-            output.append(character)
-            offsets.append(index)
+            if casefold:
+                character = character.casefold()
+            for folded_character in character:
+                if folded_character.isspace():
+                    if output:
+                        pending_space = True
+                        pending_offset = index
+                    continue
+                if pending_space:
+                    output.append(" ")
+                    offsets.append(pending_offset)
+                    pending_space = False
+                output.append(folded_character)
+                offsets.append(index)
     return "".join(output), offsets
 
 
@@ -366,11 +401,33 @@ def _locate_quote(value: str, quote: str) -> tuple[int, int] | None:
     if not normalized_quote:
         return None
     first = normalized_value.find(normalized_quote)
-    if first < 0 or first + len(normalized_quote) > len(offsets):
+    normalized_span: tuple[int, int] | None = None
+    if (
+        first >= 0
+        and first + len(normalized_quote) <= len(offsets)
+        and normalized_value.find(normalized_quote, first + 1) < 0
+    ):
+        start = offsets[first]
+        last = first + len(normalized_quote) - 1
+        normalized_span = (start, offsets[last] + 1)
+    if normalized_span is not None:
+        if _CJK_TEXT.search(value) or _CJK_TEXT.search(quote):
+            return normalized_span
+    elif _CJK_TEXT.search(value) or _CJK_TEXT.search(quote):
         return None
-    if normalized_value.find(normalized_quote, first + 1) >= 0:
-        return None
-    start = offsets[first]
-    last = first + len(normalized_quote) - 1
-    end = offsets[last] + 1
-    return start, end
+
+    # English-only case folding is intentionally a separate, conservative
+    # phase. Chinese and other CJK text never enters fuzzy matching.
+    folded_value, folded_offsets = _normalized_with_offsets(value, casefold=True)
+    folded_quote, _ = _normalized_with_offsets(quote.strip(), casefold=True)
+    folded_first = folded_value.find(folded_quote)
+    if (
+        folded_first < 0
+        or folded_first + len(folded_quote) > len(folded_offsets)
+        or folded_value.find(folded_quote, folded_first + 1) >= 0
+    ):
+        return normalized_span
+    return (
+        folded_offsets[folded_first],
+        folded_offsets[folded_first + len(folded_quote) - 1] + 1,
+    )

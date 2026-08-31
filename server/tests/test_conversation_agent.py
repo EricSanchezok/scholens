@@ -935,7 +935,7 @@ async def test_exhausted_citation_repair_publishes_safe_answer() -> None:
             }
             return
         assert info.instructions is not None
-        yield _final_answer("Safe answer [A1]")
+        yield _final_answer("Safe answer [1]")
 
     events = await _events(
         model=FunctionModel(stream_function=always_invalid),

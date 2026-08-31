@@ -43,6 +43,18 @@ series; neither is an availability alarm on its own. A spike in
 incident, while a spike in hard failures or answer completion loss is a
 provider/runtime incident.
 
+Before a release and after a rollback, run the redacted offline acceptance set
+from the Server workspace:
+
+```bash
+cd server
+uv run python -m evals.run_citation_resilience_eval
+```
+
+The result must keep structural citation precision at `1.0`; coverage is a
+separate trend and is not an availability gate. Keep the manifest free of raw
+prompts, provider bodies, nonce values, and source identifiers.
+
 For a deprecated HTTP route or MCP tool, confirm the registry's
 low-cardinality telemetry key is queryable for the full retirement window.
 Removal requires both at least 90 days since notice and production evidence of

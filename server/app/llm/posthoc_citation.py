@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from time import monotonic
-from typing import Sequence
+from typing import Literal, Protocol
 
 from app.modules.conversations.application.contracts.answer_packet import (
     AnswerSource,
@@ -26,7 +27,14 @@ _MAX_CLAIMS = 24
 _MAX_CANDIDATES = 3
 _BUDGET_SECONDS = 2.0
 _CODE_OR_FORMULA = re.compile(r"^\s*(?:```|~~~|\$\$|\\\[|<code>)")
+_LINK_ONLY = re.compile(r"^\s*(?:https?://|www\.|\[[^\]]+\]\([^)]*\)\s*$)")
 _CLAIM_BOUNDARY = re.compile(r"[。！？.!?]+(?:\s+|(?=\S)|$)|\n{2,}")
+
+VerifierDecision = Literal["SUPPORTED", "PARTIAL", "UNSUPPORTED", "UNKNOWN"]
+
+
+class CitationVerifier(Protocol):
+    def __call__(self, claim: str, evidence: str) -> VerifierDecision: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +43,7 @@ class PosthocCitationResult:
     checked_claims: int
     unverified_claims: int
     timed_out: bool
+    verified_claims: int = 0
 
 
 def _normalize(value: str) -> str:
@@ -49,7 +58,7 @@ def _claims(value: str) -> list[tuple[str, int, int]]:
         # same visible span a user reads. Paragraph breaks are separators only.
         end = match.start() if match.group().startswith("\n") else match.end()
         claim = value[start:end].strip()
-        if claim and not _CODE_OR_FORMULA.match(claim):
+        if claim and not _CODE_OR_FORMULA.match(claim) and not _LINK_ONLY.match(claim):
             offset = value.find(claim, start, end + 1)
             claims.append(
                 (
@@ -62,7 +71,12 @@ def _claims(value: str) -> list[tuple[str, int, int]]:
         if len(claims) >= _MAX_CLAIMS:
             return claims
     claim = value[start:].strip()
-    if claim and not _CODE_OR_FORMULA.match(claim) and len(claims) < _MAX_CLAIMS:
+    if (
+        claim
+        and not _CODE_OR_FORMULA.match(claim)
+        and not _LINK_ONLY.match(claim)
+        and len(claims) < _MAX_CLAIMS
+    ):
         offset = value.find(claim, start)
         claims.append(
             (
@@ -79,6 +93,7 @@ def recover_posthoc_citations(
     sources: Sequence[AnswerSource],
     *,
     budget_seconds: float = _BUDGET_SECONDS,
+    verifier: CitationVerifier | None = None,
 ) -> PosthocCitationResult:
     if not sources or not inspection.visible_content.strip():
         return PosthocCitationResult(inspection, 0, 0, False)
@@ -90,13 +105,23 @@ def recover_posthoc_citations(
     by_key = {source.key: source for source in sources}
     checked = 0
     unverified = 0
+    verified = 0
     for claim, start, end in _claims(inspection.visible_content):
         if monotonic() - started > budget_seconds:
+            result_inspection = _with_annotations(inspection, annotations, by_key)
             return PosthocCitationResult(
-                _with_annotations(inspection, annotations, by_key),
+                replace(
+                    result_inspection,
+                    grounding_status=_grounding_status(
+                        inspection.grounding_status,
+                        verified,
+                        unverified + 1,
+                    ),
+                ),
                 checked,
                 unverified + 1,
                 True,
+                verified,
             )
         checked += 1
         normalized_claim = _normalize(claim)
@@ -113,9 +138,37 @@ def recover_posthoc_citations(
             ),
             None,
         )
+        if supported is None and verifier is not None:
+            for source in candidates:
+                if monotonic() - started > budget_seconds:
+                    result_inspection = _with_annotations(
+                        inspection, annotations, by_key
+                    )
+                    return PosthocCitationResult(
+                        replace(
+                            result_inspection,
+                            grounding_status=_grounding_status(
+                                inspection.grounding_status,
+                                verified,
+                                unverified + 1,
+                            ),
+                        ),
+                        checked,
+                        unverified + 1,
+                        True,
+                        verified,
+                    )
+                try:
+                    decision = verifier(claim, source.reference)
+                except Exception:
+                    decision = "UNKNOWN"
+                if decision == "SUPPORTED":
+                    supported = source
+                    break
         if supported is None:
             unverified += 1
             continue
+        verified += 1
         if supported.key in used_keys:
             continue
         annotations.append(
@@ -126,12 +179,37 @@ def recover_posthoc_citations(
             )
         )
         used_keys.append(supported.key)
+    result_inspection = _with_annotations(inspection, annotations, by_key)
     return PosthocCitationResult(
-        _with_annotations(inspection, annotations, by_key),
+        replace(
+            result_inspection,
+            grounding_status=_grounding_status(
+                inspection.grounding_status,
+                verified,
+                unverified,
+            ),
+        ),
         checked,
         unverified,
         False,
+        verified,
     )
+
+
+def _grounding_status(
+    existing: Literal["not_evaluated", "verified", "mixed", "unverified"],
+    verified: int,
+    unverified: int,
+) -> Literal["not_evaluated", "verified", "mixed", "unverified"]:
+    if existing != "not_evaluated":
+        return existing
+    if verified and unverified:
+        return "mixed"
+    if verified:
+        return "verified"
+    if unverified:
+        return "unverified"
+    return existing
 
 
 def _overlap(left: str, right: str) -> int:
@@ -183,4 +261,9 @@ def _with_annotations(
     )
 
 
-__all__ = ["PosthocCitationResult", "recover_posthoc_citations"]
+__all__ = [
+    "CitationVerifier",
+    "PosthocCitationResult",
+    "VerifierDecision",
+    "recover_posthoc_citations",
+]

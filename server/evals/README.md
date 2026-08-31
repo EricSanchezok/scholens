@@ -1,6 +1,25 @@
 # Scholens evaluations
 
-This directory contains the maintained end-to-end Data Table evaluation.
+This directory contains maintained end-to-end and offline evaluations.
+
+## Citation resilience
+
+`citation_resilience_eval_manifest.json` is a redacted, deterministic
+acceptance set for production-shaped stale markers, malformed protocols,
+unknown source keys, multi-document attributions, and conservative post-hoc
+recovery. It deliberately contains no raw production prompt, provider body,
+nonce, or private source identifier.
+
+Run it without a live model or external service:
+
+```bash
+cd server
+uv run python -m evals.run_citation_resilience_eval
+```
+
+The command reports structural precision and citation coverage separately.
+Semantic precision for uncertain claims is measured by the optional bounded
+verifier/evaluation pipeline, never inferred from source similarity alone.
 
 ## Data Table extraction
 
