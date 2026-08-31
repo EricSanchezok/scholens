@@ -17,7 +17,6 @@ export type ReaderFloatingPosition = {
   maxWidth: number;
   placement: "top" | "bottom";
   top: number;
-  visible: boolean;
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -87,12 +86,5 @@ export function computeReaderFloatingPosition({
     maxWidth: boundaryWidth,
     placement,
     top,
-    visible:
-      boundary.right > boundary.left &&
-      boundary.bottom > boundary.top &&
-      anchor.right >= boundary.left &&
-      anchor.left <= boundary.right &&
-      anchor.bottom >= boundary.top &&
-      anchor.top <= boundary.bottom,
   };
 }

@@ -74,17 +74,6 @@ describe("computeReaderFloatingPosition", () => {
       maxWidth: 184,
       placement: "top",
       top: 108,
-      visible: false,
     });
-  });
-
-  it("hides the surface when the selection leaves the visible boundary", () => {
-    expect(
-      computeReaderFloatingPosition({
-        anchor: { bottom: -12, left: 120, right: 280, top: -32 },
-        boundary,
-        floating,
-      }).visible,
-    ).toBe(false);
   });
 });

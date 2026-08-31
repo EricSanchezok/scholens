@@ -93,8 +93,7 @@ export function useReaderFloatingPosition({
         current.top === nextPosition.top &&
         current.maxHeight === nextPosition.maxHeight &&
         current.maxWidth === nextPosition.maxWidth &&
-        current.placement === nextPosition.placement &&
-        current.visible === nextPosition.visible
+        current.placement === nextPosition.placement
           ? current
           : nextPosition,
       );

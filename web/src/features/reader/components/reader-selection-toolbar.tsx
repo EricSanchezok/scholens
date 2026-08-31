@@ -196,7 +196,7 @@ export function ReaderSelectionToolbar({
           maxHeight: position?.maxHeight,
           maxWidth: position?.maxWidth,
           top: position?.top ?? 0,
-          visibility: position && position.visible ? "visible" : "hidden",
+          visibility: position ? "visible" : "hidden",
         }}
         variants={motionVariants.swap}
       >
