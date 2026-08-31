@@ -2808,10 +2808,42 @@ export interface components {
         ConversationCitationSummary: {
             /** Annotation Count */
             annotation_count: number;
+            /**
+             * Available Source Count
+             * @default 0
+             */
+            available_source_count: number;
+            /**
+             * Dropped Annotation Count
+             * @default 0
+             */
+            dropped_annotation_count: number;
+            /**
+             * Grounding Status
+             * @default not_evaluated
+             * @enum {string}
+             */
+            grounding_status: "not_evaluated" | "verified" | "mixed" | "unverified";
             /** Rejected Source Count */
             rejected_source_count: number;
             /** Source Count */
             source_count: number;
+            /**
+             * Status
+             * @default not_required
+             * @enum {string}
+             */
+            status: "not_required" | "complete" | "partial" | "unavailable" | "pending";
+            /**
+             * Unlinked Source Count
+             * @default 0
+             */
+            unlinked_source_count: number;
+            /**
+             * Unverified Claim Count
+             * @default 0
+             */
+            unverified_claim_count: number;
         };
         /** ConversationCreateRequest */
         ConversationCreateRequest: {
@@ -3236,6 +3268,7 @@ export interface components {
         ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
+            citation_summary?: components["schemas"]["ConversationCitationSummary"] | null;
             /** References */
             references: {
                 [key: string]: components["schemas"]["JsonValue"];

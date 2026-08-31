@@ -504,6 +504,24 @@ async def stream_conversation_agent(
             if isinstance(event, ConversationAgentResult):
                 trace = event.trace
                 artifacts = event.artifacts
+                diagnostic_context.update(
+                    {
+                        "validation_reasons": list(event.validation_reasons),
+                        "retry_count": event.retry_count,
+                    }
+                )
+                if trace is not None and trace.citation_summary is not None:
+                    summary = trace.citation_summary
+                    diagnostic_context.update(
+                        {
+                            "citation_status": summary.status,
+                            "grounding_status": summary.grounding_status,
+                            "available_source_count": summary.available_source_count,
+                            "used_source_count": summary.source_count,
+                            "dropped_annotation_count": summary.dropped_annotation_count,
+                            "unverified_claim_count": summary.unverified_claim_count,
+                        }
+                    )
                 continue
             if (
                 isinstance(

@@ -74,6 +74,7 @@ change what the accepted record decided.
 - [ADR 0040: Bounded MCP public projections and lossless continuation](./0040-bounded-mcp-public-projections.md)
 - [ADR 0041: Versioned PDF text repair without destructive re-ingestion](./0041-versioned-pdf-text-repair.md)
 - [ADR 0042: Versioned migration for bounded MCP reads](./0042-versioned-mcp-bounded-read-migration.md)
+- [ADR 0043: Citation availability is separate from answer availability](./0043-citation-availability-first.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

@@ -15,6 +15,14 @@ why the repository moved away from its pre-release reset-first policy.
 | MCP `/mcp` | Existing tool names, schemas, permissions, and safety semantics remain compatible. Breaking changes use a replacement tool or versioned endpoint. |
 | Internal HTTP and job payloads | Producer and consumer overlap safely during rolling deployment and while accepted jobs remain queued. |
 
+Conversation citation summaries and optional fields on the `references` SSE
+event are compatible output extensions. Older clients may ignore them; the
+server continues to emit the existing `references` object and lifecycle event
+types. Citation metadata may be empty when evidence was retrieved but could not
+be safely attached, while the response itself remains completed. A future
+`citation_update` event must be additive and idempotent and may update only
+references/trace, never the persisted answer text.
+
 The production database baseline is revision `c9f4a62d01ab`. The protected
 database workflow must verify that value against `migrations/current.json`
 when establishing the version 3 release contract; repository text never

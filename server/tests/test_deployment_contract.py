@@ -1234,12 +1234,17 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
     dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
     rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
     widgets = json.loads(rendered_dashboard)["widgets"]
-    assert len(widgets) == 10
+    assert len(widgets) == 11
     assert "web_performance" in dashboard_body
     assert "conversation_performance" in dashboard_body
     assert "Conversation feedback and stream p75 / p95" in dashboard_body
     assert "scholens.conversation.worker.claim_age" in dashboard_body
     assert "scholens.conversation.accept.total_duration" in dashboard_body
+    assert "Conversation answer and citation health" in dashboard_body
+    assert "scholens.conversation.citation.status" in dashboard_body
+    assert "scholens.conversation.citation.grounding" in dashboard_body
+    assert "scholens.conversation.citation.hard_failure" in dashboard_body
+    assert "scholens.conversation.citation.verifier.timeout" in dashboard_body
     assert "primary_content" in dashboard_body
 
 

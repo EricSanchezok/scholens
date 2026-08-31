@@ -11,6 +11,7 @@ from app.modules.conversations.application.contracts.conversations import (
 )
 from app.modules.conversations.application.contracts.trace import (
     ConversationActivity,
+    ConversationCitationSummary,
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 
@@ -83,6 +84,7 @@ class ConversationStreamReferencesEvent(BaseModel):
     type: Literal["references"] = "references"
     response_id: uuid.UUID
     references: dict[str, JsonValue]
+    citation_summary: ConversationCitationSummary | None = None
 
 
 class ConversationStreamResponseReadyEvent(BaseModel):

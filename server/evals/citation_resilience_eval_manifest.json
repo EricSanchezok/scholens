@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "description": "Redacted offline cases for citation normalization, corruption recovery, and multi-source attribution. No production prompts or provider payloads are stored.",
+  "cases": [
+    {
+      "id": "redacted-production-stale-marker",
+      "kind": "redacted_production",
+      "answer": "The answer remains visible.[[SCHOLENS_CITE:stale:9]]",
+      "sources": ["The validated source excerpt."],
+      "expected_visible": "The answer remains visible.",
+      "expected_status": "unavailable",
+      "fact_claims": 1
+    },
+    {
+      "id": "corruption-unclosed-marker",
+      "kind": "corruption",
+      "answer": "A safe paragraph. [[SCHOLENS_CITE:eval:1",
+      "sources": ["A validated source excerpt."],
+      "expected_visible": "A safe paragraph. ",
+      "expected_status": "unavailable",
+      "fact_claims": 1
+    },
+    {
+      "id": "corruption-unknown-key",
+      "kind": "corruption",
+      "answer": "A source-backed claim.[[SCHOLENS_CITE:eval:99]]",
+      "sources": ["A source-backed claim."],
+      "expected_visible": "A source-backed claim.",
+      "expected_status": "unavailable",
+      "fact_claims": 1
+    },
+    {
+      "id": "multi-document-structured-attribution",
+      "kind": "multi_document",
+      "answer": "Two documents support this synthesis.",
+      "sources": ["Document one supports this synthesis.", "Document two supports this synthesis."],
+      "attributions": [
+        {"quote": "Two documents support this synthesis.", "source_keys": [1, 2]}
+      ],
+      "expected_visible": "Two documents support this synthesis.",
+      "expected_status": "complete",
+      "fact_claims": 1
+    },
+    {
+      "id": "posthoc-conservative-support",
+      "kind": "posthoc",
+      "answer": "The result is statistically significant.",
+      "sources": ["The result is statistically significant."],
+      "expected_visible": "The result is statistically significant.",
+      "expected_status": "complete",
+      "fact_claims": 1,
+      "posthoc": true
+    }
+  ]
+}

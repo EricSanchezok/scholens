@@ -128,7 +128,11 @@ Changing routes, switching mobile apps, locking the phone, losing connectivity,
 or reloading may detach the visible subscriber, but must not stop generation.
 Returning to the Conversation resumes the same response. Only the explicit
 Stop action cancels it, and provider or worker failures remain a safe,
-diagnostic-ID-bearing response that the user can retry.
+diagnostic-ID-bearing response that the user can retry. Citation formatting or
+attribution failures are not provider failures: the sanitized answer remains
+visible and copyable, while the source panel discloses whether citations are
+complete, partial, unavailable, or still pending. Unverified sources are never
+shown as if they support the answer.
 
 ## Projects are durable knowledge boundaries for external research agents
 

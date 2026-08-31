@@ -21,6 +21,7 @@ import { cn } from "@/lib/utilities/cn";
 
 export type ReferenceBundle = components["schemas"]["ReferenceBundle"];
 type AnswerSource = NonNullable<ReferenceBundle["sources"]>[number];
+type CitationSummary = components["schemas"]["ConversationCitationSummary"];
 
 export function isReferenceBundle(value: unknown): value is ReferenceBundle {
   return Boolean(
@@ -32,6 +33,14 @@ export function isReferenceBundle(value: unknown): value is ReferenceBundle {
 
 export function referenceSourceCount(references: unknown) {
   return isReferenceBundle(references) ? (references.sources?.length ?? 0) : 0;
+}
+
+function isCitationSummary(value: unknown): value is CitationSummary {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { status?: unknown }).status === "string",
+  );
 }
 
 function sourceTitle(source: AnswerSource, fallback: string): string {
@@ -126,12 +135,14 @@ function SourceRow({
 
 export function ConversationSources({
   references,
+  citationSummary,
   open,
   onOpenChange,
   selectedSourceKey,
   onDocumentOpen,
 }: {
   references: unknown;
+  citationSummary?: unknown;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedSourceKey?: number;
@@ -140,10 +151,14 @@ export function ConversationSources({
   ) => void;
 }) {
   const t = useTranslations("Home.conversation");
-  if (!isReferenceBundle(references) || !references.sources?.length) {
+  const bundle = isReferenceBundle(references) ? references : null;
+  const summary = isCitationSummary(citationSummary) ? citationSummary : null;
+  const sources = bundle?.sources ?? [];
+  const availableSourceCount =
+    summary?.available_source_count ?? sources.length;
+  if (!sources.length && !availableSourceCount) {
     return null;
   }
-  const sources = references.sources;
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -156,7 +171,9 @@ export function ConversationSources({
           type="button"
         >
           <Icon glyph={DocumentIcon} size={16} tone="secondary" />
-          {t("sourceSummary", { count: sources.length })}
+          {sources.length
+            ? t("sourceSummary", { count: sources.length })
+            : t("sourceSummaryUnavailable", { count: availableSourceCount })}
         </button>
       </DialogTrigger>
       <DialogContent
@@ -167,29 +184,43 @@ export function ConversationSources({
         <DialogHandle />
         <DialogHeader>
           <DialogTitle>
-            {t("sourcePanelTitle", { count: sources.length })}
+            {t("sourcePanelTitle", {
+              count: sources.length || availableSourceCount,
+            })}
           </DialogTitle>
           <DialogDescription id="conversation-sources-description">
-            {t("sourcePanelDescription")}
+            {summary?.status === "partial"
+              ? t("sourcePanelPartial")
+              : summary?.status === "unavailable"
+                ? t("sourcePanelUnavailable")
+                : summary?.status === "pending"
+                  ? t("sourcePanelPending")
+                  : t("sourcePanelDescription")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="p-0 lg:p-0">
-          {sources.map((source, index) => (
-            <SourceRow
-              fallbackTitle={t("reference", { number: index + 1 })}
-              key={`${source.kind}-${source.key}`}
-              onDocumentOpen={
-                onDocumentOpen
-                  ? (documentSource) => {
-                      onOpenChange(false);
-                      onDocumentOpen(documentSource);
-                    }
-                  : undefined
-              }
-              selected={source.key === selectedSourceKey}
-              source={source}
-            />
-          ))}
+          {!sources.length ? (
+            <p className="text-muted px-5 py-6 text-sm leading-5 lg:px-6">
+              {t("sourcePanelEmpty")}
+            </p>
+          ) : (
+            sources.map((source, index) => (
+              <SourceRow
+                fallbackTitle={t("reference", { number: index + 1 })}
+                key={`${source.kind}-${source.key}`}
+                onDocumentOpen={
+                  onDocumentOpen
+                    ? (documentSource) => {
+                        onOpenChange(false);
+                        onDocumentOpen(documentSource);
+                      }
+                    : undefined
+                }
+                selected={source.key === selectedSourceKey}
+                source={source}
+              />
+            ))
+          )}
         </DialogBody>
       </DialogContent>
     </Dialog>

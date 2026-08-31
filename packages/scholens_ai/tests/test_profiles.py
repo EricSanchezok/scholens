@@ -50,10 +50,6 @@ def test_profile_revision_is_stable_and_covers_runtime_policy() -> None:
         ({"SCHOLENS_AI_STANDARD_MODEL": "ambiguous"}, "provider:model"),
         ({"SCHOLENS_AI_STANDARD_MODEL": ":missing-provider"}, "provider:model"),
         ({"SCHOLENS_AI_STANDARD_MODEL": "openai:"}, "provider:model"),
-        (
-            {"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
-            "Unsupported AI provider",
-        ),
         ({"SCHOLENS_AI_MAX_RETRIES": "not-an-int"}, "must be an integer"),
         ({"SCHOLENS_AI_MAX_RETRIES": "-1"}, "must not be negative"),
         (
@@ -119,3 +115,18 @@ def test_build_model_requires_an_explicit_provider_credential(
 
     with pytest.raises(ProviderConfigurationError, match="API_KEY is required"):
         build_model(profile)
+
+
+def test_openai_and_bedrock_profiles_are_supported_without_aliasing() -> None:
+    openai = resolve_profile(
+        AIProfileName.STANDARD,
+        environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
+    )
+    bedrock = resolve_profile(
+        AIProfileName.STANDARD,
+        environment={
+            "SCHOLENS_AI_STANDARD_MODEL": "bedrock:anthropic.claude-3-5-sonnet"
+        },
+    )
+    assert openai.provider == "openai"
+    assert bedrock.provider == "bedrock"

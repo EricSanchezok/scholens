@@ -36,8 +36,11 @@ from app.modules.conversations.application.contracts.trace import (
     ConversationTrace,
 )
 from app.modules.conversations.application.contracts.answer_packet import (
+    AnswerCoverage,
+    AnswerPacket,
     ReferenceBundle,
 )
+from app.llm.grounded_answer import GroundedAnswerMetrics
 from app.modules.integrations.connectors.infrastructure.mcp import (
     ConnectorToolIssue,
     ResolvedConnectorToolSet,
@@ -104,6 +107,38 @@ def _grounded_final_answer(
 
 def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
     raise AssertionError("the runtime must use ToolDispatcher")
+
+
+def test_rejected_only_sources_are_reported_as_unavailable() -> None:
+    packet = AnswerPacket(
+        context={},
+        materials=[],
+        actions=[],
+        sources=[],
+        coverage=AnswerCoverage(
+            observations_total=1,
+            observations_processed=1,
+            truncated_observations=0,
+            truncated_materials=0,
+            truncated_sources=0,
+            truncated_actions=0,
+            rejected_sources=1,
+            failed_observations=0,
+        ),
+    )
+    summary = ScholensConversationAgent._citation_summary(
+        packet=packet,
+        references=None,
+        metrics=GroundedAnswerMetrics(
+            annotations_emitted=0,
+            invalid_source_keys=0,
+            protocol_errors=0,
+        ),
+    )
+
+    assert summary.status == "unavailable"
+    assert summary.source_count == 0
+    assert summary.rejected_source_count == 1
 
 
 def _catalog(*, allow_repeated_calls: bool = False) -> ToolCatalog[Any]:
@@ -914,6 +949,52 @@ async def test_source_backed_answer_retries_visible_and_missing_citations() -> N
         if isinstance(event, ConversationStreamReferencesEvent)
     )
     assert len(references.sources) == 1
+
+
+@pytest.mark.asyncio
+async def test_exhausted_citation_repair_publishes_safe_answer() -> None:
+    async def always_invalid(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        if not any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        ):
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"resilience"}',
+                    tool_call_id="search-resilience",
+                )
+            }
+            return
+        assert info.instructions is not None
+        yield _final_answer("Safe answer [1]")
+
+    events = await _events(
+        model=FunctionModel(stream_function=always_invalid),
+        dispatcher=_Dispatcher(),
+        query="Test citation resilience",
+        locale="en",
+        time_zone="UTC",
+    )
+    final = [
+        event.item.content
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemCompleteEvent)
+        and event.item.phase == "final"
+    ]
+    assert final == ["Safe answer"]
+    references = [
+        event
+        for event in events
+        if isinstance(event, ConversationStreamReferencesEvent)
+    ]
+    assert len(references) == 1
+    assert references[0].references == {"annotations": [], "sources": []}
+    assert references[0].citation_summary is not None
+    assert references[0].citation_summary.status == "unavailable"
 
 
 @pytest.mark.asyncio

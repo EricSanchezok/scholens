@@ -1933,6 +1933,29 @@
             "title": "Annotation Count",
             "type": "integer"
           },
+          "available_source_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Available Source Count",
+            "type": "integer"
+          },
+          "dropped_annotation_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Dropped Annotation Count",
+            "type": "integer"
+          },
+          "grounding_status": {
+            "default": "not_evaluated",
+            "enum": [
+              "not_evaluated",
+              "verified",
+              "mixed",
+              "unverified"
+            ],
+            "title": "Grounding Status",
+            "type": "string"
+          },
           "rejected_source_count": {
             "minimum": 0.0,
             "title": "Rejected Source Count",
@@ -1941,6 +1964,30 @@
           "source_count": {
             "minimum": 0.0,
             "title": "Source Count",
+            "type": "integer"
+          },
+          "status": {
+            "default": "not_required",
+            "enum": [
+              "not_required",
+              "complete",
+              "partial",
+              "unavailable",
+              "pending"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unlinked_source_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unlinked Source Count",
+            "type": "integer"
+          },
+          "unverified_claim_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unverified Claim Count",
             "type": "integer"
           }
         },
@@ -3001,6 +3048,16 @@
       },
       "ConversationStreamReferencesEvent": {
         "properties": {
+          "citation_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationCitationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "references": {
             "additionalProperties": {
               "$ref": "#/components/schemas/JsonValue"
