@@ -221,6 +221,12 @@ Before applying Scholens migrations, that administrator must install
 `pg_trgm` and `vector` in the shared database's `public` schema. The database
 image therefore needs pgvector support; the product migrator deliberately
 cannot install extensions.
+The guarded reset also invokes the host `psql` client to reapply grants. On
+macOS, install the client once with `HOMEBREW_NO_AUTO_UPDATE=1 brew install
+libpq` and put `/opt/homebrew/opt/libpq/bin` on the shell `PATH` (or use the
+equivalent Intel Homebrew path). A PostgreSQL image without pgvector cannot
+reach migration head; use the pgvector-enabled local image or install the
+extension in the running local container before migrating.
 `scholens_migrator` owns and migrates the product schema; `scholens_app` is the
 runtime role and must not own schemas. Alembic intentionally refuses to migrate
 a `scholens` schema owned by another role. Never use the server's daily runtime
@@ -249,6 +255,28 @@ unchanged. Supplying a different password uses the Identity password-reset path
 and therefore revokes the account's existing sessions. `--bootstrap-admin` is
 optional and works only when Scholens has no administrator yet. Daily startup
 never creates or changes accounts.
+
+### Seed a complete local reading fixture
+
+The account fixture and product fixture are deliberately separate. After the
+product schema has been migrated to `head`, seed the account's Library and
+Project with the repository's license-safe PDFs using the explicit
+development command:
+
+```bash
+cd server
+uv run --frozen --no-sync scholens dev seed-test-fixture --yes
+```
+
+The command is local-only, idempotent, and never creates an Identity account.
+It uploads two deterministic CC BY 4.0 PDFs from `server/evals/seed_data/`,
+marks them as completed documents, adds them to the test account's Library, and
+attaches them to a `Local demo · Reading workspace` Project. The isolated dev
+S3 settings in `server/.env` must be configured before running it. Re-running
+the command reuses the content-addressed PDF objects and existing references.
+Verify the result through the same authenticated routes the Web Home uses:
+`GET /api/v1/library/papers`, `GET /api/v1/projects?limit=12`, and
+`GET /api/v1/me/research-insights?range=30d`.
 
 ### Repair a prepared checkout
 

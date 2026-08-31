@@ -307,6 +307,12 @@ product profile and optional first administrator state through application
 services. Matching credentials remain unchanged so repeat runs do not revoke a
 working browser session.
 
+`dev seed-test-fixture` is the companion product fixture. Run it only after
+the product schema is at migration `head`; it uploads the committed CC BY 4.0
+evaluation PDFs to the isolated local-development S3 bucket and creates an
+idempotent Library/Project fixture for the selected synthetic account. It does
+not create or modify Identity users and is never invoked by `serve`.
+
 Paper search defaults to `PAPER_SEARCH_BACKEND=postgres_hybrid`. It combines
 compact exact/trigram matching, weighted PostgreSQL full text, and the pinned
 local multilingual embedding model at `SCHOLENS_EMBEDDING_MODEL_PATH`; no query
