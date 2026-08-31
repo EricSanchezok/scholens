@@ -31,9 +31,12 @@ class ConversationCitationSummary(BaseModel):
     the wider source registry and must never be used to imply support.
     """
 
-    source_count: int = Field(default=0, ge=0)
-    annotation_count: int = Field(default=0, ge=0)
-    rejected_source_count: int = Field(default=0, ge=0)
+    # These three fields predate the status extension and remain required in
+    # the public contract. Making them optional would be a response breaking
+    # change even though the runtime could infer defaults.
+    source_count: int = Field(ge=0)
+    annotation_count: int = Field(ge=0)
+    rejected_source_count: int = Field(ge=0)
     status: Literal["not_required", "complete", "partial", "unavailable", "pending"] = (
         "not_required"
     )

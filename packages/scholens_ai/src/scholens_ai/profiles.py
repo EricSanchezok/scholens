@@ -230,12 +230,24 @@ def _http_client(profile: AIProfile) -> httpx.AsyncClient:
 
 
 def _provider(profile: AIProfile) -> Any:
-    api_key = (
-        _require_api_key(profile)
-        if profile.provider != "bedrock"
-        else os.getenv("AWS_BEARER_TOKEN_BEDROCK")
-    )
     base_url = os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
+    if profile.provider == "bedrock":
+        from pydantic_ai.providers.bedrock import BedrockProvider
+
+        bedrock_api_key = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+        if bedrock_api_key:
+            return BedrockProvider(
+                api_key=bedrock_api_key,
+                base_url=base_url,
+                region_name=os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1"),
+                aws_read_timeout=profile.request_timeout_seconds,
+            )
+        return BedrockProvider(
+            base_url=base_url,
+            region_name=os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1"),
+            aws_read_timeout=profile.request_timeout_seconds,
+        )
+    api_key = _require_api_key(profile)
     if profile.provider == "deepseek":
         from pydantic_ai.providers.deepseek import DeepSeekProvider
 
@@ -275,15 +287,6 @@ def _provider(profile: AIProfile) -> Any:
             api_key=api_key or "",
             base_url=base_url,
             http_client=_http_client(profile),
-        )
-    if profile.provider == "bedrock":
-        from pydantic_ai.providers.bedrock import BedrockProvider
-
-        return BedrockProvider(
-            api_key=api_key,
-            base_url=base_url,
-            region_name=os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1"),
-            aws_read_timeout=profile.request_timeout_seconds,
         )
     raise ProviderConfigurationError(
         f"Unsupported AI provider {profile.provider!r}; add one provider adapter "

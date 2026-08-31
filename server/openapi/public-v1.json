@@ -1929,7 +1929,6 @@
         "additionalProperties": false,
         "properties": {
           "annotation_count": {
-            "default": 0,
             "minimum": 0.0,
             "title": "Annotation Count",
             "type": "integer"
@@ -1958,13 +1957,11 @@
             "type": "string"
           },
           "rejected_source_count": {
-            "default": 0,
             "minimum": 0.0,
             "title": "Rejected Source Count",
             "type": "integer"
           },
           "source_count": {
-            "default": 0,
             "minimum": 0.0,
             "title": "Source Count",
             "type": "integer"
@@ -1994,6 +1991,11 @@
             "type": "integer"
           }
         },
+        "required": [
+          "source_count",
+          "annotation_count",
+          "rejected_source_count"
+        ],
         "title": "ConversationCitationSummary",
         "type": "object"
       },

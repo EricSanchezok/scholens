@@ -2806,10 +2806,7 @@ export interface components {
         };
         /** ConversationCitationSummary */
         ConversationCitationSummary: {
-            /**
-             * Annotation Count
-             * @default 0
-             */
+            /** Annotation Count */
             annotation_count: number;
             /**
              * Available Source Count
@@ -2827,15 +2824,9 @@ export interface components {
              * @enum {string}
              */
             grounding_status: "not_evaluated" | "verified" | "mixed" | "unverified";
-            /**
-             * Rejected Source Count
-             * @default 0
-             */
+            /** Rejected Source Count */
             rejected_source_count: number;
-            /**
-             * Source Count
-             * @default 0
-             */
+            /** Source Count */
             source_count: number;
             /**
              * Status
