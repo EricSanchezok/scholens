@@ -11,6 +11,7 @@ import {
 
 import {
   expectLayeredKeyboardFocus,
+  expectQuietPointerFocus,
   expectStableFocusPerimeter,
   focusWithKeyboard,
   readFocusVisual,
@@ -84,6 +85,20 @@ export const Mobile: Story = {
   globals: { viewport: { value: "mobile" } },
 };
 
+export const PointerHoverIsQuiet: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox");
+    const composer = textbox.closest("form");
+    await expect(composer).not.toBeNull();
+    if (!composer) return;
+
+    const resting = readFocusVisual(composer);
+    await userEvent.hover(textbox);
+    await expectQuietPointerFocus({ element: composer, resting });
+  },
+};
+
 export const Streaming: Story = {
   args: { busy: true, stopAvailable: true },
 };
@@ -122,6 +137,11 @@ export const ContextPanelSelection: Story = {
     await expect(restingBorder).not.toBe("transparent");
     const restingTextbox = readFocusVisual(textbox);
     const restingComposer = readFocusVisual(composer!);
+    await userEvent.hover(textbox);
+    await expectQuietPointerFocus({
+      element: composer!,
+      resting: restingComposer,
+    });
     await focusWithKeyboard(textbox);
     await expect(composer).toHaveAttribute("data-focus-surface");
     await expectStableFocusPerimeter({

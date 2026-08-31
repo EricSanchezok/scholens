@@ -118,9 +118,9 @@
 }
 
 @media (hover: hover) {
-  .focus-recipe-neutral[data-focus-surface]:has(
-      [data-focus-delegate="surface"]:hover
-    ) {
+  .focus-recipe-neutral[data-focus-surface]:not(
+      [data-focus-hover="none"]
+    ):has([data-focus-delegate="surface"]:hover) {
     background-color: var(--color-bg-hover);
   }
 }

@@ -761,6 +761,7 @@ export function ResearchComposer({
         )}
         data-expanded={expanded}
         data-focus-surface
+        data-focus-hover="none"
         onSubmit={composerForm.handleSubmit(submit)}
       >
         <textarea
@@ -889,6 +890,7 @@ export function ResearchComposer({
       data-expanded={expanded}
       data-has-context={hasContext || undefined}
       data-focus-surface
+      data-focus-hover="none"
       onSubmit={composerForm.handleSubmit(submit)}
     >
       <textarea
