@@ -22,15 +22,15 @@ export function useReaderFloatingPosition({
   const floatingRef = React.useRef<HTMLDivElement>(null);
   const measureRef = React.useRef<HTMLDivElement>(null);
   const placementRef = React.useRef<"top" | "bottom" | undefined>(undefined);
-  const previousPlacementKeyRef = React.useRef(placementKey);
+  const previousPlacementKeyRef = React.useRef<string | undefined>(undefined);
   const [position, setPosition] = React.useState<ReaderFloatingPosition>();
 
-  if (previousPlacementKeyRef.current !== placementKey) {
-    previousPlacementKeyRef.current = placementKey;
-    placementRef.current = undefined;
-  }
-
   React.useLayoutEffect(() => {
+    if (previousPlacementKeyRef.current !== placementKey) {
+      previousPlacementKeyRef.current = placementKey;
+      placementRef.current = undefined;
+    }
+
     const floating = floatingRef.current;
     const measure = measureRef.current;
     const offsetParent = floating?.offsetParent;
