@@ -182,10 +182,10 @@ export const DesktopExpanded: Story = {
       "font-semibold",
     );
     const account = canvas.getByRole("button", { name: "Open account menu" });
-    await expect(account).toHaveClass("h-12", "bg-transparent", "shadow-none");
+    await expect(account).toHaveClass("h-14", "bg-transparent", "shadow-none");
     await expect(account).not.toHaveClass("bg-surface", "shadow-raised");
     await expect(account.querySelector("[data-account-avatar]")).toHaveClass(
-      "size-8",
+      "size-10",
     );
     const navigation = within(
       canvas.getByRole("navigation", { name: "Open navigation" }),

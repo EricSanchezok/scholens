@@ -439,15 +439,17 @@ function AccountMenu({
             focusSurfaceVariants({ intent: "neutral" }),
             collapsed
               ? "ml-auto h-14 w-10 justify-center rounded-[var(--radius-md)] bg-transparent p-1 shadow-none"
-              : "h-12 w-full gap-2 rounded-[var(--radius-lg)] border border-transparent bg-transparent px-2 shadow-none",
+              : "h-14 w-full gap-3 rounded-[var(--radius-lg)] border border-transparent bg-transparent px-2 shadow-none",
           )}
           type="button"
         >
           <CurrentUserAvatar
-            className={cn(collapsed ? "text-caption size-8" : "size-8 text-xs")}
+            className={cn(
+              collapsed ? "text-caption size-8" : "size-10 text-sm",
+            )}
             data-account-avatar
             fallback={initial}
-            sizes="32px"
+            sizes={collapsed ? "32px" : "40px"}
           />
           {!collapsed && (
             <span className="min-w-0 flex-1 text-left">
