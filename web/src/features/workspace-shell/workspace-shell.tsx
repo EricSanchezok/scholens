@@ -241,6 +241,7 @@ function SidebarLinkContent({
         <span
           className={cn(
             "text-sidebar-label truncate",
+            active && "font-semibold",
             animateLabel && "settled-content-enter",
           )}
         >
@@ -284,7 +285,7 @@ function SidebarControl({
         focusSurfaceVariants({ intent: "selection" }),
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active
-          ? "border-line bg-surface shadow-raised"
+          ? "border-transparent bg-hover"
           : "hover:bg-hover border-transparent",
       )}
       href={href as Route}
@@ -438,17 +439,17 @@ function AccountMenu({
             focusSurfaceVariants({ intent: "neutral" }),
             collapsed
               ? "ml-auto h-14 w-10 justify-center rounded-[var(--radius-md)] bg-transparent p-1 shadow-none"
-              : "border-line bg-surface shadow-raised h-14 w-full gap-3 rounded-[var(--radius-xl)] border px-2",
+              : "border border-transparent bg-transparent shadow-none h-12 w-full gap-2 rounded-[var(--radius-lg)] px-2",
           )}
           type="button"
         >
           <CurrentUserAvatar
             className={cn(
-              collapsed ? "text-caption size-8" : "size-10 text-sm",
+              collapsed ? "text-caption size-8" : "size-8 text-xs",
             )}
             data-account-avatar
             fallback={initial}
-            sizes={collapsed ? "32px" : "40px"}
+            sizes="32px"
           />
           {!collapsed && (
             <span className="min-w-0 flex-1 text-left">

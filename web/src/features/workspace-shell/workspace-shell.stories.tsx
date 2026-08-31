@@ -82,15 +82,18 @@ async function findConversationRow(
 }
 
 function ShellStory({
+  activeConversationId,
   activeDestination = "library",
   storyActor = actor,
 }: {
+  activeConversationId?: string;
   activeDestination?: "ask" | "library" | "projects" | "me";
   storyActor?: typeof actor;
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
   return (
     <WorkspaceShell
+      activeConversationId={activeConversationId}
       activeDestination={activeDestination}
       actor={storyActor}
       collapsed={collapsed}
@@ -164,6 +167,30 @@ export const DesktopExpanded: Story = {
       "aria-current",
       "page",
     );
+    const activeDestination = canvas.getByRole("link", { name: "Library" });
+    await expect(activeDestination).toHaveClass(
+      "bg-hover",
+      "border-transparent",
+      "font-medium",
+    );
+    await expect(activeDestination).not.toHaveClass(
+      "bg-surface",
+      "border-line",
+      "shadow-raised",
+    );
+    await expect(within(activeDestination).getByText("Library")).toHaveClass(
+      "font-semibold",
+    );
+    const account = canvas.getByRole("button", { name: "Open account menu" });
+    await expect(account).toHaveClass(
+      "h-12",
+      "bg-transparent",
+      "shadow-none",
+    );
+    await expect(account).not.toHaveClass("bg-surface", "shadow-raised");
+    await expect(
+      account.querySelector("[data-account-avatar]"),
+    ).toHaveClass("size-8");
     const navigation = within(
       canvas.getByRole("navigation", { name: "Open navigation" }),
     );
@@ -172,6 +199,20 @@ export const DesktopExpanded: Story = {
         "settled-content-enter",
       );
     }
+  },
+};
+
+export const DesktopSelectedConversation: Story = {
+  args: { activeConversationId: conversations[0]!.id },
+  play: async ({ canvasElement }) => {
+    const row = await findConversationRow(canvasElement);
+    await expect(row).toHaveAttribute("data-current", "");
+    await expect(row).toHaveClass("bg-hover", "border-transparent");
+    await expect(row).not.toHaveClass(
+      "bg-surface",
+      "border-line",
+      "shadow-raised",
+    );
   },
 };
 
