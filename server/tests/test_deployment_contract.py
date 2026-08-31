@@ -1771,6 +1771,30 @@ def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     assert "aws ssm send-command" not in combined
 
 
+def test_production_dashboard_uses_cloudwatch_metric_expression_shape() -> None:
+    template = load_template("scholens-production.yml")
+    resources = template["Resources"]
+    dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]
+    body = dashboard_body["Fn::Sub"][0]
+    dashboard = json.loads(body)
+    widget = next(
+        widget
+        for widget in dashboard["widgets"]
+        if widget["properties"].get("title")
+        == "Conversation answer and citation health"
+    )
+
+    expressions = widget["properties"]["metrics"]
+    assert expressions
+    assert all(
+        isinstance(metric, list)
+        and len(metric) == 1
+        and isinstance(metric[0], dict)
+        and isinstance(metric[0].get("expression"), str)
+        for metric in expressions
+    )
+
+
 def test_release_uses_current_control_plane_for_candidate_and_rollback_data() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
