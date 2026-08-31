@@ -169,6 +169,7 @@ function AssistantMessage({
   answerCandidate,
   provisionalItems,
   references,
+  citationSummary,
   sourceTotal,
   phase,
   failure,
@@ -195,6 +196,7 @@ function AssistantMessage({
   answerCandidate?: ProvisionalAssistantItem | null;
   provisionalItems?: ProvisionalAssistantItem[];
   references: unknown;
+  citationSummary?: components["schemas"]["ConversationCitationSummary"] | null;
   sourceTotal: number;
   phase: ConversationPhase;
   failure?: ConversationFailure | null;
@@ -365,6 +367,7 @@ function AssistantMessage({
                     value={visibleContent}
                   />
                   <ConversationSources
+                    citationSummary={citationSummary}
                     onDocumentOpen={onDocumentSourceOpen}
                     onOpenChange={(open) => {
                       setSourcesOpen(open);
@@ -476,6 +479,7 @@ const HistoricalTurnRow = React.memo(function HistoricalTurnRow({
                   : "ready"
           }
           references={response.references}
+          citationSummary={response.trace?.citation_summary}
           response={response}
           sourceTotal={
             response.trace?.citation_summary?.source_count ??
@@ -588,6 +592,7 @@ function MessageHistory({
                 onLiveContentVisible?.(liveTurn.responseId)
               }
               references={liveTurn.references}
+              citationSummary={liveTurn.citationSummary}
               response={liveResponse}
               sourceTotal={
                 liveTurn.trace?.citation_summary?.source_count ??
@@ -872,6 +877,7 @@ export function ConversationView({
                         onLiveContentVisible?.(liveTurn.responseId)
                       }
                       references={liveTurn.references}
+                      citationSummary={liveTurn.citationSummary}
                       response={liveResponse}
                       sourceTotal={
                         liveTurn.trace?.citation_summary?.source_count ??

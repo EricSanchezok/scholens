@@ -64,7 +64,9 @@ _DEFAULTS: dict[AIProfileName, tuple[str, AIThinkingMode, AIThinkingEffort]] = {
     ),
 }
 
-_SUPPORTED_PROVIDERS = frozenset({"anthropic", "deepseek", "google", "moonshotai"})
+_SUPPORTED_PROVIDERS = frozenset(
+    {"anthropic", "bedrock", "deepseek", "google", "moonshotai", "openai"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +230,11 @@ def _http_client(profile: AIProfile) -> httpx.AsyncClient:
 
 
 def _provider(profile: AIProfile) -> Any:
-    api_key = _require_api_key(profile)
+    api_key = (
+        _require_api_key(profile)
+        if profile.provider != "bedrock"
+        else os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+    )
     base_url = os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
     if profile.provider == "deepseek":
         from pydantic_ai.providers.deepseek import DeepSeekProvider
@@ -261,6 +267,23 @@ def _provider(profile: AIProfile) -> Any:
             api_key=api_key,
             base_url=base_url,
             http_client=_http_client(profile),
+        )
+    if profile.provider == "openai":
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        return OpenAIProvider(
+            api_key=api_key or "",
+            base_url=base_url,
+            http_client=_http_client(profile),
+        )
+    if profile.provider == "bedrock":
+        from pydantic_ai.providers.bedrock import BedrockProvider
+
+        return BedrockProvider(
+            api_key=api_key,
+            base_url=base_url,
+            region_name=os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1"),
+            aws_read_timeout=profile.request_timeout_seconds,
         )
     raise ProviderConfigurationError(
         f"Unsupported AI provider {profile.provider!r}; add one provider adapter "

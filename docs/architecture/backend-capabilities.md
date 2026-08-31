@@ -501,17 +501,32 @@ complete as bounded `progress`. A run can terminate only through the structured
 partially validate `answer`, strip private citation markers, hold a bounded
 suffix, and publish an opt-in provisional candidate. A later validation retry
 resets that stable candidate before replacement text; clients that do not
-use the additive candidate subscription receive no provisional events. The visible
-answer and private citation protocol still validate before the canonical final
-item or persistence. Plain terminal text, empty visible
-content, citation-only output, and copied private protocol receive bounded model
-retries and then fail through the stable invalid-response path. After a
-successful source-backed tool call registers validated source keys, the final
-answer must materialize at least one valid reference; missing references,
-unknown keys, malformed markers, and visible `[A1]`-style placeholders are
-retried at that same boundary. One completed grounded-answer inspection
-supplies validation, visible content, references, trace counts, and publication
-so those paths cannot parse the private protocol differently.
+use the additive candidate subscription receive no provisional events. The
+server still validates and strips the private citation protocol before the
+canonical final item or persistence, but citation availability is deliberately
+separate from answer availability. Plain terminal text, empty visible content,
+and copied private protocol remain hard failures after bounded retries. Missing
+references, unknown keys, malformed markers, and visible `[A1]`-style
+placeholders are soft failures: they receive bounded repair attempts, then the
+sanitized visible answer is completed while invalid attribution metadata is
+dropped. A source-backed answer records a typed citation summary
+(`not_required`, `complete`, `partial`, `unavailable`, or `pending`) plus a
+separate grounding status; an empty reference bundle means sources were found
+but no sentence-level citation was safely established, not that every source
+supports the answer. One completed grounded-answer inspection supplies the
+sanitized text, valid references, trace counts, and publication state so those
+paths cannot parse the private protocol differently.
+
+Provider-native attribution is translated through a single adapter boundary for
+DeepSeek/OpenAI-compatible output, OpenAI annotations, Gemini grounding
+supports/chunks, Anthropic citation blocks, and Bedrock citation spans. Every
+adapter maps back to the current server-owned source registry; unknown provider
+identifiers are discarded. When native metadata is absent, bounded post-hoc
+claim alignment considers at most 24 claims and three source candidates per
+claim and emits only deterministic evidence matches. Similarity is a candidate
+ranker, never proof. The first implementation is synchronous and bounded; an
+optional future `citation_update` event may enrich a completed response without
+changing its answer.
 
 Progress and final items use stable IDs and share a monotonic sequence with
 sanitized activity records. The persisted trace contains ordered progress and
@@ -521,8 +536,10 @@ typed event models directly plus one private typed result envelope, so there is
 no second untyped event protocol to drift.
 
 The public Conversation stream exposes item lifecycle events, sanitized
-activity, final-only server-generated references, a persisted `response_ready`
-snapshot, an optional turn-suggestion update, and one terminal event. Accepted
+activity, final-only server-generated references (including an empty bundle with
+an additive citation summary when evidence was retrieved but no attribution
+survived), a persisted `response_ready` snapshot, an optional turn-suggestion
+update, and one terminal event. Accepted
 generations run in the dedicated Server-owned Conversation worker. A bounded
 Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
 for running and terminal Response state. Raw

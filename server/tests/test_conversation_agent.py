@@ -917,6 +917,52 @@ async def test_source_backed_answer_retries_visible_and_missing_citations() -> N
 
 
 @pytest.mark.asyncio
+async def test_exhausted_citation_repair_publishes_safe_answer() -> None:
+    async def always_invalid(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        if not any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        ):
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"resilience"}',
+                    tool_call_id="search-resilience",
+                )
+            }
+            return
+        assert info.instructions is not None
+        yield _final_answer("Safe answer [A1]")
+
+    events = await _events(
+        model=FunctionModel(stream_function=always_invalid),
+        dispatcher=_Dispatcher(),
+        query="Test citation resilience",
+        locale="en",
+        time_zone="UTC",
+    )
+    final = [
+        event.item.content
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemCompleteEvent)
+        and event.item.phase == "final"
+    ]
+    assert final == ["Safe answer"]
+    references = [
+        event
+        for event in events
+        if isinstance(event, ConversationStreamReferencesEvent)
+    ]
+    assert len(references) == 1
+    assert references[0].references == {"annotations": [], "sources": []}
+    assert references[0].citation_summary is not None
+    assert references[0].citation_summary.status == "unavailable"
+
+
+@pytest.mark.asyncio
 async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
     async def answer_after_failure(
         messages: list[ModelMessage], _info: AgentInfo

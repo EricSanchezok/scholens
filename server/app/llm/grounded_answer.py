@@ -5,6 +5,8 @@ from __future__ import annotations
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
+import unicodedata
 
 from app.modules.conversations.application.contracts.answer_packet import (
     AnswerSource,
@@ -35,6 +37,8 @@ class GroundedAnswerMetrics:
     annotations_emitted: int
     invalid_source_keys: int
     protocol_errors: int
+    dropped_annotation_count: int = 0
+    unverified_claim_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,19 @@ class GroundedAnswerInspection:
     cited_source_keys: frozenset[int]
     references: ReferenceBundle | None
     metrics: GroundedAnswerMetrics
+    posthoc_timed_out: bool = False
+
+    @property
+    def has_citation_errors(self) -> bool:
+        return bool(self.metrics.invalid_source_keys or self.metrics.protocol_errors)
+
+    @property
+    def citation_status(
+        self,
+    ) -> Literal["not_required", "complete", "partial", "unavailable", "pending"]:
+        if self.references is None or not self.references.annotations:
+            return "unavailable" if self.has_citation_errors else "not_required"
+        return "partial" if self.has_citation_errors else "complete"
 
 
 def inspect_grounded_answer(
@@ -53,9 +70,11 @@ def inspect_grounded_answer(
     sources: Sequence[AnswerSource],
     *,
     nonce: str,
+    attributions: Sequence[object] = (),
 ) -> GroundedAnswerInspection:
     parser = GroundedAnswerStreamParser(sources, nonce=nonce)
     visible = parser.feed(value) + parser.finish()
+    parser.attach_attributions(attributions)
     return GroundedAnswerInspection(
         raw_content=value,
         visible_content=visible,
@@ -185,7 +204,48 @@ class GroundedAnswerStreamParser:
             annotations_emitted=len(self._annotations),
             invalid_source_keys=self._invalid_source_keys,
             protocol_errors=self._protocol_errors,
+            dropped_annotation_count=(
+                self._invalid_source_keys + self._protocol_errors
+            ),
         )
+
+    def attach_attributions(self, attributions: Sequence[object]) -> None:
+        """Attach optional structured attributions after marker parsing.
+
+        The model may provide a quote and source keys without knowing offsets.
+        Offsets are resolved only against the server-sanitized visible answer;
+        an ambiguous or unknown quote is dropped and never makes the answer
+        unavailable.
+        """
+        for attribution in attributions:
+            quote = getattr(attribution, "quote", None)
+            requested = getattr(attribution, "source_keys", None)
+            if not isinstance(quote, str) or not quote.strip():
+                self._protocol_errors += 1
+                continue
+            if not isinstance(requested, Sequence) or isinstance(
+                requested, (str, bytes)
+            ):
+                self._invalid_source_keys += 1
+                continue
+            try:
+                keys = tuple(dict.fromkeys(int(key) for key in requested))
+            except (TypeError, ValueError):
+                keys = ()
+            if not keys or any(key not in self._sources for key in keys):
+                self._invalid_source_keys += 1
+                continue
+            span = _locate_quote(self._output, quote)
+            if span is None:
+                self._protocol_errors += 1
+                continue
+            self._annotations.append(
+                CitationAnnotation(
+                    start_offset=span[0],
+                    end_offset=span[1],
+                    source_keys=list(keys),
+                )
+            )
 
     def _annotate(self, raw_keys: str) -> None:
         try:
@@ -271,3 +331,46 @@ class GroundedAnswerStreamParser:
         if single_at >= 0:
             return single_at, False
         return -1, False
+
+
+def _normalized_with_offsets(value: str) -> tuple[str, list[int]]:
+    """Return NFKC/whitespace-normalized text and original character offsets."""
+    output: list[str] = []
+    offsets: list[int] = []
+    pending_space = False
+    pending_offset = 0
+    # Normalize one original character at a time so compatibility expansions
+    # (for example, ``ﬀ`` → ``ff``) still point back to a valid source span.
+    for index, original_character in enumerate(value):
+        for character in unicodedata.normalize("NFKC", original_character):
+            if character.isspace():
+                if output:
+                    pending_space = True
+                    pending_offset = index
+                continue
+            if pending_space:
+                output.append(" ")
+                offsets.append(pending_offset)
+                pending_space = False
+            output.append(character)
+            offsets.append(index)
+    return "".join(output), offsets
+
+
+def _locate_quote(value: str, quote: str) -> tuple[int, int] | None:
+    exact = value.find(quote)
+    if exact >= 0 and value.find(quote, exact + 1) < 0:
+        return exact, exact + len(quote)
+    normalized_value, offsets = _normalized_with_offsets(value)
+    normalized_quote, _ = _normalized_with_offsets(quote.strip())
+    if not normalized_quote:
+        return None
+    first = normalized_value.find(normalized_quote)
+    if first < 0 or first + len(normalized_quote) > len(offsets):
+        return None
+    if normalized_value.find(normalized_quote, first + 1) >= 0:
+        return None
+    start = offsets[first]
+    last = first + len(normalized_quote) - 1
+    end = offsets[last] + 1
+    return start, end

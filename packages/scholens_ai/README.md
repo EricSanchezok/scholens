@@ -29,11 +29,12 @@ builder intentionally excludes raw full text and produces a bounded,
 digestible title/keywords/summary/abstract projection. Callers own
 authorization, persistence, ranking, retries, and degradation behavior.
 
-OpenAI Platform is not a supported provider and `openai:*` identifiers are
-rejected. The `openai` Python SDK remains a runtime dependency because the
-DeepSeek adapter deliberately uses its OpenAI-compatible client against the
-fixed default `https://api.deepseek.com` endpoint; this does not require or
-consume an OpenAI API key.
+The explicit provider adapters currently cover DeepSeek (the production
+default), OpenAI Chat/Responses, Google Gemini, Anthropic, AWS Bedrock, and
+Moonshot. `openai:*` and `bedrock:*` identifiers are no longer rejected or
+silently aliased: each uses its native Pydantic AI provider and its own
+credential/region configuration. The DeepSeek adapter still uses the OpenAI
+client against the fixed default `https://api.deepseek.com` endpoint.
 
 The package is typed and ships `py.typed`. Its direct tests live in `tests/`
 and run through the shared package workspace documented in

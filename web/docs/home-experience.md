@@ -247,7 +247,14 @@ that pill opens the single canonical source panel: a bottom sheet on phones and
 a centered dialog on desktop. Inline citation markers open that same panel and
 highlight the corresponding source instead of introducing a second source
 list. Document and external sources share the same evidence rows; only external
-sources navigate away, and they open in a new tab.
+sources navigate away, and they open in a new tab. The response trace carries
+an additive citation summary separate from response status: `complete`,
+`partial`, `unavailable`, and future `pending` states are shown only in the
+source panel. If sources were retrieved but no valid sentence-level citation
+survived, the panel opens an explicit empty state and does not present those
+sources as proof. The answer remains completed and copyable. Only validated
+annotation spans are rendered inline; visible model labels such as `[A1]` are
+never trusted.
 Conversation content uses the shared academic Markdown renderer also consumed
 by Reader reflow. It supports inline `$...$` and `\\(...\\)` plus display
 `$$...$$` and `\\[...\\]`, leaves inline and fenced code literal, and retains

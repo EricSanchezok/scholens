@@ -131,6 +131,12 @@ const researchTrace = {
     source_count: 3,
     annotation_count: 2,
     rejected_source_count: 0,
+    status: "complete" as const,
+    grounding_status: "not_evaluated" as const,
+    available_source_count: 3,
+    unlinked_source_count: 0,
+    dropped_annotation_count: 0,
+    unverified_claim_count: 0,
   },
 };
 
@@ -961,6 +967,52 @@ export const CompletedCollapsed: Story = {
       name: "Research complete · 2 actions · 3 cited sources",
     });
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  },
+};
+
+export const CitationUnavailable: Story = {
+  args: {
+    turns: [
+      researchTurn({
+        responses: [
+          response({
+            content:
+              "The answer remains available even when attribution fails.",
+            references: { annotations: [], sources: [] },
+            trace: {
+              entries: [searchActivity],
+              citation_summary: {
+                source_count: 0,
+                annotation_count: 0,
+                rejected_source_count: 0,
+                status: "unavailable",
+                grounding_status: "not_evaluated",
+                available_source_count: 3,
+                unlinked_source_count: 3,
+                dropped_annotation_count: 2,
+                unverified_claim_count: 1,
+              },
+            },
+          }),
+        ],
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const sources = canvas.getByRole("button", { name: "3 sources found" });
+    await userEvent.click(sources);
+    await expect(
+      body.getByText(
+        "Sources were retrieved, but no sentence-level citation could be established.",
+      ),
+    ).toBeVisible();
+    await expect(
+      body.getByText(
+        "No sentence-level citations were available for this answer.",
+      ),
+    ).toBeVisible();
   },
 };
 

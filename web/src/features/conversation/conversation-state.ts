@@ -7,6 +7,8 @@ export type ConversationActivity =
 export type ConversationProgressEntry =
   components["schemas"]["ConversationProgressEntry"];
 export type ConversationTrace = components["schemas"]["ConversationTrace"];
+export type ConversationCitationSummary =
+  components["schemas"]["ConversationCitationSummary"];
 export type ConversationTraceEntry =
   ConversationProgressEntry | ConversationActivity;
 export type ConversationAssistantItem =
@@ -64,6 +66,7 @@ export type LiveTurn = {
   completedItemIds: string[];
   trace: ConversationTrace | null;
   references: Record<string, unknown> | null;
+  citationSummary?: ConversationCitationSummary | null;
   suggestions: string[] | null;
   readyTurn: ConversationTurn | null;
   failure: ConversationFailure | null;
@@ -96,6 +99,7 @@ export function createLiveTurn(
     completedItemIds: [],
     trace: null,
     references: null,
+    citationSummary: null,
     suggestions: null,
     readyTurn: null,
     failure: null,
@@ -224,6 +228,7 @@ export function reduceLiveTurn(
       entries: response.trace?.entries ?? current.entries,
       trace: response.trace,
       references: response.references as Record<string, unknown> | null,
+      citationSummary: response.trace?.citation_summary ?? null,
       suggestions: event.turn.suggestions,
       readyTurn: event.turn,
       durationMs: response.duration_ms ?? current.durationMs,
@@ -382,6 +387,7 @@ export function reduceLiveTurn(
       return {
         ...current,
         references: event.references as Record<string, unknown>,
+        citationSummary: event.citation_summary ?? current.citationSummary,
         phase: "finalizing",
       };
   }

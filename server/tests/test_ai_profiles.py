@@ -44,7 +44,7 @@ def test_profile_revision_changes_with_model_and_thinking_policy() -> None:
     assert baseline.revision != changed_thinking.revision
 
 
-def test_profile_rejects_ambiguous_model_and_invalid_thinking_pair() -> None:
+def test_profile_rejects_invalid_configuration_and_accepts_openai() -> None:
     with pytest.raises(ProviderConfigurationError, match="provider:model"):
         resolve_profile(
             AIProfileName.STANDARD,
@@ -58,11 +58,11 @@ def test_profile_rejects_ambiguous_model_and_invalid_thinking_pair() -> None:
                 "SCHOLENS_AI_TRANSLATION_THINKING_EFFORT": "high",
             },
         )
-    with pytest.raises(ProviderConfigurationError, match="Unsupported AI provider"):
-        resolve_profile(
-            AIProfileName.STANDARD,
-            environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
-        )
+    profile = resolve_profile(
+        AIProfileName.STANDARD,
+        environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
+    )
+    assert profile.provider == "openai"
 
 
 def test_model_prefix_selects_provider_adapter(monkeypatch: pytest.MonkeyPatch) -> None:

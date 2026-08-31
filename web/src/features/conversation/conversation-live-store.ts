@@ -22,6 +22,7 @@ export type ConversationLiveMetadata = Pick<
   | "phase"
   | "readyTurn"
   | "references"
+  | "citationSummary"
   | "responseId"
   | "startedAtMs"
   | "stopFailure"
@@ -82,6 +83,7 @@ function metadataFrom(turn: LiveTurn | null): ConversationLiveMetadata | null {
     phase: turn.phase,
     readyTurn: turn.readyTurn,
     references: turn.references,
+    citationSummary: turn.citationSummary,
     responseId: turn.responseId,
     startedAtMs: turn.startedAtMs,
     stopFailure: turn.stopFailure,

@@ -152,7 +152,9 @@ Scholens 调用 `POST /v1/audio/speech` 创建异步语音任务，并轮询任�
 
 ## 5. AI 模型提供商
 
-Scholens 使用 `provider:model` 选择模型，由 Pydantic AI 解析到对应提供商；当前默认模型来自 DeepSeek，但业务代码不依赖 DeepSeek。若使用当前默认值，在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 API Key，并写入 `server/.env` 与 `jobs/.env`：
+Scholens 使用 `provider:model` 选择模型，由显式的 Pydantic AI provider adapter 解析到对应提供商；当前默认模型来自 DeepSeek，但业务代码不依赖 DeepSeek。支持 `deepseek`、`openai`、`google`、`anthropic`、`bedrock` 和 `moonshotai`。引用 metadata 会在服务端统一映射回本次请求的 source registry，未知来源会被丢弃而不会隐藏正文。
+
+若使用当前默认值，在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 API Key，并写入 `server/.env` 与 `jobs/.env`：
 
 ```dotenv
 SCHOLENS_AI_DEEPSEEK_API_KEY=
@@ -161,6 +163,12 @@ SCHOLENS_AI_STANDARD_MODEL=deepseek:deepseek-v4-flash
 SCHOLENS_AI_DEEP_MODEL=deepseek:deepseek-v4-pro
 SCHOLENS_AI_TRANSLATION_MODEL=deepseek:deepseek-v4-flash
 ```
+
+切换到 OpenAI、Gemini 或 Anthropic 时，分别配置对应的
+`SCHOLENS_AI_<PROVIDER>_API_KEY` 和 `provider:model`；切换到 Bedrock 时使用
+任务角色/默认 AWS 凭证链、`AWS_DEFAULT_REGION`，并设置
+`SCHOLENS_AI_STANDARD_MODEL=bedrock:<model-id>`。不要把 provider body、提示词或
+私有引用 marker 写入日志或凭证配置。
 
 AI 重排不使用通用对话模型。它直接消费 MinerU 的稳定
 `content_list.json` 结构化输出，并保留页码、坐标和图片资产；因此只需配置上文的

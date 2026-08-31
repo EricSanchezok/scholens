@@ -122,6 +122,18 @@ class SourceRegistry:
     def sources(self) -> list[AnswerSource]:
         return list(self._sources)
 
+    @classmethod
+    def from_admitted_sources(cls, sources: Sequence[AnswerSource]) -> "SourceRegistry":
+        """Create a read-only adapter view over server-admitted sources."""
+        registry = cls()
+        registry._sources = list(sources)  # noqa: SLF001 - controlled adapter view
+        for source in registry._sources:
+            fingerprint = hashlib.sha256(
+                f"{source.kind}:{getattr(source, 'document_id', getattr(source, 'url', ''))}:{_normalized_text(source.reference)}".encode()
+            ).hexdigest()
+            registry._dedupe[fingerprint] = source.key
+        return registry
+
     def reject(self) -> None:
         self.rejected_sources += 1
 

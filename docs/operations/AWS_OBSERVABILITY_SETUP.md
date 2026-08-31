@@ -29,6 +29,20 @@ After a protected deployment:
    load-balancer dimensions, and that queue age/DLQ alarms publish to the alert
    topic.
 
+Conversation citation resilience is evaluated separately from provider health.
+The dashboard should chart `scholens.conversation.answer.completed`,
+`scholens.conversation.citation.status`,
+`scholens.conversation.citation.grounding`,
+`scholens.conversation.citation.repair.success`,
+`scholens.conversation.citation.repair.exhausted`,
+`scholens.conversation.citation.verifier.timeout`, and
+`scholens.conversation.citation.hard_failure` by provider, model profile, and
+scope. Keep citation coverage and precision as separate offline/evaluation
+series; neither is an availability alarm on its own. A spike in
+`unavailable/partial` with stable answer completion is a provenance-quality
+incident, while a spike in hard failures or answer completion loss is a
+provider/runtime incident.
+
 For a deprecated HTTP route or MCP tool, confirm the registry's
 low-cardinality telemetry key is queryable for the full retirement window.
 Removal requires both at least 90 days since notice and production evidence of

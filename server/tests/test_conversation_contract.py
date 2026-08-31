@@ -120,6 +120,10 @@ def test_response_trace_serializes_as_a_typed_product_trace() -> None:
     )
     assert serialized[0].selected_response_id == response.id
     assert serialized[0].responses[0].duration_ms == 1_250
+    summary = serialized[0].responses[0].trace.citation_summary
+    assert summary is not None
+    assert summary.status == "complete"
+    assert summary.available_source_count == 2
     assert serialized[0].branch.index == 1
     assert serialized[0].branch.count == 1
 
