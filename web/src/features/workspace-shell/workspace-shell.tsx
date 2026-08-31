@@ -285,7 +285,7 @@ function SidebarControl({
         focusSurfaceVariants({ intent: "selection" }),
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active
-          ? "border-transparent bg-hover"
+          ? "bg-hover border-transparent"
           : "hover:bg-hover border-transparent",
       )}
       href={href as Route}
@@ -439,14 +439,12 @@ function AccountMenu({
             focusSurfaceVariants({ intent: "neutral" }),
             collapsed
               ? "ml-auto h-14 w-10 justify-center rounded-[var(--radius-md)] bg-transparent p-1 shadow-none"
-              : "border border-transparent bg-transparent shadow-none h-12 w-full gap-2 rounded-[var(--radius-lg)] px-2",
+              : "h-12 w-full gap-2 rounded-[var(--radius-lg)] border border-transparent bg-transparent px-2 shadow-none",
           )}
           type="button"
         >
           <CurrentUserAvatar
-            className={cn(
-              collapsed ? "text-caption size-8" : "size-8 text-xs",
-            )}
+            className={cn(collapsed ? "text-caption size-8" : "size-8 text-xs")}
             data-account-avatar
             fallback={initial}
             sizes="32px"

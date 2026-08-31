@@ -9,7 +9,7 @@ import { focusSurfaceVariants } from "./focus";
 import { useTextControlFocus } from "./text-control-focus";
 
 const controlClass = cn(
-  "motion-control w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted hover:bg-hover aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled",
+  "motion-control w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled",
   focusSurfaceVariants({ intent: "neutral" }),
 );
 
@@ -67,6 +67,7 @@ export const SearchField = React.forwardRef<HTMLInputElement, SearchFieldProps>(
         focusSurfaceVariants({ intent: "neutral" }),
         surfaceClassName,
       )}
+      data-focus-hover="none"
       data-focus-surface
     >
       <Icon
@@ -115,6 +116,7 @@ export const PasswordInput = React.forwardRef<
           "bg-surface relative rounded-[var(--radius-md)]",
           focusSurfaceVariants({ intent: "neutral" }),
         )}
+        data-focus-hover="none"
         data-focus-surface
       >
         <Input
@@ -138,7 +140,7 @@ export const PasswordInput = React.forwardRef<
         >
           <span
             aria-hidden
-            className="motion-control group-hover:bg-hover group-active:bg-pressed absolute size-8 rounded-[var(--radius-md)] group-disabled:bg-transparent"
+            className="motion-control group-active:bg-pressed absolute size-8 rounded-[var(--radius-md)] group-disabled:bg-transparent"
             data-slot="password-visibility-affordance"
           />
           <Icon

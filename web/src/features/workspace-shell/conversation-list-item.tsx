@@ -225,7 +225,7 @@ export function ConversationListItem({
         "motion-control group/interactive-row focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)] border",
         mobile ? "min-h-16 px-1 py-1" : "min-h-12 px-1 py-0.5",
         current
-          ? "border-transparent bg-hover"
+          ? "bg-hover border-transparent"
           : "hover:bg-hover border-transparent",
       )}
       data-current={current ? "" : undefined}

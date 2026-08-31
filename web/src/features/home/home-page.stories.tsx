@@ -77,7 +77,7 @@ export const Default: Story = {
       name: "Open account menu",
     });
     await expect(newChat).toHaveStyle({ height: "40px" });
-    await expect(account).toHaveStyle({ height: "56px" });
+    await expect(account).toHaveStyle({ height: "48px" });
     await userEvent.click(composer);
     await expect(composer).toHaveAttribute("data-focus-delegate", "surface");
     await expect(composer).toHaveAttribute("data-focus-origin", "pointer");

@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, within } from "storybook/test";
 
+import {
+  expectQuietPointerFocus,
+  readFocusVisual,
+} from "./focus-contract.story-test";
 import { PasswordInput } from "./input";
 
 const meta = {
@@ -39,6 +43,21 @@ export const CompactHoverAffordance: Story = {
     await expect(affordance.getBoundingClientRect().width).toBe(32);
   },
 };
+
+export const QuietPointerHover: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByLabelText("Password");
+    const surface = input.closest<HTMLElement>("[data-focus-surface]");
+    await expect(surface).not.toBeNull();
+    if (!surface) return;
+
+    const resting = readFocusVisual(surface);
+    await userEvent.hover(input);
+    await expectQuietPointerFocus({ element: surface, resting });
+  },
+};
+
 export const AllStates: Story = {
   render: (args) => (
     <div className="grid gap-3">
