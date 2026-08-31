@@ -407,6 +407,12 @@ provider credentials in the ignored `server/.env`; Jobs receives the same dev
 S3 settings through its own ignored `jobs/.env`. Production RDS, S3, and mail
 resources must never be used by local startup.
 
+The `scholens dev seed-test-fixture` command is stricter than ordinary local
+startup because it uploads deterministic PDFs: it requires `S3_BUCKET_NAME` to
+match the documented `scholens-dev-*` naming convention and requires
+`AWS_ENDPOINT_URL_S3` to be empty. It rejects the command before any upload
+when either storage guard fails.
+
 ## API Documentation
 
 FastAPI automatically generates API documentation. Once the application is running, you can access:

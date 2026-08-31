@@ -175,7 +175,9 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
   settings; no identity-prefixed mail configuration exists.
 - Scholens local development uses a dedicated remote dev S3 bucket with
   least-privilege development credentials. Leave `AWS_ENDPOINT_URL_S3` empty
-  for AWS S3 and never point local credentials at a production bucket.
+  for AWS S3 and never point local credentials at a production bucket. The
+  `dev seed-test-fixture` command enforces a `scholens-dev-*` bucket name and
+  rejects custom S3 endpoints before uploading any fixture objects.
 - Remote model/search providers (DeepSeek, MinerU, MOSS Voice, Scholight MCP,
   OpenAlex, and user-configured MCP connectors) are opt-in. Use them only when the feature
   under test requires them and never commit their credentials.

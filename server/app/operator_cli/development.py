@@ -35,6 +35,9 @@ _SYNTHETIC_EMAIL_DOMAINS = {
     "example.net",
     "example.org",
 }
+_LOCAL_DEV_BUCKET_PATTERN = re.compile(
+    r"^scholens-dev-[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+)
 
 
 def _require_reset_url(value: str, *, variable: str) -> None:
@@ -69,6 +72,21 @@ def _require_local_test_account_target(database_url: str, *, email: str) -> None
     domain = email.rpartition("@")[2].casefold()
     if domain not in _SYNTHETIC_EMAIL_DOMAINS:
         raise ValueError("Test-account email must use a reserved synthetic domain")
+
+
+def _require_local_fixture_storage_target() -> str:
+    """Reject fixture uploads unless storage is the documented dev S3 bucket."""
+    bucket = os.getenv("S3_BUCKET_NAME", "").strip()
+    if not _LOCAL_DEV_BUCKET_PATTERN.fullmatch(bucket):
+        raise ValueError(
+            "Local fixture seeding requires S3_BUCKET_NAME to be a dedicated "
+            "scholens-dev-* bucket"
+        )
+    if os.getenv("AWS_ENDPOINT_URL_S3", "").strip():
+        raise ValueError(
+            "Local fixture seeding requires AWS_ENDPOINT_URL_S3 to be empty"
+        )
+    return bucket
 
 
 def _password_callback(
@@ -325,6 +343,7 @@ def seed_test_fixture(state: CliState, email: str, yes: bool) -> None:
     """Seed deterministic local PDFs and a Project for one test account."""
     database_url = os.getenv("DATABASE_URL", "")
     _require_local_test_account_target(database_url, email=email)
+    _require_local_fixture_storage_target()
     confirm(
         f"Seed local PDF and Project fixture for {email}? Existing matching fixture "
         "rows will be reused.",
