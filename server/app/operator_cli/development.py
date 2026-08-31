@@ -35,9 +35,7 @@ _SYNTHETIC_EMAIL_DOMAINS = {
     "example.net",
     "example.org",
 }
-_LOCAL_DEV_BUCKET_PATTERN = re.compile(
-    r"^scholens-dev-[a-z0-9][a-z0-9.-]*[a-z0-9]$"
-)
+_LOCAL_DEV_BUCKET_PATTERN = re.compile(r"^scholens-dev-[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 
 
 def _require_reset_url(value: str, *, variable: str) -> None:

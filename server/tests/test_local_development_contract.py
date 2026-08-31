@@ -84,10 +84,7 @@ def test_local_fixture_storage_guard_accepts_documented_dev_bucket(
     monkeypatch.setenv("S3_BUCKET_NAME", "scholens-dev-123-ap-southeast-1")
     monkeypatch.delenv("AWS_ENDPOINT_URL_S3", raising=False)
 
-    assert (
-        _require_local_fixture_storage_target()
-        == "scholens-dev-123-ap-southeast-1"
-    )
+    assert _require_local_fixture_storage_target() == "scholens-dev-123-ap-southeast-1"
 
 
 @pytest.mark.parametrize(
