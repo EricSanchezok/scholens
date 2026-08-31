@@ -11,23 +11,37 @@ import {
 export function useReaderFloatingPosition({
   boundaryRef,
   bounds,
+  placementKey,
+  preferredPlacement = "bottom",
 }: {
   boundaryRef?: React.RefObject<HTMLElement | null>;
   bounds: ReaderFloatingRect;
+  placementKey: string;
+  preferredPlacement?: "top" | "bottom";
 }) {
   const floatingRef = React.useRef<HTMLDivElement>(null);
+  const measureRef = React.useRef<HTMLDivElement>(null);
+  const placementRef = React.useRef<"top" | "bottom" | undefined>(undefined);
+  const previousPlacementKeyRef = React.useRef(placementKey);
   const [position, setPosition] = React.useState<ReaderFloatingPosition>();
+
+  if (previousPlacementKeyRef.current !== placementKey) {
+    previousPlacementKeyRef.current = placementKey;
+    placementRef.current = undefined;
+  }
 
   React.useLayoutEffect(() => {
     const floating = floatingRef.current;
+    const measure = measureRef.current;
     const offsetParent = floating?.offsetParent;
-    if (!floating || !(offsetParent instanceof HTMLElement)) return;
+    if (!floating || !measure || !(offsetParent instanceof HTMLElement)) return;
     const boundaryElement = boundaryRef?.current;
     let frame: number | undefined;
 
     function updatePosition() {
       frame = undefined;
       const floatingRect = floating!.getBoundingClientRect();
+      const measureRect = measure!.getBoundingClientRect();
       const offsetParentRect = offsetParent!.getBoundingClientRect();
       const hostRect =
         boundaryElement?.getBoundingClientRect() ?? offsetParentRect;
@@ -65,63 +79,95 @@ export function useReaderFloatingPosition({
         anchor,
         boundary,
         floating: {
-          height: floatingRect.height,
+          height: measureRect.height,
           width: floatingRect.width,
         },
+        lockedPlacement: placementRef.current,
+        preferredPlacement,
       });
+      if (!placementRef.current) placementRef.current = nextPosition.placement;
       setPosition((current) =>
         current &&
+        current.contentMaxHeight === nextPosition.contentMaxHeight &&
         current.left === nextPosition.left &&
         current.top === nextPosition.top &&
         current.maxHeight === nextPosition.maxHeight &&
         current.maxWidth === nextPosition.maxWidth &&
-        current.placement === nextPosition.placement
+        current.placement === nextPosition.placement &&
+        current.visible === nextPosition.visible
           ? current
           : nextPosition,
       );
     }
 
-    function schedulePositionUpdate() {
+    function schedulePositionUpdate(resetPlacement = false) {
+      if (resetPlacement) placementRef.current = undefined;
       if (frame !== undefined) return;
       frame = window.requestAnimationFrame(updatePosition);
     }
 
-    const observer = new ResizeObserver(schedulePositionUpdate);
+    let floatingWidth = floating.getBoundingClientRect().width;
+    const observer = new ResizeObserver((entries) => {
+      let resetPlacement = false;
+      let widthChanged = false;
+      for (const entry of entries) {
+        if (entry.target === floating) {
+          if (entry.contentRect.width !== floatingWidth) {
+            floatingWidth = entry.contentRect.width;
+            widthChanged = true;
+          }
+        } else {
+          resetPlacement = true;
+        }
+      }
+      if (resetPlacement || widthChanged) {
+        schedulePositionUpdate(resetPlacement);
+      }
+    });
     observer.observe(floating);
+    observer.observe(measure);
     observer.observe(offsetParent);
     if (boundaryElement && boundaryElement !== offsetParent) {
       observer.observe(boundaryElement);
     }
-    window.addEventListener("resize", schedulePositionUpdate, {
+    const handleWindowResize = () => schedulePositionUpdate(true);
+    const handleWindowScroll = () => schedulePositionUpdate();
+    const handleViewportResize = () => schedulePositionUpdate(true);
+    const handleViewportScroll = () => schedulePositionUpdate();
+    window.addEventListener("resize", handleWindowResize, {
       passive: true,
     });
-    window.addEventListener("scroll", schedulePositionUpdate, {
+    window.addEventListener("scroll", handleWindowScroll, {
       capture: true,
       passive: true,
     });
-    window.visualViewport?.addEventListener("resize", schedulePositionUpdate, {
-      passive: true,
-    });
-    window.visualViewport?.addEventListener("scroll", schedulePositionUpdate, {
-      passive: true,
-    });
+    window.visualViewport?.addEventListener("resize", handleViewportResize);
+    window.visualViewport?.addEventListener("scroll", handleViewportScroll);
     updatePosition();
 
     return () => {
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener("resize", schedulePositionUpdate);
-      window.removeEventListener("scroll", schedulePositionUpdate, true);
+      window.removeEventListener("resize", handleWindowResize);
+      window.removeEventListener("scroll", handleWindowScroll, true);
       window.visualViewport?.removeEventListener(
         "resize",
-        schedulePositionUpdate,
+        handleViewportResize,
       );
       window.visualViewport?.removeEventListener(
         "scroll",
-        schedulePositionUpdate,
+        handleViewportScroll,
       );
     };
-  }, [boundaryRef, bounds.bottom, bounds.left, bounds.right, bounds.top]);
+  }, [
+    boundaryRef,
+    bounds.bottom,
+    bounds.left,
+    bounds.right,
+    bounds.top,
+    placementKey,
+    preferredPlacement,
+  ]);
 
-  return { floatingRef, position };
+  return { floatingRef, measureRef, position };
 }

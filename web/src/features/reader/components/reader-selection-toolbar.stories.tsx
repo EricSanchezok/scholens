@@ -6,6 +6,7 @@ import {
   focusWithKeyboard,
   readFocusVisual,
 } from "@/components/ui/focus-contract.story-test";
+import { cn } from "@/lib/utilities/cn";
 import type { ReaderSelection } from "./pdf-page";
 import { ReaderSelectionToolbar } from "./reader-selection-toolbar";
 
@@ -79,9 +80,14 @@ const meta = {
     selection,
   },
   decorators: [
-    (Story) => (
+    (Story, context) => (
       <div
-        className="bg-canvas relative mx-auto h-[36rem] w-[28rem] max-w-[100vw] border"
+        className={cn(
+          "bg-canvas relative mx-auto max-w-[100vw] border",
+          context.parameters.readerSelectionBoundary === "wide"
+            ? "h-[50rem] w-[min(100vw,160rem)]"
+            : "h-[36rem] w-[28rem]",
+        )}
         data-reader-selection-story-boundary
       >
         <span
@@ -129,8 +135,8 @@ export const CompletedTranslation: Story = {
       "[data-reader-selection-translation-text]",
     );
     await expect(text).not.toBeNull();
-    await expect(getComputedStyle(text!).webkitLineClamp).toBe("4");
-    await expect(getComputedStyle(text!).overflow).toBe("hidden");
+    await expect(getComputedStyle(text!).overflowY).toBe("auto");
+    await expect(text!).toHaveAttribute("tabindex", "0");
   },
 };
 
@@ -157,7 +163,7 @@ export const LongCompletedTranslationTeaser: Story = {
   args: {
     translationPreview: {
       status: "completed",
-      text: "检索质量取决于排序和上下文构建。完整的翻译结果只保证出现在右侧翻译面板中，桌面预览是一个带省略号的紧凑摘要。检索质量取决于排序和上下文构建。",
+      text: "检索质量取决于排序和上下文构建。完整的翻译结果只保证出现在右侧翻译面板中，桌面预览是一个可滚动摘要。检索质量取决于排序和上下文构建。",
     },
   },
   play: async ({ canvasElement }) => {
@@ -171,8 +177,9 @@ export const LongCompletedTranslationTeaser: Story = {
     await expect(boundary).not.toBeNull();
     await waitFor(() => {
       const textRect = text!.getBoundingClientRect();
-      expect(textRect.height).toBeLessThanOrEqual(96);
-      expect(getComputedStyle(text!).webkitLineClamp).toBe("4");
+      expect(textRect.height).toBeGreaterThan(96);
+      expect(getComputedStyle(text!).overflowY).toBe("auto");
+      expect(text!.scrollHeight).toBeGreaterThan(text!.clientHeight);
     });
   },
 };
@@ -215,6 +222,39 @@ export const LongSelectionNearPageTop: Story = {
   },
 };
 
+export const SelectionNearHorizontalEdges: Story = {
+  args: {
+    selection: {
+      ...selection,
+      anchor: {
+        kind: "pdf_text",
+        page_number: 4,
+        rects: [{ x: 0.01, y: 0.42, width: 0.2, height: 0.04 }],
+      },
+    },
+    translationPreview: {
+      status: "completed",
+      text: "长单词和 URL https://example.com/research/reader-selection-translation-stability 应该安全换行。",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const floating = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-floating]",
+    );
+    const boundary = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-story-boundary]",
+    );
+    await expect(floating).not.toBeNull();
+    await expect(boundary).not.toBeNull();
+    await waitFor(() => {
+      const floatingRect = floating!.getBoundingClientRect();
+      const boundaryRect = boundary!.getBoundingClientRect();
+      expect(floatingRect.left).toBeGreaterThanOrEqual(boundaryRect.left);
+      expect(floatingRect.right).toBeLessThanOrEqual(boundaryRect.right);
+    });
+  },
+};
+
 export const TranslationNearVisibleTop: Story = {
   args: {
     selection: {
@@ -240,6 +280,82 @@ export const TranslationNearVisibleTop: Story = {
   },
 };
 
+export const TranslationNearVisibleBottom: Story = {
+  args: {
+    selection: {
+      ...selection,
+      anchor: {
+        kind: "pdf_text",
+        page_number: 4,
+        rects: [{ x: 0.2, y: 0.86, width: 0.6, height: 0.04 }],
+      },
+    },
+    translationPreview: {
+      status: "streaming",
+      text: "这是一个持续增长的流式翻译预览，用于验证方向锁定。",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const floating = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-floating]",
+    );
+    await waitFor(() => {
+      expect(floating?.dataset.readerSelectionPlacement).toBe("top");
+    });
+  },
+};
+
+export const LongStreamingTranslation: Story = {
+  args: {
+    translationPreview: {
+      status: "streaming",
+      text: "这是一段持续增长的翻译内容。".repeat(32),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const text = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-text]",
+    );
+    const floating = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-floating]",
+    );
+    await expect(text).not.toBeNull();
+    await expect(floating).not.toBeNull();
+    await waitFor(() => {
+      expect(getComputedStyle(text!).overflowY).toBe("auto");
+      expect(text!.scrollHeight).toBeGreaterThan(text!.clientHeight);
+      expect(floating!.dataset.readerSelectionPlacement).toBe("bottom");
+    });
+  },
+};
+
+export const LongStreamingTranslationReducedMotion: Story = {
+  ...LongStreamingTranslation,
+  globals: { motion: "reduced" },
+};
+
+export const WideDesktopPreview: Story = {
+  ...LongCompletedTranslationTeaser,
+  parameters: { readerSelectionBoundary: "wide" },
+};
+
+export const KeyboardScrollablePreview: Story = {
+  args: LongStreamingTranslation.args,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const previewText = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-text]",
+    );
+    await expect(previewText).not.toBeNull();
+    await expect(
+      canvas.getByRole("button", { name: "View translation" }),
+    ).toBeVisible();
+    previewText!.focus();
+    await expect(previewText!).toHaveFocus();
+    await userEvent.keyboard("{PageDown}");
+  },
+};
+
 export const TranslationNearVisibleTopDark: Story = {
   ...TranslationNearVisibleTop,
   globals: { appearance: "dark" },
@@ -248,7 +364,14 @@ export const TranslationNearVisibleTopDark: Story = {
 export const SelectionToolbarSmallMobile: Story = {
   args: TranslationNearVisibleTop.args,
   globals: { viewport: { value: "smallMobile" } },
-  play: LongSelectionNearPageTop.play,
+  play: async (context) => {
+    await LongSelectionNearPageTop.play?.(context);
+    await expect(
+      context.canvasElement.querySelector(
+        "[data-reader-selection-translation-preview]",
+      ),
+    ).toBeNull();
+  },
 };
 
 export const HighlightPalette: Story = {

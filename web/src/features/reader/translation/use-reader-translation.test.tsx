@@ -7,9 +7,14 @@ import type { ReaderSelection } from "../components/pdf-page";
 import * as translationApi from "./api";
 import {
   AUTO_TRANSLATION_DELAY_MS,
+  TRANSLATION_DELTA_FLUSH_INTERVAL_MS,
   useReaderTranslation,
 } from "./use-reader-translation";
 import { ApiError } from "@/lib/api";
+
+type SelectionTranslationEventHandler = Parameters<
+  typeof translationApi.streamSelectionTranslation
+>[0]["onEvent"];
 
 function selection(text: string): ReaderSelection {
   return {
@@ -25,12 +30,12 @@ function selection(text: string): ReaderSelection {
   };
 }
 
-function createWrapper() {
+function createWrapper(autoTranslateSelection = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   queryClient.setQueryData(translationApi.translationKeys.current(), {
-    auto_translate_selection: true,
+    auto_translate_selection: autoTranslateSelection,
     custom_instructions: null,
     source_language: "auto",
     target_language: "zh-CN",
@@ -98,6 +103,125 @@ describe("useReaderTranslation", () => {
 
     rerender({ source: "second" });
     expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("merges consecutive deltas into one bounded state commit", async () => {
+    vi.useFakeTimers();
+    let emit: SelectionTranslationEventHandler | undefined;
+    vi.spyOn(translationApi, "streamSelectionTranslation").mockImplementation(
+      async ({ onEvent }) => {
+        emit = onEvent;
+        await new Promise<void>(() => undefined);
+      },
+    );
+    let renderCount = 0;
+    const { result } = renderHook(
+      () => {
+        renderCount += 1;
+        return useReaderTranslation({
+          documentId: "10000000-0000-4000-8000-000000000001",
+          selection: selection("stream source"),
+        });
+      },
+      { wrapper: createWrapper(false) },
+    );
+
+    await act(async () => {
+      void result.current.translate("manual");
+    });
+    const rendersBeforeDeltas = renderCount;
+    act(() => {
+      emit?.({ type: "delta", text: "第" });
+      emit?.({ type: "delta", text: "一" });
+      emit?.({ type: "delta", text: "段" });
+    });
+    expect(result.current.state.translatedText).toBe("");
+    expect(renderCount).toBe(rendersBeforeDeltas);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        TRANSLATION_DELTA_FLUSH_INTERVAL_MS,
+      );
+    });
+    expect(result.current.state.translatedText).toBe("第一段");
+    expect(renderCount).toBe(rendersBeforeDeltas + 1);
+  });
+
+  it.each(["complete", "error"] as const)(
+    "flushes the final delta before a %s event",
+    async (terminalEvent) => {
+      vi.useFakeTimers();
+      vi.spyOn(
+        translationApi,
+        "streamSelectionTranslation",
+      ).mockImplementation(async ({ onEvent }) => {
+        onEvent({ type: "delta", text: "最后一段" });
+        onEvent(
+          terminalEvent === "complete"
+            ? { type: "complete", cacheHit: false }
+            : {
+                type: "error",
+                code: "provider_error",
+                message: "Provider failed",
+                retryable: true,
+              },
+        );
+      });
+      const { result } = renderHook(
+        () =>
+          useReaderTranslation({
+            documentId: "10000000-0000-4000-8000-000000000001",
+            selection: selection("terminal source"),
+          }),
+        { wrapper: createWrapper(false) },
+      );
+
+      await act(async () => {
+        await result.current.translate("manual");
+      });
+
+      expect(result.current.state.translatedText).toBe("最后一段");
+      expect(result.current.state.status).toBe(
+        terminalEvent === "complete" ? "completed" : "error",
+      );
+    },
+  );
+
+  it("ignores late events from an aborted selection request", async () => {
+    vi.useFakeTimers();
+    const events: SelectionTranslationEventHandler[] = [];
+    vi.spyOn(translationApi, "streamSelectionTranslation").mockImplementation(
+      async ({ onEvent }) => {
+        events.push(onEvent);
+        await new Promise<void>(() => undefined);
+      },
+    );
+    const { result, rerender } = renderHook(
+      ({ source }) =>
+        useReaderTranslation({
+          documentId: "10000000-0000-4000-8000-000000000001",
+          selection: selection(source),
+        }),
+      { initialProps: { source: "first" }, wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_TRANSLATION_DELAY_MS);
+    });
+    rerender({ source: "second" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_TRANSLATION_DELAY_MS);
+    });
+    act(() => {
+      events[0]?.({ type: "delta", text: "stale" });
+      events[0]?.({ type: "complete", cacheHit: false });
+      events[1]?.({ type: "delta", text: "fresh" });
+      events[1]?.({ type: "complete", cacheHit: false });
+    });
+
+    expect(result.current.state.selection?.selected_text).toBe("second");
+    expect(result.current.state.translatedText).toBe("fresh");
+    expect(result.current.state.status).toBe("completed");
   });
 
   it("maps a codeless 403 into the edge_blocked error state", async () => {

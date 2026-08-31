@@ -134,7 +134,14 @@ function TranslationResult({
   if (state.status === "error") {
     return (
       <div className="border-line bg-surface rounded-[var(--radius-lg)] border p-4">
-        <p className="text-sm font-medium">{t("errors.title")}</p>
+        <p
+          aria-atomic="true"
+          aria-live="polite"
+          className="text-sm font-medium"
+          role="status"
+        >
+          {t("errors.title")}
+        </p>
         <p className="text-muted mt-1 text-sm">
           {t(translationErrorMessageKey(state.errorCode))}
         </p>
@@ -178,12 +185,16 @@ function TranslationResult({
         </div>
       ) : (
         <div
-          aria-live="polite"
           aria-busy={state.status === "streaming"}
           className="border-line bg-surface min-h-44 rounded-[var(--radius-lg)] border p-4"
         >
           <div className="flex items-center justify-between gap-3">
-            <p className="text-muted text-xs font-medium tracking-wide uppercase">
+            <p
+              aria-atomic="true"
+              aria-live="polite"
+              className="text-muted text-xs font-medium tracking-wide uppercase"
+              role="status"
+            >
               {state.status === "streaming"
                 ? t("status.translating")
                 : t("status.completed")}
