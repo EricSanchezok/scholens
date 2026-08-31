@@ -1183,8 +1183,8 @@ async def test_direct_response_flushes_acceptance_before_durable_subscription() 
     assert response.headers["cache-control"] == "no-cache, no-transform"
     assert response.headers["vary"] == "Accept"
     assert response.headers["x-accel-buffering"] == "no"
-    assert response.headers["content-type"] == _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
-    assert response.media_type == _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
+    assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+    assert response.media_type == "text/event-stream"
     assert chat.subscribe_calls == 0
     assert await anext(response.body_iterator) == ": accepted\n\n"
     assert chat.subscribe_calls == 0
