@@ -91,28 +91,25 @@ export function useReaderTranslation({
     pendingDeltaRef.current = "";
   }, []);
 
-  const flushDeltaBuffer = React.useCallback(
-    (requestId: number) => {
-      if (requestIdRef.current !== requestId) return;
-      if (deltaFrameRef.current !== undefined) {
-        window.cancelAnimationFrame?.(deltaFrameRef.current);
-        deltaFrameRef.current = undefined;
-      }
-      if (deltaTimerRef.current !== undefined) {
-        window.clearTimeout(deltaTimerRef.current);
-        deltaTimerRef.current = undefined;
-      }
-      const pendingText = pendingDeltaRef.current;
-      pendingDeltaRef.current = "";
-      if (!pendingText) return;
-      setState((current) =>
-        requestIdRef.current === requestId
-          ? { ...current, translatedText: current.translatedText + pendingText }
-          : current,
-      );
-    },
-    [],
-  );
+  const flushDeltaBuffer = React.useCallback((requestId: number) => {
+    if (requestIdRef.current !== requestId) return;
+    if (deltaFrameRef.current !== undefined) {
+      window.cancelAnimationFrame?.(deltaFrameRef.current);
+      deltaFrameRef.current = undefined;
+    }
+    if (deltaTimerRef.current !== undefined) {
+      window.clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = undefined;
+    }
+    const pendingText = pendingDeltaRef.current;
+    pendingDeltaRef.current = "";
+    if (!pendingText) return;
+    setState((current) =>
+      requestIdRef.current === requestId
+        ? { ...current, translatedText: current.translatedText + pendingText }
+        : current,
+    );
+  }, []);
 
   const scheduleDeltaFlush = React.useCallback(
     (requestId: number) => {

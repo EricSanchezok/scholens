@@ -196,8 +196,7 @@ export function ReaderSelectionToolbar({
           maxHeight: position?.maxHeight,
           maxWidth: position?.maxWidth,
           top: position?.top ?? 0,
-          visibility:
-            position && position.visible ? "visible" : "hidden",
+          visibility: position && position.visible ? "visible" : "hidden",
         }}
         variants={motionVariants.swap}
       >
@@ -239,7 +238,7 @@ export function ReaderSelectionToolbar({
               animate="animate"
               aria-busy={translationPreview.status === "streaming"}
               aria-label={labels.viewTranslation}
-              className="border-line bg-elevated shadow-raised hidden w-[clamp(22.5rem,26vw,30rem)] min-w-0 max-w-full overflow-hidden rounded-[var(--radius-lg)] border p-3 text-left lg:block"
+              className="border-line bg-elevated shadow-raised hidden w-[clamp(22.5rem,26vw,30rem)] max-w-full min-w-0 overflow-hidden rounded-[var(--radius-lg)] border p-3 text-left lg:block"
               data-reader-selection-translation-preview
               exit="exit"
               initial="initial"

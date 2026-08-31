@@ -1132,9 +1132,7 @@ test("keeps the desktop selection translation anchored while SSE content grows",
   await selectPdfPassage(page, 2);
   const floating = page.locator("[data-reader-selection-floating]");
   const preview = page.locator("[data-reader-selection-translation-preview]");
-  const previewText = page.locator(
-    "[data-reader-selection-translation-text]",
-  );
+  const previewText = page.locator("[data-reader-selection-translation-text]");
   await expect(preview).toBeVisible({ timeout: 8_000 });
   await expect(previewText).toContainText("译文：");
 
@@ -2027,9 +2025,7 @@ test("uses the full translation panel instead of a desktop preview on narrow Rea
     await expect(
       page.locator("[data-reader-selection-translation-preview]"),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "Translate selection" })
-      .click();
+    await page.getByRole("button", { name: "Translate selection" }).click();
     await expect(page).toHaveURL(/panel=translation/);
     await expect(
       page.getByText("Selected text", { exact: true }),

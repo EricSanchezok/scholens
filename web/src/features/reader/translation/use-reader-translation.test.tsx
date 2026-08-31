@@ -139,9 +139,7 @@ describe("useReaderTranslation", () => {
     expect(renderCount).toBe(rendersBeforeDeltas);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(
-        TRANSLATION_DELTA_FLUSH_INTERVAL_MS,
-      );
+      await vi.advanceTimersByTimeAsync(TRANSLATION_DELTA_FLUSH_INTERVAL_MS);
     });
     expect(result.current.state.translatedText).toBe("第一段");
     expect(renderCount).toBe(rendersBeforeDeltas + 1);
@@ -151,22 +149,21 @@ describe("useReaderTranslation", () => {
     "flushes the final delta before a %s event",
     async (terminalEvent) => {
       vi.useFakeTimers();
-      vi.spyOn(
-        translationApi,
-        "streamSelectionTranslation",
-      ).mockImplementation(async ({ onEvent }) => {
-        onEvent({ type: "delta", text: "最后一段" });
-        onEvent(
-          terminalEvent === "complete"
-            ? { type: "complete", cacheHit: false }
-            : {
-                type: "error",
-                code: "provider_error",
-                message: "Provider failed",
-                retryable: true,
-              },
-        );
-      });
+      vi.spyOn(translationApi, "streamSelectionTranslation").mockImplementation(
+        async ({ onEvent }) => {
+          onEvent({ type: "delta", text: "最后一段" });
+          onEvent(
+            terminalEvent === "complete"
+              ? { type: "complete", cacheHit: false }
+              : {
+                  type: "error",
+                  code: "provider_error",
+                  message: "Provider failed",
+                  retryable: true,
+                },
+          );
+        },
+      );
       const { result } = renderHook(
         () =>
           useReaderTranslation({
