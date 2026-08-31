@@ -65,6 +65,11 @@ export const SignIn: Story = {
     await expect(
       await canvas.findByRole("heading", { name: "Welcome back" }),
     ).toBeVisible();
+    const frame = canvasElement.querySelector('[data-slot="frame"]');
+    const panel = canvasElement.querySelector('[data-slot="frame-panel"]');
+    await expect(frame).toHaveClass("bg-transparent");
+    await expect(frame).not.toHaveClass("border");
+    await expect(panel).toHaveClass("border", "shadow-raised");
     await expect(
       canvasElement.querySelector('[data-product-mark="portrait"]'),
     ).not.toBeNull();

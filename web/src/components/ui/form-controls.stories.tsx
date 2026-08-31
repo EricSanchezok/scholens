@@ -138,15 +138,15 @@ export const QuietPointerFocus: Story = {
     const canvas = within(canvasElement);
     const input = canvas.getByRole("textbox", { name: "Email" });
 
+    const resting = readFocusVisual(input);
     await userEvent.hover(input);
-    const hovered = readFocusVisual(input);
+    await expectQuietPointerFocus({ element: input, resting });
     await userEvent.click(input);
     await expect(input).toHaveAttribute("data-focus-origin", "pointer");
-    await expectQuietPointerFocus({ element: input, resting: hovered });
+    await expectQuietPointerFocus({ element: input, resting });
 
     await userEvent.unhover(input);
     await userEvent.click(canvas.getByRole("button", { name: "Before field" }));
-    const resting = readFocusVisual(input);
     await focusWithKeyboard(input);
     await expect(input).toHaveAttribute("data-focus-origin", "keyboard");
     await expectLayeredKeyboardFocus({ element: input, resting });

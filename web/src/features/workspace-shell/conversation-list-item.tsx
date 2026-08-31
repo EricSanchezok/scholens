@@ -225,7 +225,7 @@ export function ConversationListItem({
         "motion-control group/interactive-row focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)] border",
         mobile ? "min-h-16 px-1 py-1" : "min-h-12 px-1 py-0.5",
         current
-          ? "border-line bg-surface shadow-raised"
+          ? "bg-hover border-transparent"
           : "hover:bg-hover border-transparent",
       )}
       data-current={current ? "" : undefined}
@@ -252,6 +252,7 @@ export function ConversationListItem({
           <span
             className={cn(
               "block truncate",
+              current && "font-medium",
               mobile ? "text-base leading-6" : "text-sidebar-label leading-5",
             )}
           >

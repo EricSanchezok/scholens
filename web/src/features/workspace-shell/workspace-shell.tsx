@@ -241,6 +241,7 @@ function SidebarLinkContent({
         <span
           className={cn(
             "text-sidebar-label truncate",
+            active && "font-semibold",
             animateLabel && "settled-content-enter",
           )}
         >
@@ -284,7 +285,7 @@ function SidebarControl({
         focusSurfaceVariants({ intent: "selection" }),
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active
-          ? "border-line bg-surface shadow-raised"
+          ? "bg-hover border-transparent"
           : "hover:bg-hover border-transparent",
       )}
       href={href as Route}
@@ -438,7 +439,7 @@ function AccountMenu({
             focusSurfaceVariants({ intent: "neutral" }),
             collapsed
               ? "ml-auto h-14 w-10 justify-center rounded-[var(--radius-md)] bg-transparent p-1 shadow-none"
-              : "border-line bg-surface shadow-raised h-14 w-full gap-3 rounded-[var(--radius-xl)] border px-2",
+              : "h-14 w-full gap-3 rounded-[var(--radius-lg)] border border-transparent bg-transparent px-2 shadow-none",
           )}
           type="button"
         >

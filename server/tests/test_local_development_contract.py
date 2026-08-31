@@ -3,6 +3,9 @@ from pathlib import Path
 import pytest
 
 from app.cli import require_local_database_url, require_local_server_address
+from app.operator_cli.development import (
+    _require_local_fixture_storage_target,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -73,3 +76,37 @@ def test_local_server_address_accepts_only_registered_loopback_port() -> None:
         require_local_server_address("0.0.0.0", 7301)
     with pytest.raises(ValueError, match="127.0.0.1:7301"):
         require_local_server_address("127.0.0.1", 8000)
+
+
+def test_local_fixture_storage_guard_accepts_documented_dev_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("S3_BUCKET_NAME", "scholens-dev-123-ap-southeast-1")
+    monkeypatch.delenv("AWS_ENDPOINT_URL_S3", raising=False)
+
+    assert _require_local_fixture_storage_target() == "scholens-dev-123-ap-southeast-1"
+
+
+@pytest.mark.parametrize(
+    "bucket",
+    ["", "scholens-production-123-ap-southeast-1", "scholens-dev-"],
+)
+def test_local_fixture_storage_guard_rejects_non_dev_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+    bucket: str,
+) -> None:
+    monkeypatch.setenv("S3_BUCKET_NAME", bucket)
+    monkeypatch.delenv("AWS_ENDPOINT_URL_S3", raising=False)
+
+    with pytest.raises(ValueError, match=r"scholens-dev-\* bucket"):
+        _require_local_fixture_storage_target()
+
+
+def test_local_fixture_storage_guard_rejects_custom_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("S3_BUCKET_NAME", "scholens-dev-123-ap-southeast-1")
+    monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "http://127.0.0.1:59000")
+
+    with pytest.raises(ValueError, match="AWS_ENDPOINT_URL_S3 to be empty"):
+        _require_local_fixture_storage_target()

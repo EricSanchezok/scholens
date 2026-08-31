@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -34,6 +35,7 @@ _SYNTHETIC_EMAIL_DOMAINS = {
     "example.net",
     "example.org",
 }
+_LOCAL_DEV_BUCKET_PATTERN = re.compile(r"^scholens-dev-[a-z0-9][a-z0-9.-]*[a-z0-9]$")
 
 
 def _require_reset_url(value: str, *, variable: str) -> None:
@@ -68,6 +70,21 @@ def _require_local_test_account_target(database_url: str, *, email: str) -> None
     domain = email.rpartition("@")[2].casefold()
     if domain not in _SYNTHETIC_EMAIL_DOMAINS:
         raise ValueError("Test-account email must use a reserved synthetic domain")
+
+
+def _require_local_fixture_storage_target() -> str:
+    """Reject fixture uploads unless storage is the documented dev S3 bucket."""
+    bucket = os.getenv("S3_BUCKET_NAME", "").strip()
+    if not _LOCAL_DEV_BUCKET_PATTERN.fullmatch(bucket):
+        raise ValueError(
+            "Local fixture seeding requires S3_BUCKET_NAME to be a dedicated "
+            "scholens-dev-* bucket"
+        )
+    if os.getenv("AWS_ENDPOINT_URL_S3", "").strip():
+        raise ValueError(
+            "Local fixture seeding requires AWS_ENDPOINT_URL_S3 to be empty"
+        )
+    return bucket
 
 
 def _password_callback(
@@ -127,8 +144,21 @@ def _apply_local_grants(admin_url: str) -> None:
     environment = os.environ.copy()
     if parsed.password:
         environment["PGPASSWORD"] = unquote(parsed.password)
+    psql = shutil.which("psql")
+    if psql is None:
+        for candidate in (
+            "/opt/homebrew/opt/libpq/bin/psql",
+            "/usr/local/opt/libpq/bin/psql",
+        ):
+            if Path(candidate).is_file():
+                psql = candidate
+                break
+    if psql is None:
+        raise FileNotFoundError(
+            "psql is required to reapply local grants; install PostgreSQL client tools"
+        )
     args = [
-        "psql",
+        psql,
         "--host",
         parsed.hostname or "127.0.0.1",
         "--port",
@@ -294,6 +324,49 @@ def bootstrap_account(
         state,
         mutation_payload(changed=changed, email=email),
         human=f"{email}: {'changed' if changed else 'unchanged'}",
+    )
+
+
+@development_group.command("seed-test-fixture")
+@click.option(
+    "--email",
+    default="developer@example.com",
+    show_default=True,
+    callback=email_callback,
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_obj
+@guarded
+def seed_test_fixture(state: CliState, email: str, yes: bool) -> None:
+    """Seed deterministic local PDFs and a Project for one test account."""
+    database_url = os.getenv("DATABASE_URL", "")
+    _require_local_test_account_target(database_url, email=email)
+    _require_local_fixture_storage_target()
+    confirm(
+        f"Seed local PDF and Project fixture for {email}? Existing matching fixture "
+        "rows will be reused.",
+        yes=yes,
+    )
+    from app.operator_cli.local_fixture import seed_local_fixture
+
+    result = seed_local_fixture(email=email)
+    emit(
+        state,
+        {
+            "changed": any(
+                result[key]
+                for key in (
+                    "created_documents",
+                    "created_library_entries",
+                    "created_project_links",
+                )
+            ),
+            **result,
+        },
+        human=(
+            f"{email}: {result['documents']} PDFs in "
+            f"Project {result['project_title']} ({result['project_id']})"
+        ),
     )
 
 

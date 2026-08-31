@@ -77,6 +77,7 @@ export function AuthenticationPanel({
       asChild
       className={cn("mx-auto w-full max-w-[23.5rem]", className)}
       spacing="compact"
+      variant="transparent"
     >
       <section>
         <FramePanel className="grid gap-5" spacing="roomy">

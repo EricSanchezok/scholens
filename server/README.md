@@ -307,6 +307,12 @@ product profile and optional first administrator state through application
 services. Matching credentials remain unchanged so repeat runs do not revoke a
 working browser session.
 
+`dev seed-test-fixture` is the companion product fixture. Run it only after
+the product schema is at migration `head`; it uploads the committed CC BY 4.0
+evaluation PDFs to the isolated local-development S3 bucket and creates an
+idempotent Library/Project fixture for the selected synthetic account. It does
+not create or modify Identity users and is never invoked by `serve`.
+
 Paper search defaults to `PAPER_SEARCH_BACKEND=postgres_hybrid`. It combines
 compact exact/trigram matching, weighted PostgreSQL full text, and the pinned
 local multilingual embedding model at `SCHOLENS_EMBEDDING_MODEL_PATH`; no query
@@ -400,6 +406,12 @@ same `SCHOLENS_ALIYUN_DM_*` account configuration and `CLIENT_DOMAIN`. Keep
 provider credentials in the ignored `server/.env`; Jobs receives the same dev
 S3 settings through its own ignored `jobs/.env`. Production RDS, S3, and mail
 resources must never be used by local startup.
+
+The `scholens dev seed-test-fixture` command is stricter than ordinary local
+startup because it uploads deterministic PDFs: it requires `S3_BUCKET_NAME` to
+match the documented `scholens-dev-*` naming convention and requires
+`AWS_ENDPOINT_URL_S3` to be empty. It rejects the command before any upload
+when either storage guard fails.
 
 ## API Documentation
 
