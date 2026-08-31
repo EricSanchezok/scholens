@@ -324,16 +324,21 @@ Selection has three deliberately separate lifetimes:
   annotation thread.
 
 The text-selection toolbar is absent until a real non-collapsed PDF text
-selection exists. It measures its complete action, translation-preview, and
-palette surface against the intersection of the PDF viewport and the visual
-viewport. Placement applies an offset, flips above or below the selection when
-the preferred side cannot fit, then shifts and size-limits the result so it
-cannot cross a visible edge. It remains above the PDF page stack when it crosses
-a page gap and stays horizontally clamped to the rendered page. Resize, zoom,
-scroll, visual-viewport, streamed-preview, and palette-size changes all
-recompute the same position without a second placement path. Its actions and
-color palette always sit on an isolated, fully opaque elevated surface so
-document text cannot show through the controls. It
+selection exists. The fixed action bar is measured against the intersection of
+the PDF viewport and the visual viewport; the translation preview and palette
+are separate content below it and never participate in the anchor height. The
+initial placement prefers below the selection and falls back above only when
+the action bar cannot fit. That direction is locked for the selection's
+lifetime, so streamed text growth cannot move the toolbar or flip the preview
+to the other side. A new selection, zoom, resize, or visual-viewport size
+change starts a fresh placement decision; scrolling and side-space changes only
+recalculate the available clipping height while preserving the locked
+direction. When the selection leaves the visible intersection the floating
+surface is hidden, then restored when it returns, instead of searching for a
+new page position. Horizontal placement remains clamped to the rendered page
+and visual viewport. Its actions and color palette always sit on an isolated,
+fully opaque elevated surface so document text cannot show through the
+controls. It
 contains only the semantic icons for Ask, Translate, Highlight, Add annotation,
 and Copy;
 Ask uses `AskIcon` (`ChatBubbleQuestion`) while Add annotation uses
@@ -396,11 +401,16 @@ Selection, its Ranges, and all PDF.js text layers:
   normalized selection. When automatic selection translation is enabled, an
   unchanged selection waits 300 ms before starting. A replacement selection,
   page change, Escape, or component unmount aborts the stale request. Desktop
-  shows a compact teaser beside the toolbar; the teaser is line-clamped with an
-  ellipsis and is not a complete reading surface. Mobile opens the full-height
-  panel instead of covering the selected source. Completed translations are
-  only guaranteed complete in the Translate panel; they may be copied or
-  inserted as the editable initial comment of a new annotation.
+  shows a separate preview card below the fixed action bar. The card uses a
+  fluid `clamp(22.5rem, 26vw, 30rem)` width, grows downward, and limits the
+  preview body to `min(24rem, 40dvh)` before enabling contained internal
+  scrolling. Preview growth never re-runs placement. The card is a scrollable
+  summary with an independent button for the complete Translate panel; the
+  panel remains the only guaranteed complete reading, copy, and annotation
+  surface. At mobile widths the desktop preview is absent and the existing
+  full-height panel opens instead. Streaming deltas are buffered and committed
+  at most every 50 ms, while a stable status announcement reports only
+  translating, completed, or failed states.
 - Highlight first discloses the adjacent color palette, creates a thread with
   no comment, then clears the browser selection. In personal Reader its audience
   is personal. In Project Reader its audience defaults to personal but may be

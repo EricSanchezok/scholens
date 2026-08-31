@@ -14,6 +14,7 @@ import {
 } from "./api";
 
 export const AUTO_TRANSLATION_DELAY_MS = 300;
+export const TRANSLATION_DELTA_FLUSH_INTERVAL_MS = 50;
 
 export type SelectionTranslationState = {
   cacheHit: boolean;
@@ -62,6 +63,9 @@ export function useReaderTranslation({
     React.useState<SelectionTranslationState>(initialState);
   const abortRef = React.useRef<AbortController | undefined>(undefined);
   const requestIdRef = React.useRef(0);
+  const pendingDeltaRef = React.useRef("");
+  const deltaFrameRef = React.useRef<number | undefined>(undefined);
+  const deltaTimerRef = React.useRef<number | undefined>(undefined);
   const key = selectionKey(selection);
   const selectionRef = React.useRef(selection);
   selectionRef.current = selection;
@@ -75,12 +79,70 @@ export function useReaderTranslation({
   const inputKey = `${key ?? "none"}:${preferencesFingerprint}`;
   const previousInputKeyRef = React.useRef<string | undefined>(undefined);
 
+  const clearDeltaBuffer = React.useCallback(() => {
+    if (deltaFrameRef.current !== undefined) {
+      window.cancelAnimationFrame?.(deltaFrameRef.current);
+      deltaFrameRef.current = undefined;
+    }
+    if (deltaTimerRef.current !== undefined) {
+      window.clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = undefined;
+    }
+    pendingDeltaRef.current = "";
+  }, []);
+
+  const flushDeltaBuffer = React.useCallback((requestId: number) => {
+    if (requestIdRef.current !== requestId) return;
+    if (deltaFrameRef.current !== undefined) {
+      window.cancelAnimationFrame?.(deltaFrameRef.current);
+      deltaFrameRef.current = undefined;
+    }
+    if (deltaTimerRef.current !== undefined) {
+      window.clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = undefined;
+    }
+    const pendingText = pendingDeltaRef.current;
+    pendingDeltaRef.current = "";
+    if (!pendingText) return;
+    setState((current) =>
+      requestIdRef.current === requestId
+        ? { ...current, translatedText: current.translatedText + pendingText }
+        : current,
+    );
+  }, []);
+
+  const scheduleDeltaFlush = React.useCallback(
+    (requestId: number) => {
+      if (
+        deltaFrameRef.current === undefined &&
+        typeof window.requestAnimationFrame === "function"
+      ) {
+        deltaFrameRef.current = window.requestAnimationFrame(() => {
+          deltaFrameRef.current = undefined;
+          flushDeltaBuffer(requestId);
+        });
+      }
+      if (deltaTimerRef.current === undefined) {
+        deltaTimerRef.current = window.setTimeout(() => {
+          deltaTimerRef.current = undefined;
+          if (deltaFrameRef.current !== undefined) {
+            window.cancelAnimationFrame?.(deltaFrameRef.current);
+            deltaFrameRef.current = undefined;
+          }
+          flushDeltaBuffer(requestId);
+        }, TRANSLATION_DELTA_FLUSH_INTERVAL_MS);
+      }
+    },
+    [flushDeltaBuffer],
+  );
+
   const translate = React.useCallback(
     async (
       targetSelection: ReaderSelection,
       trigger: "auto" | "manual" = "manual",
     ) => {
       abortRef.current?.abort();
+      clearDeltaBuffer();
       const controller = new AbortController();
       abortRef.current = controller;
       const requestId = ++requestIdRef.current;
@@ -99,41 +161,43 @@ export function useReaderTranslation({
           signal: controller.signal,
           onEvent: (event) => {
             if (requestIdRef.current !== requestId) return;
-            setState((current) => {
-              if (event.type === "start") {
-                return {
-                  ...current,
-                  cacheHit: event.cacheHit,
-                  targetLanguage: event.targetLanguage,
-                };
-              }
-              if (event.type === "delta") {
-                return {
-                  ...current,
-                  translatedText: current.translatedText + event.text,
-                };
-              }
-              if (event.type === "complete") {
-                return {
-                  ...current,
-                  cacheHit: event.cacheHit,
-                  status: "completed",
-                };
-              }
-              return {
+            if (event.type === "start") {
+              setState((current) => ({
                 ...current,
-                errorCode: event.code,
-                errorMessage: event.message,
-                retryable: event.retryable,
-                status: "error",
-              };
-            });
+                cacheHit: event.cacheHit,
+                targetLanguage: event.targetLanguage,
+              }));
+              return;
+            }
+            if (event.type === "delta") {
+              pendingDeltaRef.current += event.text;
+              scheduleDeltaFlush(requestId);
+              return;
+            }
+            flushDeltaBuffer(requestId);
+            if (event.type === "complete") {
+              setState((current) => ({
+                ...current,
+                cacheHit: event.cacheHit,
+                status: "completed",
+              }));
+              return;
+            }
+            setState((current) => ({
+              ...current,
+              errorCode: event.code,
+              errorMessage: event.message,
+              retryable: event.retryable,
+              status: "error",
+            }));
           },
         });
       } catch (error) {
         if (controller.signal.aborted || requestIdRef.current !== requestId) {
+          if (requestIdRef.current === requestId) clearDeltaBuffer();
           return;
         }
+        flushDeltaBuffer(requestId);
         const edgeBlocked =
           error instanceof ApiError && error.status === 403 && !error.code;
         setState((current) => ({
@@ -149,11 +213,12 @@ export function useReaderTranslation({
         }));
       }
     },
-    [documentId],
+    [clearDeltaBuffer, documentId, flushDeltaBuffer, scheduleDeltaFlush],
   );
 
   React.useEffect(() => {
     abortRef.current?.abort();
+    clearDeltaBuffer();
     requestIdRef.current += 1;
     const currentSelection = selectionRef.current;
     const inputChanged = previousInputKeyRef.current !== inputKey;
@@ -179,14 +244,20 @@ export function useReaderTranslation({
       void translate(currentSelection, "auto");
     }, AUTO_TRANSLATION_DELAY_MS);
     return () => window.clearTimeout(timeout);
-  }, [inputKey, preferencesQuery.data?.auto_translate_selection, translate]);
+  }, [
+    clearDeltaBuffer,
+    inputKey,
+    preferencesQuery.data?.auto_translate_selection,
+    translate,
+  ]);
 
   React.useEffect(
     () => () => {
       abortRef.current?.abort();
+      clearDeltaBuffer();
       requestIdRef.current += 1;
     },
-    [],
+    [clearDeltaBuffer],
   );
 
   const effectivePreferences: TranslationPreferences | undefined =

@@ -362,6 +362,34 @@ async function mockReader(page: Page) {
       }),
   );
   await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/selection-translations`,
+    async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = route.request().postDataJSON() as { text: string };
+      const prefix = body.text.slice(0, 24) || "selected text";
+      await route.fulfill({
+        contentType: "text/event-stream",
+        headers: { "Cache-Control": "no-cache" },
+        body: [
+          `event: start\ndata: ${JSON.stringify({
+            cache_hit: false,
+            target_language: "zh-CN",
+          })}\n\n`,
+          `event: delta\ndata: ${JSON.stringify({ text: `译文：${prefix}。` })}\n\n`,
+          `event: delta\ndata: ${JSON.stringify({
+            text: "这是一段较长的增量内容，用来验证预览正文只向下增长并在达到上限后保持内部滚动。".repeat(
+              8,
+            ),
+          })}\n\n`,
+          `event: complete\ndata: ${JSON.stringify({ cache_hit: false })}\n\n`,
+        ].join(""),
+      });
+    },
+  );
+  await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
     async (route) => {
       if (route.request().method() === "POST") {
@@ -1088,6 +1116,97 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await expect(page).toHaveTitle("Scholens");
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("keeps the desktop selection translation anchored while SSE content grows", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockReaderReflow(page);
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+
+  await selectPdfPassage(page, 2);
+  const floating = page.locator("[data-reader-selection-floating]");
+  const preview = page.locator("[data-reader-selection-translation-preview]");
+  const previewText = page.locator("[data-reader-selection-translation-text]");
+  await expect(preview).toBeVisible({ timeout: 8_000 });
+  await expect(previewText).toContainText("译文：");
+
+  const initial = await floating.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      placement: element.getAttribute("data-reader-selection-placement"),
+      top: rect.top,
+    };
+  });
+  const pdfScrollBefore = await pdfScrollTop(page, 2);
+  const documentScrollBefore = await page.evaluate(() => ({
+    body: document.body.scrollTop,
+    root: document.documentElement.scrollTop,
+  }));
+
+  await expect(previewText).toContainText("内部滚动");
+  const after = await floating.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      placement: element.getAttribute("data-reader-selection-placement"),
+      top: rect.top,
+    };
+  });
+  expect(after.placement).toBe(initial.placement);
+  expect(Math.abs(after.top - initial.top)).toBeLessThanOrEqual(2);
+  expect(await pdfScrollTop(page, 2)).toBe(pdfScrollBefore);
+  expect(
+    await page.evaluate(() => ({
+      body: document.body.scrollTop,
+      root: document.documentElement.scrollTop,
+    })),
+  ).toEqual(documentScrollBefore);
+
+  const previewMetrics = await preview.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      bodyOverflow: getComputedStyle(
+        element.querySelector("[data-reader-selection-translation-text]")!,
+      ).overflowY,
+      pageOverflow:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
+      width: rect.width,
+    };
+  });
+  expect(previewMetrics.width).toBeGreaterThanOrEqual(360);
+  expect(previewMetrics.width).toBeLessThanOrEqual(480);
+  expect(previewMetrics.bodyOverflow).toBe("auto");
+  expect(previewMetrics.pageOverflow).toBe(false);
+});
+
+test("uses the fluid preview width on an ultra-wide Reader viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 2560, height: 1440 });
+  await mockReaderReflow(page);
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await selectPdfPassage(page, 2);
+
+  const preview = page.locator("[data-reader-selection-translation-preview]");
+  await expect(preview).toBeVisible({ timeout: 8_000 });
+  const metrics = await preview.evaluate((element) => ({
+    pageOverflow:
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth,
+    width: element.getBoundingClientRect().width,
+  }));
+  expect(metrics.width).toBeGreaterThanOrEqual(360);
+  expect(metrics.width).toBeLessThanOrEqual(480);
+  expect(metrics.pageOverflow).toBe(false);
 });
 
 test("creates a persistent document highlight with the full color palette", async ({
@@ -1890,6 +2009,28 @@ test("uses an immersive mobile Reader without the Workspace bottom navigation", 
   await page.getByRole("button", { name: "Search PDF" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Search PDF" })).toBeVisible();
+});
+
+test("uses the full translation panel instead of a desktop preview on narrow Reader", async ({
+  page,
+}) => {
+  await mockReaderReflow(page);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+    await expect(
+      page.locator('[data-pdf-page-number="2"] > canvas'),
+    ).toBeVisible();
+    await selectPdfPassage(page, 2);
+    await expect(
+      page.locator("[data-reader-selection-translation-preview]"),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Translate selection" }).click();
+    await expect(page).toHaveURL(/panel=translation/);
+    await expect(
+      page.getByText("Selected text", { exact: true }),
+    ).toBeVisible();
+  }
 });
 
 test("keeps full translation in the toolbar and renders traceable bilingual reflow", async ({

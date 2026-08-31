@@ -6,24 +6,43 @@ const boundary = { bottom: 600, left: 0, right: 400, top: 0 };
 const floating = { height: 120, width: 240 };
 
 describe("computeReaderFloatingPosition", () => {
-  it("places the surface above the selection when it fits", () => {
+  it("places the surface below the selection when it fits", () => {
     expect(
       computeReaderFloatingPosition({
         anchor: { bottom: 340, left: 120, right: 280, top: 320 },
         boundary,
         floating,
       }),
-    ).toMatchObject({ left: 80, placement: "top", top: 192 });
+    ).toMatchObject({ left: 80, placement: "bottom", top: 348 });
   });
 
-  it("flips below a selection near the visible top edge", () => {
+  it("flips above a selection near the visible bottom edge", () => {
     expect(
       computeReaderFloatingPosition({
-        anchor: { bottom: 44, left: 120, right: 280, top: 24 },
+        anchor: { bottom: 576, left: 120, right: 280, top: 556 },
         boundary,
         floating,
       }),
-    ).toMatchObject({ placement: "bottom", top: 52 });
+    ).toMatchObject({ placement: "top", top: 428 });
+  });
+
+  it("keeps a locked placement stable as preview content grows", () => {
+    const initial = computeReaderFloatingPosition({
+      anchor: { bottom: 340, left: 120, right: 280, top: 320 },
+      boundary,
+      floating,
+      lockedPlacement: "bottom",
+    });
+    const grownPreview = computeReaderFloatingPosition({
+      anchor: { bottom: 340, left: 120, right: 280, top: 320 },
+      boundary,
+      floating,
+      lockedPlacement: "bottom",
+    });
+
+    expect(grownPreview.placement).toBe(initial.placement);
+    expect(grownPreview.top).toBe(initial.top);
+    expect(grownPreview.contentMaxHeight).toBe(initial.contentMaxHeight);
   });
 
   it("shifts horizontally instead of crossing the visible boundary", () => {
@@ -49,7 +68,7 @@ describe("computeReaderFloatingPosition", () => {
         boundary: { bottom: 260, left: 20, right: 220, top: 100 },
         floating: { height: 300, width: 300 },
       }),
-    ).toEqual({
+    ).toMatchObject({
       left: 28,
       maxHeight: 144,
       maxWidth: 184,

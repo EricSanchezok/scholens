@@ -24,6 +24,7 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import { AnimatePresence, m, motionVariants } from "@/design-system/motion";
 import { cn } from "@/lib/utilities/cn";
+import { useReaderMediaQuery } from "../hooks/use-reader-layout";
 import {
   readerHighlightColors,
   type ReaderHighlightColor,
@@ -122,6 +123,7 @@ export function ReaderSelectionToolbar({
   translationPreview?: ReaderSelectionTranslationPreview;
 }) {
   const translationError = useTranslations("Reader.translation");
+  const showTranslationPreview = useReaderMediaQuery("(min-width: 64rem)");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [audience, setAudience] =
     React.useState<ReaderAnnotationAudience>("personal");
@@ -150,9 +152,17 @@ export function ReaderSelectionToolbar({
     }),
     { left: 1, right: 0, top: 1, bottom: 0 },
   );
-  const { floatingRef, position } = useReaderFloatingPosition({
+  const placementKey = JSON.stringify({
+    anchor: selection.anchor,
+    documentId: selection.document_id,
+    pageNumber: selection.page_number,
+    selectedText: selection.selected_text,
+  });
+  const { floatingRef, measureRef, position } = useReaderFloatingPosition({
     boundaryRef,
     bounds,
+    placementKey,
+    preferredPlacement: "bottom",
   });
 
   async function copySelection() {
@@ -171,7 +181,7 @@ export function ReaderSelectionToolbar({
     <TooltipProvider delayDuration={350}>
       <m.div
         animate="animate"
-        className="pointer-events-auto absolute isolate z-40 flex flex-col items-center gap-1 overflow-y-auto overscroll-contain"
+        className="pointer-events-auto absolute isolate z-40 flex min-w-0 flex-col items-center gap-1"
         data-reader-selection-floating
         data-reader-selection-placement={position?.placement}
         initial="initial"
@@ -193,6 +203,7 @@ export function ReaderSelectionToolbar({
         <div
           className={cn(floatingSurfaceClass, "gap-0.5 p-1")}
           data-reader-selection-toolbar-surface="actions"
+          ref={measureRef}
           style={{ backgroundColor: "var(--color-bg-elevated)" }}
         >
           <ToolbarAction label={labels.ask} onClick={onAsk}>
@@ -222,31 +233,53 @@ export function ReaderSelectionToolbar({
           </span>
         </div>
         <AnimatePresence initial={false}>
-          {translationPreview ? (
-            <m.button
+          {translationPreview && showTranslationPreview ? (
+            <m.div
               animate="animate"
+              aria-busy={translationPreview.status === "streaming"}
               aria-label={labels.viewTranslation}
-              className={cn(
-                "border-line bg-elevated shadow-raised hidden w-80 max-w-[min(20rem,80vw)] rounded-[var(--radius-lg)] border p-3 text-left lg:block",
-                focusSurfaceVariants({ intent: "neutral" }),
-              )}
+              className="border-line bg-elevated shadow-raised hidden w-[clamp(22.5rem,26vw,30rem)] max-w-full min-w-0 overflow-hidden rounded-[var(--radius-lg)] border p-3 text-left lg:block"
               data-reader-selection-translation-preview
               exit="exit"
               initial="initial"
-              onClick={onOpenTranslation}
-              type="button"
+              role="group"
+              style={{ maxWidth: position?.maxWidth }}
               variants={motionVariants.swap}
             >
-              <span className="text-muted block text-xs font-medium">
-                {translationPreview.status === "streaming"
-                  ? labels.translating
-                  : translationPreview.status === "error"
-                    ? labels.translationFailed
-                    : labels.viewTranslation}
-              </span>
-              <span
-                className="mt-1 line-clamp-4 block text-sm leading-6"
+              <div className="flex items-center justify-between gap-3">
+                <span
+                  className="text-muted block text-xs font-medium"
+                  data-reader-selection-translation-status
+                >
+                  {translationPreview.status === "streaming"
+                    ? labels.translating
+                    : translationPreview.status === "error"
+                      ? labels.translationFailed
+                      : labels.viewTranslation}
+                </span>
+                <IconButton
+                  className="size-7 min-h-7 rounded-full"
+                  label={labels.viewTranslation}
+                  onClick={onOpenTranslation}
+                  variant="ghost"
+                >
+                  <Icon glyph={TranslationIcon} size={16} />
+                </IconButton>
+              </div>
+              <div
+                aria-label={labels.viewTranslation}
+                className={cn(
+                  "mt-2 block max-h-[min(24rem,40dvh)] min-w-0 overflow-y-auto overscroll-contain text-sm leading-6 [overflow-wrap:anywhere]",
+                  focusSurfaceVariants({ intent: "scroll" }),
+                )}
                 data-reader-selection-translation-text
+                role="region"
+                style={{
+                  maxHeight: position
+                    ? `min(24rem, 40dvh, max(0px, calc(${Math.max(0, position.contentMaxHeight)}px - 4rem)))`
+                    : undefined,
+                }}
+                tabIndex={0}
               >
                 {translationPreview.text ||
                   (translationPreview.status === "error"
@@ -256,8 +289,20 @@ export function ReaderSelectionToolbar({
                         ),
                       )
                     : labels.translating)}
+              </div>
+              <span
+                aria-atomic="true"
+                aria-live="polite"
+                className="sr-only"
+                role="status"
+              >
+                {translationPreview.status === "streaming"
+                  ? labels.translating
+                  : translationPreview.status === "error"
+                    ? labels.translationFailed
+                    : labels.viewTranslation}
               </span>
-            </m.button>
+            </m.div>
           ) : null}
           {paletteOpen ? (
             <m.div
