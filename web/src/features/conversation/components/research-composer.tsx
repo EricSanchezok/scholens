@@ -849,7 +849,7 @@ export function ResearchComposer({
             <IconButton
               aria-busy={!stopAvailable || undefined}
               aria-disabled={!stopAvailable || undefined}
-              className="size-9 min-h-9 rounded-full"
+              className="ms-auto size-9 min-h-9 rounded-full"
               label={t(stopAvailable ? "composer.stop" : "composer.pending")}
               onClick={stopAvailable ? onStop : undefined}
               type="button"
@@ -865,7 +865,7 @@ export function ResearchComposer({
             </IconButton>
           ) : (
             <IconButton
-              className="size-9 min-h-9 rounded-full"
+              className="ms-auto size-9 min-h-9 rounded-full"
               disabled={!composerForm.formState.isValid || busy || unavailable}
               label={t("composer.submit")}
               type="submit"

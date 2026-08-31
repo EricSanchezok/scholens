@@ -290,6 +290,12 @@ export const ContextPanelMobileVisualWrapExpansion: Story = {
     await waitFor(() =>
       expect(composer).toHaveAttribute("data-expanded", "true"),
     );
+    const submit = canvas.getByRole("button", { name: "Ask Scholens" });
+    const submitBounds = submit.getBoundingClientRect();
+    const expandedComposerBounds = composer.getBoundingClientRect();
+    await expect(
+      Math.round(expandedComposerBounds.right - submitBounds.right),
+    ).toBeLessThanOrEqual(10);
     await expect(
       Number.parseFloat(getComputedStyle(composer).borderRadius),
     ).toBeCloseTo(24, 0);
