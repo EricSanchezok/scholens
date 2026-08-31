@@ -201,13 +201,12 @@ _EVENT_STREAM_HEADERS = {
 
 def _event_stream_response(
     events: AsyncIterator[str],
-    *,
-    media_type: str = "text/event-stream",
 ) -> ConversationEventStreamResponse:
+    # Candidate events are selected through Accept, but the wire format must
+    # remain standard SSE so browser-facing proxies recognize and flush it.
     return ConversationEventStreamResponse(
         events,
         headers=_EVENT_STREAM_HEADERS,
-        media_type=media_type,
     )
 
 
@@ -270,14 +269,7 @@ async def _accepted_response(
                 else frame
             )
 
-    return _event_stream_response(
-        events(),
-        media_type=(
-            _CANDIDATE_EVENT_STREAM_MEDIA_TYPE
-            if candidate_stream
-            else "text/event-stream"
-        ),
-    )
+    return _event_stream_response(events())
 
 
 def _conversation_operation(
