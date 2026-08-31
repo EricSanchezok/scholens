@@ -149,12 +149,19 @@ export const EdgeBlockedTranslation: Story = {
     },
   },
   play: async ({ canvasElement }) => {
-    const header = within(canvasElement).getByText("Translation failed");
+    const preview = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-preview]",
+    );
+    const header = preview?.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-status]",
+    );
     const body = canvasElement.querySelector<HTMLElement>(
       "[data-reader-selection-translation-text]",
     );
+    await expect(preview).not.toBeNull();
+    await expect(header).not.toBeNull();
     await expect(body).not.toBeNull();
-    await expect(body!.textContent).not.toBe(header.textContent);
+    await expect(body!.textContent).not.toBe(header!.textContent);
     await expect(body!.textContent).toContain("network edge");
   },
 };
@@ -163,7 +170,9 @@ export const LongCompletedTranslationTeaser: Story = {
   args: {
     translationPreview: {
       status: "completed",
-      text: "检索质量取决于排序和上下文构建。完整的翻译结果只保证出现在右侧翻译面板中，桌面预览是一个可滚动摘要。检索质量取决于排序和上下文构建。",
+      text: "检索质量取决于排序和上下文构建。完整的翻译结果只保证出现在右侧翻译面板中，桌面预览是一个可滚动摘要。检索质量取决于排序和上下文构建。".repeat(
+        6,
+      ),
     },
   },
   play: async ({ canvasElement }) => {

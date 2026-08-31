@@ -247,7 +247,10 @@ export function ReaderSelectionToolbar({
               variants={motionVariants.swap}
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted block text-xs font-medium">
+                <span
+                  className="text-muted block text-xs font-medium"
+                  data-reader-selection-translation-status
+                >
                   {translationPreview.status === "streaming"
                     ? labels.translating
                     : translationPreview.status === "error"
