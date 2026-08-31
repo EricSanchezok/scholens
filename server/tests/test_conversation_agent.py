@@ -36,8 +36,11 @@ from app.modules.conversations.application.contracts.trace import (
     ConversationTrace,
 )
 from app.modules.conversations.application.contracts.answer_packet import (
+    AnswerCoverage,
+    AnswerPacket,
     ReferenceBundle,
 )
+from app.llm.grounded_answer import GroundedAnswerMetrics
 from app.modules.integrations.connectors.infrastructure.mcp import (
     ConnectorToolIssue,
     ResolvedConnectorToolSet,
@@ -104,6 +107,38 @@ def _grounded_final_answer(
 
 def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
     raise AssertionError("the runtime must use ToolDispatcher")
+
+
+def test_rejected_only_sources_are_reported_as_unavailable() -> None:
+    packet = AnswerPacket(
+        context={},
+        materials=[],
+        actions=[],
+        sources=[],
+        coverage=AnswerCoverage(
+            observations_total=1,
+            observations_processed=1,
+            truncated_observations=0,
+            truncated_materials=0,
+            truncated_sources=0,
+            truncated_actions=0,
+            rejected_sources=1,
+            failed_observations=0,
+        ),
+    )
+    summary = ScholensConversationAgent._citation_summary(
+        packet=packet,
+        references=None,
+        metrics=GroundedAnswerMetrics(
+            annotations_emitted=0,
+            invalid_source_keys=0,
+            protocol_errors=0,
+        ),
+    )
+
+    assert summary.status == "unavailable"
+    assert summary.source_count == 0
+    assert summary.rejected_source_count == 1
 
 
 def _catalog(*, allow_repeated_calls: bool = False) -> ToolCatalog[Any]:

@@ -1806,7 +1806,7 @@ Initial server-validated answer material:
         if not available_sources:
             status: Literal[
                 "not_required", "complete", "partial", "unavailable", "pending"
-            ] = "not_required"
+            ] = "unavailable" if packet.coverage.rejected_sources else "not_required"
         elif used_sources == 0:
             status = "unavailable"
         elif (

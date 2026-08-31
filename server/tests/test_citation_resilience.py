@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from uuid import uuid4
 
+import pytest
 from app.llm.citation_adapters import (
     AnthropicCitationAdapter,
     BedrockCitationAdapter,
@@ -281,6 +282,48 @@ def test_provider_adapters_drop_unknown_sources_without_failing() -> None:
         registry,
     )
     assert bedrock == ()
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [(-1, 8), (0, 0), (8, 0), (0, 9), (True, 8)],
+)
+def test_provider_adapters_reject_invalid_generated_text_spans(
+    start: object,
+    end: object,
+) -> None:
+    source = _source(reference="Evidence")
+    registry = SourceRegistry.from_admitted_sources([source])
+
+    openai = OpenAICitationAdapter().normalize(
+        {
+            "output_text_annotations": [
+                {
+                    "start_index": start,
+                    "end_index": end,
+                    "file_citation": {"file_id": str(source.document_id)},
+                }
+            ]
+        },
+        registry,
+        generated_text="Evidence",
+    )
+    google = GoogleCitationAdapter().normalize(
+        {
+            "groundingSupports": [
+                {
+                    "segment": {"startIndex": start, "endIndex": end},
+                    "groundingChunkIndices": [0],
+                }
+            ],
+            "groundingChunks": [{"web": {"uri": source.reference}}],
+        },
+        registry,
+        generated_text="Evidence",
+    )
+
+    assert openai == ()
+    assert google == ()
 
 
 def test_provider_adapters_map_native_identifiers_to_admitted_keys() -> None:

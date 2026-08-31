@@ -60,6 +60,21 @@ def _source_key(registry: SourceRegistry, identifier: object) -> int | None:
     return None
 
 
+def _generated_span(value: str, start: object, end: object) -> str | None:
+    """Return only a non-empty, in-bounds provider-generated text span."""
+    if (
+        not isinstance(start, int)
+        or isinstance(start, bool)
+        or not isinstance(end, int)
+        or isinstance(end, bool)
+        or start < 0
+        or end <= start
+        or end > len(value)
+    ):
+        return None
+    return value[start:end]
+
+
 def _attribution(
     quote: object,
     identifiers: Sequence[object],
@@ -153,9 +168,9 @@ class OpenAICitationAdapter:
             if not data:
                 continue
             start, end = data.get("start_index"), data.get("end_index")
-            if not isinstance(start, int) or not isinstance(end, int):
+            quote = _generated_span(generated_text, start, end)
+            if quote is None:
                 continue
-            quote = generated_text[start:end]
             citation = _mapping(data.get("file_citation")) or _mapping(
                 data.get("url_citation")
             )
@@ -191,7 +206,8 @@ class GoogleCitationAdapter:
             if not segment or not isinstance(indices, Sequence):
                 continue
             start, end = segment.get("startIndex", 0), segment.get("endIndex", 0)
-            if not isinstance(start, int) or not isinstance(end, int):
+            quote = _generated_span(generated_text, start, end)
+            if quote is None:
                 continue
             identifiers: list[object] = []
             for index in indices:
@@ -199,9 +215,7 @@ class GoogleCitationAdapter:
                     chunk = _mapping(chunks[index])
                     web = _mapping(chunk.get("web")) if chunk else None
                     identifiers.append(web.get("uri") if web else None)
-            normalized = _attribution(
-                generated_text[start:end], identifiers, source_registry
-            )
+            normalized = _attribution(quote, identifiers, source_registry)
             if normalized is not None:
                 result.append(normalized)
         return tuple(result[:32])
