@@ -11,7 +11,7 @@ import {
   projectPaperFixtures,
 } from "../../src/features/projects/api/fixtures";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 const paperDocument = libraryPapers[0]!.document;
 const readerProject = {
   ...projectFixtures[0]!,
@@ -2018,6 +2018,7 @@ test("uses the full translation panel instead of a desktop preview on narrow Rea
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(
       page.locator('[data-pdf-page-number="2"] > canvas'),
     ).toBeVisible();

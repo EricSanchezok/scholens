@@ -1,6 +1,6 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 
 test.use({ ...devices["Pixel 7"] });
 

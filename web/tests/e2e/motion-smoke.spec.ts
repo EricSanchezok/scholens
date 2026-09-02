@@ -8,7 +8,7 @@ import {
 } from "../../src/features/home/api/fixtures";
 import { mockBillingUsage } from "./billing-fixture";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 const readerDocument = homePapers[0]!.document;
 const actor = {
   id: 7,

@@ -11,7 +11,7 @@ import {
 import { mockBillingUsage } from "./billing-fixture";
 import { focusThroughTab } from "./focus";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 const avatarUrl =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23272b35'/%3E%3Ccircle cx='32' cy='25' r='13' fill='%23d9b08c'/%3E%3Cpath d='M10 64c2-17 10-25 22-25s20 8 22 25' fill='%2386a8e7'/%3E%3C/svg%3E";
 type ConversationTurn = (typeof homeTurns)[number];
@@ -394,7 +394,7 @@ test("lets the Server generate the initial conversation title", async ({
   const creation = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
-      /\/api\/v1\/conversations\/[^/]+\/start$/.test(
+      /\/api\/v2\/conversations\/[^/]+\/start$/.test(
         new URL(request.url()).pathname,
       ),
   );
@@ -513,14 +513,14 @@ test("shows streamed answer text before the response completes", async ({
   await page.route(`${apiPattern}/conversations**`, async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
-    if (pathname.endsWith("/events/candidates")) {
+    if (pathname.endsWith("/events")) {
       await route.continue({
         url: request.url().replace("http://127.0.0.1:7301", testApiUrl),
       });
       return;
     }
     if (
-      pathname === `/api/v1/conversations/${conversation.id}/turns` &&
+      pathname === `/api/v2/conversations/${conversation.id}/turns` &&
       request.method() === "POST"
     ) {
       submitted = request.postDataJSON() as typeof submitted;
@@ -767,7 +767,7 @@ test("keeps an IME candidate-confirmation Enter in the Composer", async ({
   page.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      /\/api\/v1\/conversations\/[^/]+\/start$/.test(
+      /\/api\/v2\/conversations\/[^/]+\/start$/.test(
         new URL(request.url()).pathname,
       )
     ) {

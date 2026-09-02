@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 import { mockBillingUsage } from "./billing-fixture";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 const actor = {
   id: 7,
   email: "eric@scholens.ai",
