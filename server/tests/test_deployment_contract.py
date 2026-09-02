@@ -2423,6 +2423,7 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
     assert resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"] == [
         "^/mcp$",
         "^/api/v1/conversations(?:/.*)?$",
+        "^/api/v2/conversations(?:/.*)?$",
         "^/api/v1/paper-ingestions(?:/.*)?$",
     ]
     assert resources["ContentFreeTextPathSet"]["Properties"][
@@ -2507,6 +2508,21 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         for method in ("post", "put", "patch"):
             if method in methods and "requestBody" in methods[method]:
                 body_paths.append((method.upper(), path))
+    # The generated public-v1 snapshot intentionally excludes the versioned
+    # conversation transport. Keep its body-bearing writes in this
+    # dependency-free WAF classification lane until a v2 snapshot is added.
+    body_paths.extend(
+        (
+            "POST",
+            path,
+        )
+        for path in (
+            "/api/v2/conversations/{conversation_id}/start",
+            "/api/v2/conversations/{conversation_id}/turns",
+            "/api/v2/conversations/{conversation_id}/turns/{turn_id}/responses",
+            "/api/v2/conversations/{conversation_id}/turns/{turn_id}/branches",
+        )
+    )
 
     compiled = [re.compile(pattern) for pattern in exempt_patterns]
 

@@ -76,6 +76,7 @@ change what the accepted record decided.
 - [ADR 0042: Versioned migration for bounded MCP reads](./0042-versioned-mcp-bounded-read-migration.md)
 - [ADR 0043: Citation availability is separate from answer availability](./0043-citation-availability-first.md)
 - [ADR 0044: Plain-text terminal boundary for conversation harness](./0044-text-terminal-conversation-harness.md)
+- [ADR 0045: Conversation stream v2 and confirmed playback](./0045-conversation-stream-v2-confirmed-playback.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

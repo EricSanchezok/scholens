@@ -126,6 +126,20 @@ describe("Home live conversation state", () => {
     expect(reduceLiveTurn(turn, readyEvent())?.phase).toBe("ready");
   });
 
+  it("maps v2 phase heartbeats to stable product phases", () => {
+    let turn = createLiveTurn(turnId, responseId, "Question");
+    turn = reduceLiveTurn(
+      turn,
+      event({ type: "phase", phase: "tool", elapsed_ms: 1_200 }),
+    )!;
+    expect(turn.phase).toBe("working");
+    turn = reduceLiveTurn(
+      turn,
+      event({ type: "phase", phase: "synthesizing", elapsed_ms: 2_000 }),
+    )!;
+    expect(turn.phase).toBe("answering");
+  });
+
   it("reconciles a detached stream from the canonical persisted response", () => {
     const turn = readyEvent().turn;
 

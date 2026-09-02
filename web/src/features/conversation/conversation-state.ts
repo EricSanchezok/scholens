@@ -239,6 +239,34 @@ export function reduceLiveTurn(
     };
   }
   if (event.response_id !== current.responseId) return current;
+  if (event.type === "phase") {
+    if (
+      current.phase === "ready" ||
+      current.phase === "cancelled" ||
+      current.phase === "error"
+    ) {
+      return current;
+    }
+    const phase = {
+      queued: "queued",
+      thinking: "working",
+      tool: "working",
+      synthesizing: "answering",
+      finalizing: "finalizing",
+      completed: "ready",
+      failed: "error",
+      canceled: "cancelled",
+    }[event.phase] as ConversationPhase;
+    return {
+      ...current,
+      phase,
+      connectionState: "connected",
+      durationMs:
+        phase === "ready" || phase === "error" || phase === "cancelled"
+          ? Math.max(0, Date.now() - current.startedAtMs)
+          : current.durationMs,
+    };
+  }
   if (event.type === "suggestions") {
     if (event.turn_id !== current.turnId || current.phase !== "ready") {
       return current;

@@ -395,6 +395,24 @@
     ],
     "/api/v1/shares/{share_token}/collect": [
       "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/start": [
+      "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/turns": [
+      "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/turns/{turn_id}/branches": [
+      "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/turns/{turn_id}/responses": [
+      "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/cancel": [
+      "post"
+    ],
+    "/api/v2/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events": [
+      "get"
     ]
   }
 }

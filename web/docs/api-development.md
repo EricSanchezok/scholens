@@ -10,12 +10,20 @@ FastAPI app.openapi()
   -> server/openapi/public-v1.json
   -> openapi-typescript
   -> src/lib/api/generated/schema.d.ts
+FastAPI app.openapi()
+  -> filter /api/v2 conversation routes
+  -> server/openapi/public-v2.json
+  -> openapi-typescript
+  -> src/lib/api/generated/conversation-v2.d.ts
   -> openapi-fetch transport
   -> feature query options and mutations
 ```
 
 `server/openapi/v1-contract.json` remains a route/method architecture audit. It
 does not replace the full public schema used by the frontend.
+The v2 conversation transport has its own committed
+`server/openapi/public-v2.json` snapshot so its envelope is generated into the
+feature's dedicated type file rather than hand-written in the Web slice.
 
 ## Coordinated backend change
 
@@ -59,6 +67,13 @@ requires a running backend.
 Do not create feature-specific Axios/fetch clients, retry interceptors, or auth
 refresh loops. Add cross-cutting transport behavior once at this boundary and
 test it independently.
+
+Conversation streaming is the versioned exception: the Web conversation slice
+uses `/api/v2/conversations/...` and its generated v2 public contract snapshot.
+It keeps the same low-level
+`authenticatedFetch` transport, SSE headers, credentials, abort semantics, and
+`Last-Event-ID` cursor as v1. The v2 envelope is normalized only at the feature
+boundary; no second API client or runtime protocol probe is introduced.
 
 ## Feature API layer
 
@@ -105,8 +120,8 @@ removed or narrowed in place. An incompatible replacement uses another major
 API boundary and keeps v1 as a Server transport adapter to the canonical
 application use case for its support lifetime.
 
-Web consumes exactly one generated contract. Do not add DTO-shape detection,
-dual query implementations, legacy field fallbacks, or a second handwritten
-wire model. Deprecation and removal follow
+Web consumes one generated contract per versioned HTTP boundary. Do not add
+DTO-shape detection, dual query implementations, legacy field fallbacks, or a
+second handwritten wire model. Deprecation and removal follow
 [`docs/architecture/contract-evolution.md`](../../docs/architecture/contract-evolution.md),
 including the 90-day minimum and 30 consecutive zero-traffic days.

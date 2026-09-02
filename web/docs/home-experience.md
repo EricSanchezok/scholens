@@ -115,51 +115,45 @@ research-insight, and actor contracts. It does not import from `client/` and
 does not define duplicate wire DTOs.
 
 Conversation continuation uses the direct durable SSE response, and a first
-prompt uses `POST /api/v1/conversations/{id}/start` to atomically create the
+prompt uses `POST /api/v2/conversations/{id}/start` to atomically create the
 client-identified Conversation, Turn, Response, job, and outbox dispatch. HTTP
 acceptance therefore makes generation durable and enables Stop without a
 separately committed empty Conversation or a second subscription round trip.
 The optimistic transcript and Composer clear happen immediately on local
 submission and are rolled back exactly if acceptance fails. Explicit
-`Prefer: respond-async` remains the compatible detachable `202` mode for other
-clients. If the direct subscription drops, the Web app follows the response
-event endpoint with `Last-Event-ID`; both paths use one standard SSE decoder.
-The stream accepts `start`, the stable-ID
-`assistant_item_start → delta → complete`
-lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
-`complete`, `cancelled`, and `error`. The Server buffers model text until the
-complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`; ordinary text with no tool call is terminal. Direct
-requests opt into candidates by advertising
-`application/vnd.scholens.conversation-events` in `Accept`, and the additive
-`/events/candidates` resume subscription returns sanitized terminal text through
-`assistant_candidate_start`, `assistant_candidate_delta`, and
-`assistant_candidate_reset`. Candidate projection no longer depends on a
-model-visible finalization tool or JSON envelope. A bounded suffix and all
-private citation markers stay server-side. Clients
-do not fall back to the original `/events` route: an incompatible deployment is
-surfaced and retried instead of silently changing an active answer's event
-contract. All runtime responses retain the standard `text/event-stream`
-Content-Type so browser-facing proxies flush candidate events as SSE. A `final`
-item completes after ordinary text and citation sanitization.
-`response_ready` supplies the complete persisted turn
-snapshot, and an optional `suggestions` event may supplement it before
-`complete` closes the stream. The client never infers phase from prose. A
-sanitized answer candidate renders only in the main answer lane while it is
-streaming; it is replaced by the canonical published item on completion.
-Candidate text never becomes a Worklog row,
-enables answer actions, or enters persistence. Progress and activity share one
-sequence and become an ordered worklog. The final answer remains outside that
-trace and is always visible.
+`Prefer: respond-async` remains the detachable `202` mode. v2 uses one unified
+SSE stream with a versioned envelope (`protocol_version`, `seq`,
+`emitted_at`, and stable part IDs/versions); phase, activity, progress,
+candidate, references, final-answer, and terminal events all share the same
+`Last-Event-ID` replay cursor. The browser normalizes the event log before
+publishing to React, ignores duplicate or stale versions, and keeps canonical
+state separate from the visible confirmed-playback projection. Candidate text
+is provisional and resettable; `response.ready` promotes the selected part in
+place and unlocks actions without waiting for visual playback or sidecars. The
+runtime buffers model text until the complete node establishes its role:
+ordinary text with no tool call is terminal, while tool-adjacent text is bounded
+progress. The v1 adapter retains its explicit vendor Accept negotiation and
+`/events/candidates` resume route during the rolling deployment window; v2
+remains the active unified stream and never silently downgrades its contract.
+The stream's legacy event names (`start`, `assistant_item_start → delta →
+complete`, `activity`, `references`, `response_ready`, `suggestions`,
+`cancelled`, and `error`) are normalized by the decoder for compatibility.
+Candidate projection no longer depends on a model-visible finalization tool or
+JSON envelope. A bounded suffix and all private citation markers stay
+server-side. A sanitized answer candidate renders only in the main answer lane
+while it is streaming; it is replaced by the canonical published item on
+completion. Candidate text never becomes a Worklog row, enables answer actions,
+or enters persistence. Progress and activity share one sequence and become an
+ordered worklog. The final answer remains outside that trace and is always
+visible.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
-tool name. Adjacent tool entries with the same outcome are rendered as one
-category-count batch; outcome changes and progress text separate batches. Model
-reasoning, provider heartbeats, raw tool names, arguments, and return payloads
-are not product UI. Only final items may
-publish references. `response_ready` releases the Composer and completed-answer
+tool name. Every real invocation remains a separate Worklog row so long tool
+runs never look idle. Model reasoning, provider heartbeats, raw tool names,
+arguments, and return payloads are not product UI. Only final items may
+publish references. `response.ready` releases the Composer and completed-answer
 actions without waiting for a GET refetch, conversation title, or suggestion
-sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
+sidecar. `turn.completed`, `turn.canceled`, and `turn.failed` are terminal. A dropped
 subscription reconnects with bounded backoff and event-ID deduplication; it
 never creates a second Turn or retries model generation. Unmounting or changing
 routes aborts only the local subscription. Moving to another conversation also

@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any, cast
 
 PUBLIC_PREFIX = "/api/v1"
+PUBLIC_V2_PREFIX = "/api/v2"
 SERVER_ROOT = Path(__file__).resolve().parents[3]
 OUTPUT = SERVER_ROOT / "openapi" / "public-v1.json"
+V2_OUTPUT = SERVER_ROOT / "openapi" / "public-v2.json"
 SURFACE_OUTPUT = SERVER_ROOT / "openapi" / "v1-contract.json"
 
 _AUTH_FAILURES: dict[str, dict[str, tuple[int, ...]]] = {
@@ -63,6 +65,10 @@ def public_openapi_schema() -> dict[str, Any]:
     definitions = model_schema.pop("$defs", {})
     schemas = schema.setdefault("components", {}).setdefault("schemas", {})
     schemas.update(definitions)
+    # v2 conversation stream contracts have their own public boundary and
+    # should not silently expand the generated v1 wire schema.
+    schemas.pop("ConversationStreamV2Accepted", None)
+    schemas.pop("ConversationStreamV2Event", None)
     schemas["ApiErrorResponse"] = model_schema
     response_schema = {"$ref": "#/components/schemas/ApiErrorResponse"}
     for path, operations in _AUTH_FAILURES.items():
@@ -79,6 +85,17 @@ def public_openapi_schema() -> dict[str, Any]:
                     "description": _STATUS_DESCRIPTIONS[status],
                     "content": {"application/json": {"schema": response_schema}},
                 }
+    return cast(dict[str, Any], schema)
+
+
+def public_v2_openapi_schema() -> dict[str, Any]:
+    """Return the committed schema for the versioned conversation transport."""
+    schema = deepcopy(_application().openapi())
+    schema["paths"] = {
+        path: schema["paths"][path]
+        for path in sorted(schema.get("paths", {}))
+        if path.startswith(PUBLIC_V2_PREFIX)
+    }
     return cast(dict[str, Any], schema)
 
 
@@ -106,6 +123,8 @@ def route_surface() -> dict[str, Any]:
 def encoded_artifacts() -> dict[Path, str]:
     return {
         OUTPUT: json.dumps(public_openapi_schema(), indent=2, sort_keys=True) + "\n",
+        V2_OUTPUT: json.dumps(public_v2_openapi_schema(), indent=2, sort_keys=True)
+        + "\n",
         SURFACE_OUTPUT: json.dumps(route_surface(), indent=2, sort_keys=True) + "\n",
     }
 
@@ -129,9 +148,11 @@ def check_contract() -> tuple[Path, ...]:
 
 __all__ = [
     "OUTPUT",
+    "V2_OUTPUT",
     "SURFACE_OUTPUT",
     "check_contract",
     "export_contract",
     "public_openapi_schema",
+    "public_v2_openapi_schema",
     "route_surface",
 ]

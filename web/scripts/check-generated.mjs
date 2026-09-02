@@ -14,14 +14,14 @@ if (!new Set(["tokens", "api"]).has(task)) {
 const generatedPath =
   task === "tokens"
     ? path.join(root, "src/design-system/generated")
-    : path.join(root, "src/lib/api/generated/schema.d.ts");
+    : path.join(root, "src/lib/api/generated");
 const temporaryDirectory = fs.mkdtempSync(
   path.join(os.tmpdir(), `scholens-${task}-`),
 );
 const regeneratedPath =
   task === "tokens"
     ? path.join(temporaryDirectory, "generated")
-    : path.join(temporaryDirectory, "schema.d.ts");
+    : path.join(temporaryDirectory, "generated");
 
 if (task === "tokens") {
   execFileSync("node", ["scripts/build-tokens.mjs"], {
@@ -30,17 +30,22 @@ if (task === "tokens") {
     stdio: "inherit",
   });
 } else {
-  execFileSync(
-    "pnpm",
-    [
-      "exec",
-      "openapi-typescript",
-      "../server/openapi/public-v1.json",
-      "-o",
-      regeneratedPath,
-    ],
-    { cwd: root, stdio: "inherit" },
-  );
+  for (const [snapshot, output] of [
+    ["public-v1.json", "schema.d.ts"],
+    ["public-v2.json", "conversation-v2.d.ts"],
+  ]) {
+    execFileSync(
+      "pnpm",
+      [
+        "exec",
+        "openapi-typescript",
+        `../server/openapi/${snapshot}`,
+        "-o",
+        path.join(regeneratedPath, output),
+      ],
+      { cwd: root, stdio: "inherit" },
+    );
+  }
 }
 
 const compare = (left, right) => {

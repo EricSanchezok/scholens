@@ -28,7 +28,7 @@
     "design:check": "node scripts/check-design-system.mjs",
     "docs:check": "node scripts/check-docs.mjs && pnpm docs:contract:check",
     "docs:contract:check": "node scripts/check-documentation-contract.mjs",
-    "api:generate": "openapi-typescript ../server/openapi/public-v1.json -o src/lib/api/generated/schema.d.ts",
+    "api:generate": "openapi-typescript ../server/openapi/public-v1.json -o src/lib/api/generated/schema.d.ts && openapi-typescript ../server/openapi/public-v2.json -o src/lib/api/generated/conversation-v2.d.ts",
     "api:check": "node scripts/check-generated.mjs api",
     "storybook": "storybook dev -p 7306 --host 127.0.0.1 --exact-port --no-open",
     "build-storybook": "storybook build",

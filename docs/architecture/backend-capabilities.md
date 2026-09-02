@@ -27,9 +27,12 @@ HTTP / Agent / MCP / job callback
 
 ## Stable contracts
 
-The browser-facing API is mounted once at `/api/v1`. A future provider callback
-must live under `/webhooks/v1`, but the current production release mounts no
-public provider webhook. Worker-only operations are under `/internal/v1`, which
+The browser-facing API is versioned: product resources remain under `/api/v1`,
+while the replacement conversation stream is under `/api/v2/conversations`.
+The v2 surface is limited to the unified replayable conversation lifecycle;
+other product resources continue to use v1. A future provider callback must
+live under `/webhooks/v1`, but the current production release mounts no public
+provider webhook. Worker-only operations are under `/internal/v1`, which
 production routing deliberately does not expose.
 
 Public resources use canonical identifiers:

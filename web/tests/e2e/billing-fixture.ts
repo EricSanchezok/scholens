@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 
 export const billingUsageFixture = {
   limits: {

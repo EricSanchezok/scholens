@@ -75,6 +75,26 @@ async def test_keepalive_drives_the_source_from_one_task_for_its_whole_lifecycle
 
 
 @pytest.mark.asyncio
+async def test_keepalive_can_publish_a_product_phase_without_provider_details() -> None:
+    release = asyncio.Event()
+
+    async def delayed_stream():
+        await release.wait()
+        yield "typed-event"
+
+    stream = stream_with_keepalive(
+        delayed_stream(),
+        interval_seconds=0.001,
+        on_timeout=lambda: 'event: phase\ndata: {"phase":"tool"}\n\n',
+    )
+    phase = await anext(stream)
+    assert phase.startswith("event: phase\n")
+    assert ": keepalive" not in phase
+    release.set()
+    assert await anext(stream) == "typed-event"
+
+
+@pytest.mark.asyncio
 async def test_stream_failure_is_redacted_and_recorded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

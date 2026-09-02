@@ -420,9 +420,10 @@ FastAPI automatically generates API documentation. Once the application is runni
 - Swagger UI: `http://127.0.0.1:7301/docs`
 - ReDoc: `http://127.0.0.1:7301/redoc`
 
-Public application routes are under `/api/v1`; provider webhooks are under
-`/webhooks/v1`. `/internal/v1` is reserved for authenticated worker traffic and
-is intentionally not routed by the production edge proxy.
+Public application routes are under `/api/v1`; the unified conversation stream
+also exposes the versioned `/api/v2/conversations` surface. Provider webhooks
+are under `/webhooks/v1`. `/internal/v1` is reserved for authenticated worker
+traffic and is intentionally not routed by the production edge proxy.
 
 Reader composes the existing Document, Research Item, Conversation, and turn
 stream capabilities. PDF and parsed-text anchors are discriminated application
@@ -463,13 +464,12 @@ eligible job; callback outcomes are revision-bound so a late attempt cannot
 invalidate a replacement credential.
 
 Conversation turns are created at
-`POST /api/v1/conversations/{conversation_id}/turns`; retrying the active branch
-leaf
-creates another response variant at
-`POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
+`POST /api/v2/conversations/{conversation_id}/turns`; retrying the active branch
+leaf creates another response variant at
+`POST /api/v2/conversations/{conversation_id}/turns/{turn_id}/responses`.
 Editing any turn on the active path creates an immutable sibling through
-`POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/branches`.
-`POST /api/v1/conversations/{conversation_id}/start` atomically creates a
+`POST /api/v2/conversations/{conversation_id}/turns/{turn_id}/branches`.
+`POST /api/v2/conversations/{conversation_id}/start` atomically creates a
 client-identified Conversation and accepts its first Turn/Response, so a first
 prompt never commits an empty Conversation in a separate request. Replaying the
 same immutable Turn/Response request returns its existing generation even after
@@ -495,35 +495,35 @@ Server-owned `conversation` worker then generates outside the browser request.
 Without that preference, the same endpoint returns a direct durable SSE
 subscription to the accepted generation: a comment-only `: accepted` frame
 flushes the response before subscription preparation, followed by the Redis-ID
-typed events. It never runs the agent in the HTTP request.
-`GET /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events`
+typed events. It never runs the agent in the HTTP request. The v2 stream at
+`GET /api/v2/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events`
 replays the bounded Redis event log from `Last-Event-ID` and reconciles terminal
 state from PostgreSQL; Redis is never canonical. Route changes, mobile
 backgrounding, reload, and connectivity loss therefore detach only a subscriber.
 `POST .../responses/{response_id}/cancel` is the sole user cancellation boundary
 and conditionally cancels both Response and job.
-Selecting the already-active branch is a storage and journal no-op. Consumers
-must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
-`assistant_item_complete`, `activity`, `references`, `response_ready`,
-`suggestions`, `complete`, `cancelled`, and `error` events and treat those last
-three as terminal. `response_ready` carries the complete persisted turn snapshot and
-unblocks response actions; `suggestions` is an optional late sidecar update.
+Selecting the already-active branch is a storage and journal no-op. The v2
+consumer receives one ordered envelope family: `turn.started`, `phase.updated`,
+sanitized `message.part.updated` activity/progress, `message.part.delta`,
+`message.part.reset`, `message.part.completed`, `references.ready`,
+`response.ready`, optional `suggestions.ready`, and the terminal
+`turn.completed`, `turn.canceled`, or `turn.failed`. Each envelope carries a
+response-local sequence and a replay cursor; raw tool names, arguments, payloads,
+provider heartbeats, and model reasoning never leave the server. Candidate text
+is provisional and resettable, while `response.ready` carries the complete
+persisted turn snapshot and unblocks response actions. The v1 endpoints remain a
+compatibility adapter for the legacy event union during the rolling deployment
+window. The v2 adapter maps the classified candidate lifecycle to
+`message.part.*`; the v1 compatibility adapter retains the explicit
+`application/vnd.scholens.conversation-events` negotiation and
+`/events/candidates` resume route.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`; ordinary text with no tool call is the terminal answer. The additive
-`/events/candidates` subscription and a direct request that explicitly
-advertises `application/vnd.scholens.conversation-events` in `Accept` additionally
-return sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
-`assistant_candidate_reset` events from the classified terminal text. Candidate
-events no longer depend on a model-visible finalization tool or JSON envelope.
-The standard representation keeps the original direct-stream event union and
-projects cancellation through its existing terminal `error` shape. The Web
-requests the candidate representation and reconnects only through the
-candidate-aware route, so a deployment cannot silently downgrade an active
-answer's event contract. Every runtime response uses the standard
-`text/event-stream` Content-Type; the vendor media type is an `Accept`
-negotiation token rather than a replacement for SSE. Private citation protocol
-never enters the candidate.
+`progress`; ordinary text with no tool call is the terminal answer. Candidate
+events do not depend on a model-visible finalization tool or JSON envelope.
+Every runtime response uses the standard `text/event-stream` Content-Type; the
+vendor media type is an Accept negotiation token rather than a replacement for
+SSE. Private citation protocol never enters the candidate.
 A `final` item is published after normal text termination and server-side
 sanitization. Missing references, invalid source keys, malformed private
 markers, and visible `[A1]`-style placeholders are citation-quality soft
@@ -541,8 +541,8 @@ adapter rather than maintaining a second dictionary-shaped protocol. Completed
 assistant items must contain visible text; user-visible progress is bounded to
 4,000 characters, and a response without a validated visible final answer is
 failed instead of persisting an empty or internal-draft response variant. A
-turn owns the immutable user
-prompt, typed paper-context snapshot, and one or more generated responses.
+turn owns the immutable user prompt, typed paper-context snapshot, and one or
+more generated responses.
 Parent and selected-child pointers form a persistent tree, while the
 Conversation selects one root and publishes a monotonic path revision. Agent
 history contains only the generated turn's selected ancestors. Only the active

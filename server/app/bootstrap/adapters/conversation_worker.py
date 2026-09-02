@@ -320,7 +320,10 @@ async def _run_generation(
         store = ConversationEventStore(runtime.settings.resolved_cache_url)
 
         async def drain() -> None:
-            async for _frame in store.publish(
+            # Keep the worker compatible with narrow test doubles and older
+            # adapters while the non-blocking persistence path rolls out.
+            publisher = getattr(store, "publish_nonblocking", store.publish)
+            async for _frame in publisher(
                 response_id=request.response_id,
                 source=source,
             ):

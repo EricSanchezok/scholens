@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -33,6 +34,7 @@ from app.modules.conversations.application.contracts.answer_packet import (
     ReferenceBundle,
 )
 from app.modules.conversations.application.contracts.turns import (
+    ConversationStreamActivityEvent,
     ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
     ConversationStreamAssistantCandidateDeltaEvent,
@@ -94,7 +96,39 @@ logger = logging.getLogger(__name__)
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _JSON_OBJECT_LIST = TypeAdapter(list[dict[str, JsonValue]])
 _SUGGESTION_TAIL_SECONDS = 2.0
+_PHASE_HEARTBEAT_INTERVAL_SECONDS = 1.0
 _T = TypeVar("_T")
+
+
+def _encode_phase_sse(
+    *,
+    response_id: uuid.UUID,
+    phase: Literal[
+        "queued",
+        "thinking",
+        "tool",
+        "synthesizing",
+        "finalizing",
+        "completed",
+    ],
+    elapsed_ms: int,
+) -> str:
+    """Encode a safe, UI-facing phase heartbeat.
+
+    This is deliberately not a provider heartbeat: it contains only the
+    product phase and elapsed time, never internal model/tool details.
+    """
+    payload = json.dumps(
+        {
+            "type": "phase",
+            "response_id": str(response_id),
+            "phase": phase,
+            "elapsed_ms": elapsed_ms,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"event: phase\ndata: {payload}\n\n"
 
 
 async def _resolve_thread_command(
@@ -168,6 +202,10 @@ def _is_assistant_candidate_frame(frame: str) -> bool:
     return any(
         line.startswith("event: assistant_candidate_") for line in frame.splitlines()
     )
+
+
+def _is_phase_frame(frame: str) -> bool:
+    return any(line == "event: phase" for line in frame.splitlines())
 
 
 class ConversationSuggestionGenerator(Protocol):
@@ -419,6 +457,16 @@ async def stream_conversation_agent(
     suggestion_task: asyncio.Task[tuple[str, str, str] | None] | None = None
     title_task: asyncio.Task[str | None] | None = None
     title_seed: str | None = None
+    phase_state: list[
+        Literal[
+            "queued",
+            "thinking",
+            "tool",
+            "synthesizing",
+            "finalizing",
+            "completed",
+        ]
+    ] = ["queued"]
 
     diagnostic_context: dict[str, object] = {
         "stage": "agent",
@@ -445,6 +493,15 @@ async def stream_conversation_agent(
                 conversation_id=conversation_id,
                 before_turn_id=request.turn_id,
             ),
+        )
+        # Resolve the small history read before publishing the first product
+        # phase. This keeps the phase boundary deterministic for reconnecting
+        # clients while the initial ``start`` frame remains immediate.
+        phase_state[0] = "thinking"
+        yield _encode_phase_sse(
+            response_id=request.response_id,
+            phase="thinking",
+            elapsed_ms=elapsed_ms(),
         )
 
         def start_sidecars() -> None:
@@ -538,8 +595,21 @@ async def stream_conversation_agent(
             if isinstance(event, ConversationStreamAssistantItemCompleteEvent):
                 if event.item.phase == "final":
                     final_content = event.item.content
+                    phase_state[0] = "finalizing"
             elif isinstance(event, ConversationStreamReferencesEvent):
+                phase_state[0] = "finalizing"
                 references = ReferenceBundle.model_validate(event.references)
+            elif isinstance(
+                event,
+                (
+                    ConversationStreamAssistantCandidateStartEvent,
+                    ConversationStreamAssistantCandidateDeltaEvent,
+                    ConversationStreamAssistantCandidateResetEvent,
+                ),
+            ):
+                phase_state[0] = "synthesizing"
+            elif isinstance(event, ConversationStreamActivityEvent):
+                phase_state[0] = "tool"
             yield encode_conversation_sse(event)
             if not sidecars_started:
                 # The keepalive pump can prefetch synchronously. Hand control back
@@ -598,6 +668,7 @@ async def stream_conversation_agent(
             conversation_id=conversation_id,
             turn_id=request.turn_id,
         )
+        phase_state[0] = "finalizing"
         ready_at = time.perf_counter()
         yield encode_conversation_sse(
             ConversationStreamResponseReadyEvent(turn=snapshot)
@@ -683,6 +754,7 @@ async def stream_conversation_agent(
             },
             user_id=str(current_user.id),
         )
+        phase_state[0] = "completed"
         yield encode_conversation_sse(
             ConversationStreamCompleteEvent(
                 turn_id=request.turn_id,
@@ -715,7 +787,15 @@ async def stream_conversation_agent(
         try:
             yield start_event
             async for event in stream_with_stable_error(
-                stream_with_keepalive(run_response_generator()),
+                stream_with_keepalive(
+                    run_response_generator(),
+                    interval_seconds=_PHASE_HEARTBEAT_INTERVAL_SECONDS,
+                    on_timeout=lambda: _encode_phase_sse(
+                        response_id=request.response_id,
+                        phase=phase_state[0],
+                        elapsed_ms=elapsed_ms(),
+                    ),
+                ),
                 event_name="conversation_chat_message_error",
                 user_id=current_user.id,
                 properties={
@@ -1383,6 +1463,7 @@ class DefaultConversationChatGateway:
         response_id: uuid.UUID,
         last_event_id: str | None,
         include_assistant_candidates: bool = False,
+        include_phase_events: bool = False,
     ) -> AsyncIterator[str]:
         await asyncio.to_thread(
             _generation_snapshot,
@@ -1409,6 +1490,8 @@ class DefaultConversationChatGateway:
                             not include_assistant_candidates
                             and _is_assistant_candidate_frame(frame)
                         ):
+                            continue
+                        if not include_phase_events and _is_phase_frame(frame):
                             continue
                         yield frame
                         if any(

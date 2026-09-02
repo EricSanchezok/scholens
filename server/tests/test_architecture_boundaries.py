@@ -393,9 +393,12 @@ def test_only_versioned_public_routes_are_exposed() -> None:
     paths = set(app.openapi()["paths"])
     public_business_paths = {path for path in paths if path.startswith("/api/")}
     assert public_business_paths
-    assert all(path.startswith("/api/v1/") for path in public_business_paths)
+    assert all(
+        path.startswith(("/api/v1/", "/api/v2/")) for path in public_business_paths
+    )
     assert not any(path.startswith("/internal/") for path in paths)
     assert "/api/v1/billing/usage" in paths
+    assert "/api/v2/conversations/{conversation_id}/turns" in paths
     assert (
         not {
             "/api/v1/billing/subscription",

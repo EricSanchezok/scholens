@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 
 async function mockAnonymousSession(page: Page) {
   await page.route(`${apiPattern}/auth/bootstrap`, async (route) => {

@@ -12,7 +12,7 @@ import {
 import { mockBillingUsage } from "./billing-fixture";
 import { expectPaperCollectionScrollContained } from "./paper-collection-scroll";
 
-const apiPattern = "**/api/v1";
+const apiPattern = "**/api/v*";
 const actor = {
   id: 7,
   email: "eric@scholens.ai",

@@ -25,7 +25,7 @@ from scholens_observability import (
 )
 
 logger = logging.getLogger(__name__)
-_SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+_SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
 _STREAM_END = object()
 
 
@@ -47,6 +47,7 @@ async def stream_with_keepalive(
     source: AsyncIterator[str],
     *,
     interval_seconds: float = _SSE_KEEPALIVE_INTERVAL_SECONDS,
+    on_timeout: Callable[[], str] | None = None,
 ) -> AsyncIterator[str]:
     """Emit SSE comments while awaiting the next typed event without cancelling it."""
     if interval_seconds <= 0:
@@ -83,7 +84,7 @@ async def stream_with_keepalive(
                 async with asyncio.timeout(interval_seconds):
                     item = await queue.get()
             except TimeoutError:
-                yield ": keepalive\n\n"
+                yield on_timeout() if on_timeout is not None else ": keepalive\n\n"
                 continue
 
             if item is _STREAM_END:
