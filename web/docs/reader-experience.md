@@ -150,7 +150,15 @@ longer accessible or no longer contains the Document.
 Reader uses the official `pdfjs-dist` Display and Viewer layers through the
 feature-owned `PdfDocumentAdapter`. The worker and main package versions must
 match. PDF code loads on the client and must not enter the server-rendering
-bundle.
+bundle. The Web build publishes the locked package's WASM image codecs and
+fallback modules under the release-scoped, same-origin
+`/pdfjs/wasm/<release>/` path; `PdfDocumentAdapter` passes that directory as
+PDF.js's `wasmUrl` and validates its manifest before opening a document.
+
+Missing codec assets are a document-level terminal state with a download
+action. Non-cancellation page render failures are shown on the affected page
+with the same original-PDF download path; they must never remain as an
+unbounded loading indicator or an empty page without feedback.
 
 The document surface supports:
 

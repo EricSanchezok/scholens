@@ -147,6 +147,7 @@ run_web() {
     pnpm test:storybook
     pnpm build-storybook
     NEXT_TELEMETRY_DISABLED=1 pnpm build
+    pnpm pdfjs:assets:check
     pnpm test:e2e
   )
 }

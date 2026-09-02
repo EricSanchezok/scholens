@@ -28,6 +28,7 @@ web/playwright-report/
 client/.next/
 web/.next/
 web/.next-dev/
+web/public/pdfjs/wasm/
 web/out/
 web/storybook-static/
 client/out/

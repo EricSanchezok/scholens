@@ -3,7 +3,7 @@
 import type { PDFPageProxy } from "pdfjs-dist";
 import * as React from "react";
 
-import { LoadingState } from "@/components/feedback";
+import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
@@ -198,6 +198,11 @@ function PdfPageSurface({
   scrollContainerRef,
   zoom,
   loadingLabel,
+  pageErrorDescription,
+  pageErrorTitle,
+  downloadLabel,
+  onDownload,
+  onRenderError,
   annotations = [],
   selectedAnnotationId,
   previewAnnotationId,
@@ -228,6 +233,11 @@ function PdfPageSurface({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   zoom: number;
   loadingLabel: string;
+  pageErrorDescription: string;
+  pageErrorTitle: string;
+  downloadLabel: string;
+  onDownload: () => void;
+  onRenderError?: (pageNumber: number, error: unknown) => void;
   annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
   previewAnnotationId?: string;
@@ -263,6 +273,8 @@ function PdfPageSurface({
     pageNumber === currentPageNumber,
   );
   const [renderedKey, setRenderedKey] = React.useState("");
+  const [renderErrorKey, setRenderErrorKey] = React.useState("");
+  const reportedRenderErrorsRef = React.useRef(new Set<string>());
 
   React.useEffect(() => {
     const surface = pageSurfaceRef.current;
@@ -381,6 +393,12 @@ function PdfPageSurface({
         ) {
           return;
         }
+        if (!active) return;
+        setRenderErrorKey(expectedRenderedKey);
+        if (!reportedRenderErrorsRef.current.has(expectedRenderedKey)) {
+          reportedRenderErrorsRef.current.add(expectedRenderedKey);
+          onRenderError?.(pageNumber, error);
+        }
       });
     return () => {
       active = false;
@@ -393,6 +411,7 @@ function PdfPageSurface({
     onInternalDestination,
     page,
     pageNumber,
+    onRenderError,
     shouldRender,
     scale,
     scrollContainerRef,
@@ -401,7 +420,10 @@ function PdfPageSurface({
   ]);
 
   const rendering =
-    shouldRender && (!page || renderedKey !== expectedRenderedKey);
+    shouldRender &&
+    renderErrorKey !== expectedRenderedKey &&
+    (!page || renderedKey !== expectedRenderedKey);
+  const renderError = renderErrorKey === expectedRenderedKey;
 
   React.useEffect(() => {
     const textLayer = textLayerRef.current;
@@ -437,6 +459,17 @@ function PdfPageSurface({
       {rendering && (
         <div className="absolute inset-x-0 top-4 z-30 mx-auto w-fit">
           <LoadingState label={loadingLabel} />
+        </div>
+      )}
+      {renderError && (
+        <div className="absolute inset-0 z-30 p-4">
+          <AsyncFeedback
+            action={{ label: downloadLabel, onClick: onDownload }}
+            description={pageErrorDescription}
+            presentation="overlay"
+            state="error"
+            title={pageErrorTitle}
+          />
         </div>
       )}
       <canvas className="absolute inset-0" ref={canvasRef} />
@@ -629,6 +662,11 @@ export function PdfPage({
   searchQuery,
   zoom,
   loadingLabel,
+  pageErrorDescription,
+  pageErrorTitle,
+  downloadLabel,
+  onDownload,
+  onRenderError,
   annotations = [],
   selectedAnnotationId,
   previewAnnotationId,
@@ -661,6 +699,11 @@ export function PdfPage({
   searchQuery: string;
   zoom: number;
   loadingLabel: string;
+  pageErrorDescription: string;
+  pageErrorTitle: string;
+  downloadLabel: string;
+  onDownload: () => void;
+  onRenderError?: (pageNumber: number, error: unknown) => void;
   annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
   previewAnnotationId?: string;
@@ -1010,6 +1053,11 @@ export function PdfPage({
               fitMode={fitMode}
               key={number}
               loadingLabel={loadingLabel}
+              pageErrorDescription={pageErrorDescription}
+              pageErrorTitle={pageErrorTitle}
+              downloadLabel={downloadLabel}
+              onDownload={onDownload}
+              onRenderError={onRenderError}
               onActiveTextSelectionChange={onActiveTextSelectionChange}
               onAnnotationSelect={onAnnotationSelect}
               onAskSelection={onAskSelection}

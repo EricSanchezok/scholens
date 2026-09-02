@@ -822,6 +822,8 @@
     "downloadInstead": "Download PDF",
     "pdfErrorDescription": "The PDF could not be displayed. You can still download the original file.",
     "pdfErrorTitle": "Could not render this PDF",
+    "pageErrorDescription": "This page contains content the browser could not render. You can still download the original file.",
+    "pageErrorTitle": "Could not render this page",
     "thumbnail": "Open page {page}",
     "navigation": {
       "label": "Page thumbnails"

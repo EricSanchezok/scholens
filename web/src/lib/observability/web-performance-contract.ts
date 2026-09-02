@@ -20,6 +20,19 @@ export const conversationPerformanceMetricNames = [
   "conversation_max_stall",
 ] as const;
 
+export const pdfRenderErrorKinds = [
+  "asset_unavailable",
+  "document_open",
+  "page_render",
+] as const;
+
+export const pdfRenderErrorDecoders = [
+  "jbig2",
+  "openjpeg",
+  "qcms",
+  "unknown",
+] as const;
+
 export const webPerformanceRouteGroups = [
   "documentation",
   "home",
@@ -61,15 +74,32 @@ export const conversationPerformanceEventSchema = z
   })
   .strict();
 
+export const pdfRenderErrorEventSchema = z
+  .object({
+    decoder: z.enum(pdfRenderErrorDecoders).optional(),
+    device_class: z.enum(["desktop", "mobile"]),
+    effective_type: z.enum(["slow-2g", "2g", "3g", "4g", "unknown"]).optional(),
+    error_kind: z.enum(pdfRenderErrorKinds),
+    event_id: z.uuid(),
+    metric: z.literal("pdf_render_error"),
+    release: z.string().trim().min(1).max(64),
+    save_data: z.boolean().optional(),
+    surface: z.enum(["document", "page"]),
+    to_route: z.literal("reader"),
+  })
+  .strict();
+
 export const webTelemetryEventSchema = z.union([
   webPerformanceEventSchema,
   conversationPerformanceEventSchema,
+  pdfRenderErrorEventSchema,
 ]);
 
 export type WebPerformanceEvent = z.infer<typeof webPerformanceEventSchema>;
 export type ConversationPerformanceEvent = z.infer<
   typeof conversationPerformanceEventSchema
 >;
+export type PdfRenderErrorEvent = z.infer<typeof pdfRenderErrorEventSchema>;
 export type ConversationPerformanceMetricName =
   (typeof conversationPerformanceMetricNames)[number];
 export type WebTelemetryEvent = z.infer<typeof webTelemetryEventSchema>;

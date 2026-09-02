@@ -822,6 +822,8 @@
     "downloadInstead": "下载 PDF",
     "pdfErrorDescription": "无法显示 PDF，但你仍可下载原始文件。",
     "pdfErrorTitle": "无法渲染此 PDF",
+    "pageErrorDescription": "此页面包含浏览器无法渲染的内容，但你仍可下载原始文件。",
+    "pageErrorTitle": "无法渲染此页面",
     "thumbnail": "打开第 {page} 页",
     "navigation": {
       "label": "页面缩略图"

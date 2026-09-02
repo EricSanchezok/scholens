@@ -8,9 +8,38 @@ import {
   findReaderPageSearchMatches,
   type ReaderSearchMatch,
 } from "./reader-search";
+import { clientEnvironment } from "@/lib/env/client";
 
 let workerConfigured = false;
 const activeCanvasRenders = new WeakMap<HTMLCanvasElement, Promise<void>>();
+const pdfjsRelease = clientEnvironment.NEXT_PUBLIC_RELEASE_SHA;
+export const PDFJS_WASM_URL = `/pdfjs/wasm/${encodeURIComponent(pdfjsRelease)}/`;
+const requiredCodecAssets = [
+  "jbig2.wasm",
+  "openjpeg.wasm",
+  "qcms_bg.wasm",
+  "jbig2_nowasm_fallback.js",
+  "openjpeg_nowasm_fallback.js",
+] as const;
+
+type PdfJsAssetManifest = {
+  files: Record<string, { sha256: string; size: number }>;
+  pdfjs_version: string;
+  release: string;
+  schema: 1;
+};
+
+export class PdfJsAssetsUnavailableError extends Error {
+  readonly asset: string;
+
+  constructor(asset: string) {
+    super(`PDF.js codec asset is unavailable: ${asset}`);
+    this.asset = asset;
+    this.name = "PdfJsAssetsUnavailableError";
+  }
+}
+
+let codecAssetsPromise: Promise<void> | undefined;
 
 async function loadPdfJs() {
   const pdfjs = await import("pdfjs-dist");
@@ -24,6 +53,74 @@ async function loadPdfJs() {
   return pdfjs;
 }
 
+async function ensurePdfJsCodecAssets(pdfjs: { version: string }) {
+  if (!codecAssetsPromise) {
+    codecAssetsPromise = (async () => {
+      let manifestResponse: Response;
+      try {
+        manifestResponse = await fetch(`${PDFJS_WASM_URL}manifest.json`, {
+          cache: "no-store",
+        });
+      } catch {
+        throw new PdfJsAssetsUnavailableError("manifest.json");
+      }
+      if (!manifestResponse.ok) {
+        throw new PdfJsAssetsUnavailableError("manifest.json");
+      }
+
+      let manifest: PdfJsAssetManifest;
+      try {
+        manifest = (await manifestResponse.json()) as PdfJsAssetManifest;
+      } catch {
+        throw new PdfJsAssetsUnavailableError("manifest.json");
+      }
+      if (
+        manifest.schema !== 1 ||
+        manifest.release !== pdfjsRelease ||
+        manifest.pdfjs_version !== pdfjs.version ||
+        !manifest.files
+      ) {
+        throw new PdfJsAssetsUnavailableError("manifest.json");
+      }
+
+      await Promise.all(
+        requiredCodecAssets.map(async (asset) => {
+          if (!manifest.files[asset]) {
+            throw new PdfJsAssetsUnavailableError(asset);
+          }
+          let response: Response;
+          try {
+            response = await fetch(`${PDFJS_WASM_URL}${asset}`, {
+              cache: "no-store",
+              method: "HEAD",
+            });
+          } catch {
+            throw new PdfJsAssetsUnavailableError(asset);
+          }
+          if (!response.ok) {
+            throw new PdfJsAssetsUnavailableError(asset);
+          }
+          if (
+            asset.endsWith(".wasm") &&
+            !response.headers
+              .get("content-type")
+              ?.toLowerCase()
+              .includes("application/wasm")
+          ) {
+            throw new PdfJsAssetsUnavailableError(asset);
+          }
+        }),
+      );
+    })();
+  }
+  try {
+    await codecAssetsPromise;
+  } catch (error) {
+    codecAssetsPromise = undefined;
+    throw error;
+  }
+}
+
 export class PdfDocumentAdapter {
   private constructor(
     private readonly document: PDFDocumentProxy,
@@ -32,6 +129,7 @@ export class PdfDocumentAdapter {
 
   static async open(getFreshUrl: () => Promise<string>) {
     const pdfjs = await loadPdfJs();
+    await ensurePdfJsCodecAssets(pdfjs);
     let latestTask: PDFDocumentLoadingTask | undefined;
     let previousError: unknown;
 
@@ -39,6 +137,7 @@ export class PdfDocumentAdapter {
       try {
         latestTask = pdfjs.getDocument({
           url: await getFreshUrl(),
+          wasmUrl: PDFJS_WASM_URL,
         });
         const document = await latestTask.promise;
         return new PdfDocumentAdapter(document, latestTask);
