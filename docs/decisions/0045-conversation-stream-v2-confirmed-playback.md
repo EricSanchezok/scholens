@@ -1,4 +1,4 @@
-# ADR 0044: Conversation stream v2 and confirmed playback
+# ADR 0045: Conversation stream v2 and confirmed playback
 
 ## Status
 
@@ -42,8 +42,8 @@ window and zero-traffic evidence.
   current long gaps are also produced upstream during model/tool phases.
 - Keeping `/api/v1` and adding a second candidate stream was rejected because it
   preserves two event authorities and the same reconnect ambiguity.
-- A browser-only typewriter was rejected because it would hide transport
-  stalls, fabricate cadence, and diverge from canonical response state.
+- A browser-only typewriter was rejected because it would hide transport stalls,
+  fabricate cadence, and diverge from canonical response state.
 
 ## Consequences
 
