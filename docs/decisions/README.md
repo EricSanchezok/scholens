@@ -67,7 +67,7 @@ change what the accepted record decided.
 - [ADR 0033: Segmented cross-page PDF anchors](./0033-segmented-cross-page-pdf-anchors.md)
 - [ADR 0034: Read-only shared profile avatars](./0034-read-only-shared-profile-avatars.md)
 - [ADR 0035: Installable Web App as the first mobile distribution boundary](./0035-installable-web-app-mobile-distribution.md)
-- [ADR 0036: Validated Conversation final output](./0036-validated-conversation-final-output.md)
+- [ADR 0036: Validated Conversation final output (superseded)](./0036-validated-conversation-final-output.md)
 - [ADR 0037: Registry intake without a second UI system](./0037-registry-intake-without-a-second-ui-system.md)
 - [ADR 0038: Durable direct Conversation streaming](./0038-durable-direct-conversation-stream.md)
 - [ADR 0039: First-party research activity ledger](./0039-first-party-research-activity-ledger.md)
@@ -75,6 +75,7 @@ change what the accepted record decided.
 - [ADR 0041: Versioned PDF text repair without destructive re-ingestion](./0041-versioned-pdf-text-repair.md)
 - [ADR 0042: Versioned migration for bounded MCP reads](./0042-versioned-mcp-bounded-read-migration.md)
 - [ADR 0043: Citation availability is separate from answer availability](./0043-citation-availability-first.md)
+- [ADR 0044: Plain-text terminal boundary for conversation harness](./0044-text-terminal-conversation-harness.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

@@ -510,28 +510,27 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`. The additive `/events/candidates` subscription and a direct request
-that explicitly advertises `application/vnd.scholens.conversation-events` in
-`Accept` additionally return sanitized `assistant_candidate_start`,
-`assistant_candidate_delta`, and `assistant_candidate_reset` events parsed from
-partial structured `final_answer` arguments. The standard representation keeps
-the original direct-stream event union and projects cancellation through its
-existing terminal `error` shape. The Web requests the candidate representation
-and reconnects only through the candidate-aware route, so a deployment cannot
-silently downgrade an active answer's event contract. Every runtime response
-uses the standard `text/event-stream` Content-Type; the vendor media type is an
-`Accept` negotiation token rather than a replacement for SSE. Retries clear the
-provisional candidate, while only a currently ambiguous forbidden-protocol or
-visible citation suffix is withheld;
-short safe answers stream immediately. Private citation protocol never enters
-the candidate.
-A `final` item is published only after the model submits the
-structured `final_answer` output and its visible content and private citation
-protocol validate. A successful source-backed tool result also makes at least
-one valid materialized reference mandatory; missing references, invalid source
-keys, malformed private markers, and visible `[A1]`-style placeholders receive
-the same bounded model retry before publication. Plain text cannot terminate a
-Conversation run.
+`progress`; ordinary text with no tool call is the terminal answer. The additive
+`/events/candidates` subscription and a direct request that explicitly
+advertises `application/vnd.scholens.conversation-events` in `Accept` additionally
+return sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
+`assistant_candidate_reset` events from the classified terminal text. Candidate
+events no longer depend on a model-visible finalization tool or JSON envelope.
+The standard representation keeps the original direct-stream event union and
+projects cancellation through its existing terminal `error` shape. The Web
+requests the candidate representation and reconnects only through the
+candidate-aware route, so a deployment cannot silently downgrade an active
+answer's event contract. Every runtime response uses the standard
+`text/event-stream` Content-Type; the vendor media type is an `Accept`
+negotiation token rather than a replacement for SSE. Private citation protocol
+never enters the candidate.
+A `final` item is published after normal text termination and server-side
+sanitization. Missing references, invalid source keys, malformed private
+markers, and visible `[A1]`-style placeholders are citation-quality soft
+failures: safe prose is completed while invalid attribution metadata is dropped.
+Empty visible output, copied private protocol prose, provider stream corruption,
+and unexpected output tools remain hard failures. Plain text is the canonical
+terminal representation.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.

@@ -559,10 +559,10 @@ async function mockReader(page: Page) {
 
 async function mockReaderReflow(
   page: Page,
-  options: { delayMs?: number } = {},
+  options: { autoTranslateSelection?: boolean; delayMs?: number } = {},
 ) {
   let preferences = {
-    auto_translate_selection: true,
+    auto_translate_selection: options.autoTranslateSelection ?? true,
     custom_instructions: null as string | null,
     full_translation_display: "bilingual",
     show_translation_marker: true,
@@ -2014,7 +2014,7 @@ test("uses an immersive mobile Reader without the Workspace bottom navigation", 
 test("uses the full translation panel instead of a desktop preview on narrow Reader", async ({
   page,
 }) => {
-  await mockReaderReflow(page);
+  await mockReaderReflow(page, { autoTranslateSelection: false });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`/reader/${paperDocument.document_id}?page=2`);

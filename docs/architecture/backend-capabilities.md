@@ -493,23 +493,22 @@ connector is available, the agent says so instead of fabricating a search.
 
 The model receives an injected absolute time for the request's validated IANA
 time zone, so current-date answers do not rely on model memory. Tool results are
-bounded and projected before returning to the model. `Agent.iter()` exposes
-complete model and tool nodes to the harness, which buffers model text until the
-node establishes its role. Text accompanying an ordinary runtime tool call may
-complete as bounded `progress`. A run can terminate only through the structured
-`final_answer` output. While that tool's JSON arguments stream, the harness can
-partially validate `answer`, strip private citation markers, hold a bounded
-suffix, and publish an opt-in provisional candidate. A later validation retry
-resets that stable candidate before replacement text; clients that do not
-use the additive candidate subscription receive no provisional events. The
-server still validates and strips the private citation protocol before the
+bounded and projected before returning to the model. `Agent.iter()` remains the
+single Pydantic AI execution loop; the harness buffers complete model nodes and
+classifies them by tool presence and normal termination, never by prose
+heuristics. Text accompanying an ordinary runtime tool call may complete as
+bounded `progress`. A response with no tool call and normal text termination is
+the terminal answer; there is no model-visible finalization tool or structured
+output envelope. The additive candidate route projects that terminal text after
+classification, while clients that do not use it receive no provisional events.
+The server still validates and strips the private citation protocol before the
 canonical final item or persistence, but citation availability is deliberately
-separate from answer availability. Plain terminal text, empty visible content,
-and copied private protocol remain hard failures after bounded retries. Missing
-references, unknown keys, malformed markers, and visible `[A1]`-style
-placeholders are soft failures: they receive bounded repair attempts, then the
-sanitized visible answer is completed while invalid attribution metadata is
-dropped. A source-backed answer records a typed citation summary
+separate from answer availability. Empty visible content, copied private
+protocol, provider stream corruption, and unexpected output tools remain hard
+failures. Missing references, unknown keys, malformed markers, and visible
+`[A1]`-style placeholders are citation-quality soft failures: the sanitized
+visible answer is completed while invalid attribution metadata is dropped. A
+source-backed answer records a typed citation summary
 (`not_required`, `complete`, `partial`, `unavailable`, or `pending`) plus a
 separate grounding status; an empty reference bundle means sources were found
 but no sentence-level citation was safely established, not that every source
