@@ -6,7 +6,10 @@ import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { usePrimaryContentReady } from "@/lib/observability/web-performance";
+import {
+  reportPdfRenderError,
+  usePrimaryContentReady,
+} from "@/lib/observability/web-performance";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
@@ -85,7 +88,10 @@ import {
   ReaderToolbar,
   type ReaderToolbarLabels,
 } from "./components/reader-toolbar";
-import { PdfDocumentAdapter } from "./pdf-document-adapter";
+import {
+  PdfDocumentAdapter,
+  PdfJsAssetsUnavailableError,
+} from "./pdf-document-adapter";
 import { moveReaderSearchCursor } from "./reader-search";
 import { compareReaderAnnotationsBySource } from "./reader-annotations";
 import { readerScrollTopForTarget } from "./reader-scroll";
@@ -115,6 +121,16 @@ import type {
   ReaderAnnotationStatus,
   ReaderContextPanel as ReaderContextPanelName,
 } from "./reader-types";
+
+function pdfDecoderForError(
+  error: unknown,
+): "jbig2" | "openjpeg" | "qcms" | "unknown" {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/jbig2/i.test(message)) return "jbig2";
+  if (/openjpeg|jpx/i.test(message)) return "openjpeg";
+  if (/qcms|icc/i.test(message)) return "qcms";
+  return "unknown";
+}
 
 function ReaderDocumentWorkspace({
   actor,
@@ -537,7 +553,17 @@ function ReaderDocumentWorkspace({
         setPageCount(nextAdapter.pageCount);
       })
       .catch((error: unknown) => {
-        if (active) setAdapterErrorState({ documentId, error });
+        if (active) {
+          reportPdfRenderError({
+            decoder: pdfDecoderForError(error),
+            error_kind:
+              error instanceof PdfJsAssetsUnavailableError
+                ? "asset_unavailable"
+                : "document_open",
+            surface: "document",
+          });
+          setAdapterErrorState({ documentId, error });
+        }
       });
     return () => {
       active = false;
@@ -1102,6 +1128,17 @@ function ReaderDocumentWorkspace({
                       canvasLabel={t("documentCanvas")}
                       fitMode={fitMode}
                       loadingLabel={t("renderingPage")}
+                      pageErrorDescription={t("pageErrorDescription")}
+                      pageErrorTitle={t("pageErrorTitle")}
+                      downloadLabel={t("downloadInstead")}
+                      onDownload={() => void handleDownload()}
+                      onRenderError={(_pageNumber, error) => {
+                        reportPdfRenderError({
+                          decoder: pdfDecoderForError(error),
+                          error_kind: "page_render",
+                          surface: "page",
+                        });
+                      }}
                       onActiveTextSelectionChange={
                         handleActiveTextSelectionChange
                       }

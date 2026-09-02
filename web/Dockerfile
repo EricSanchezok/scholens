@@ -18,6 +18,7 @@ COPY . .
 RUN test -n "$NEXT_PUBLIC_API_URL" \
     && echo "$NEXT_PUBLIC_RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$' \
     && pnpm build \
+    && pnpm pdfjs:assets:check \
     && node scripts/package-source-maps.mjs
 
 FROM ${NODE_IMAGE} AS runtime

@@ -40,6 +40,13 @@ keeps route and chunk behavior aligned with the release artifact. The runner
 never reuses a process already listening on port 7300: a conflict fails clearly
 instead of silently testing another checkout or build.
 
+The PDF codec smoke suite also verifies the release-scoped PDF.js manifest and
+WASM resources over HTTP, including `HEAD`, MIME type, and WebAssembly magic
+bytes. Any redistributable JBIG2/JPEG2000 fixture used for image rendering
+must record its license and provenance beside the fixture; the affected
+production paper is additionally verified in staging without copying its
+copyrighted source into the repository.
+
 ## Storybook coverage
 
 Use global toolbar controls instead of duplicating entire story files:

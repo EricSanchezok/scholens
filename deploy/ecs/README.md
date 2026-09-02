@@ -72,11 +72,11 @@ or cluster.
 
 ## Runtime boundaries
 
-| Image                        | Workloads                                                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sanchezcloud-scholens-web`  | canonical `web/` Next.js standalone server                                 | Public values are baked at build time; browser source maps are removed from the image and stored privately.                                                                                                                                                                                                                                                                             |
-| `sanchezcloud-scholens-api`  | API, dedicated Conversation worker, and one-off product migration          | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process.                                                                                          |
-| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot hourly maintenance scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. The scheduler independently attempts Zotero orchestration and drains Server-owned reading-detail retention batches; either failure makes the task fail after both are attempted.                                                                                |
+| Image                        | Workloads                                                                  | Notes                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sanchezcloud-scholens-web`  | canonical `web/` Next.js standalone server                                 | Public values are baked at build time; release-scoped PDF.js codec WASM assets are copied into `/app/public`; browser source maps are removed from the image and stored privately.                                                                                                                    |
+| `sanchezcloud-scholens-api`  | API, dedicated Conversation worker, and one-off product migration          | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process.        |
+| `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot hourly maintenance scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. The scheduler independently attempts Zotero orchestration and drains Server-owned reading-detail retention batches; either failure makes the task fail after both are attempted. |
 
 The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its
 locked dependencies on the digest-pinned Debian Python image because PyMuPDF publishes
@@ -229,7 +229,9 @@ move back. This requires adjacent public contracts to remain bidirectionally com
 during a rollout; the workflow does not rely on simultaneous task replacement.
 
 ECS stability and public `/healthz` checks are necessary transport checks, not functional
-proof of the Redis, versioned-S3, or asynchronous ingestion paths. After every runtime
+proof of the Redis, versioned-S3, or asynchronous ingestion paths. The Web image check
+also verifies the release-scoped PDF.js manifest and codec resources over loopback,
+including the WASM MIME type and header bytes. After every runtime
 change affecting those dependencies, an authenticated operator must:
 
 1. send a real Conversation message and observe a terminal successful response;

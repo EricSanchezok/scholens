@@ -42,6 +42,16 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"], serviceWorkers: "block" },
     },
     {
+      name: "firefox-pdf-codec",
+      testMatch: /pdf-codec\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"], serviceWorkers: "block" },
+    },
+    {
+      name: "webkit-pdf-codec",
+      testMatch: /pdf-codec\.spec\.ts/,
+      use: { ...devices["Desktop Safari"], serviceWorkers: "block" },
+    },
+    {
       grep: /@selection/,
       name: "firefox-selection",
       testMatch: /reader\.spec\.ts/,

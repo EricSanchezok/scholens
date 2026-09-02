@@ -7,6 +7,7 @@ import { clientEnvironment } from "@/lib/env/client";
 import type {
   ConversationPerformanceEvent,
   ConversationPerformanceMetricName,
+  PdfRenderErrorEvent,
   WebTelemetryEvent,
   WebPerformanceEvent,
   WebPerformanceMetricName,
@@ -89,6 +90,8 @@ function reportWebTelemetry(event: BrowserTelemetryPayload<WebTelemetryEvent>) {
   }).catch(() => undefined);
 }
 
+type PdfRenderErrorPayload = Omit<PdfRenderErrorEvent, BrowserContextFields>;
+
 function reportWebPerformance(
   event: BrowserTelemetryPayload<WebPerformanceEvent>,
 ) {
@@ -106,6 +109,17 @@ export function reportConversationPerformance(
     stream_kind: streamKind,
     to_route: performanceRouteGroup(window.location.pathname),
     value: Math.max(0, value),
+  });
+}
+
+export function reportPdfRenderError(
+  payload: Omit<PdfRenderErrorPayload, "metric" | "to_route">,
+) {
+  if (typeof window === "undefined") return;
+  reportWebTelemetry({
+    ...payload,
+    metric: "pdf_render_error",
+    to_route: "reader",
   });
 }
 

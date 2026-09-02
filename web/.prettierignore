@@ -5,4 +5,5 @@ playwright-report/
 storybook-static/
 test-results/
 public/mockServiceWorker.js
+public/pdfjs/wasm/
 src/lib/api/generated/

@@ -12,6 +12,7 @@ export default defineConfig([
     ".next-dev/**",
     "storybook-static/**",
     "public/mockServiceWorker.js",
+    "public/pdfjs/wasm/**",
     "src/design-system/generated/**",
     "src/lib/api/generated/**",
   ]),

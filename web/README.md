@@ -27,6 +27,10 @@ pnpm design:check        # token parity, adapters, styling and Storybook contrac
 pnpm docs:check          # docs links plus MCP snapshot/page fact alignment
 ```
 
+`pnpm dev` generates local PDF.js codec assets, while `pnpm build` generates
+and validates release-scoped assets before Next.js builds. `pnpm start` checks
+that the generated assets are present before starting the standalone server.
+
 Authentication modes are available at `/login`, `?mode=register`,
 `?mode=forgot`, `?mode=verify&token=...`, and `?mode=reset&token=...`. Review
 the isolated states under `Features/Authentication/Lifecycle` in Storybook.

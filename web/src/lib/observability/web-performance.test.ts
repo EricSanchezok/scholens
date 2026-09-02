@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 
 import {
   performanceRouteGroup,
+  reportPdfRenderError,
   usePrimaryContentReady,
 } from "./web-performance";
 
@@ -64,5 +65,33 @@ describe("performanceRouteGroup", () => {
       "project-detail",
       "project-detail",
     ]);
+  });
+
+  it("reports a low-cardinality PDF render error", async () => {
+    const bodies: string[] = [];
+    const fetch = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+      bodies.push(String(request?.body));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+
+    reportPdfRenderError({
+      decoder: "jbig2",
+      error_kind: "asset_unavailable",
+      surface: "document",
+    });
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(bodies[0]!)).toMatchObject({
+      decoder: "jbig2",
+      error_kind: "asset_unavailable",
+      metric: "pdf_render_error",
+      surface: "document",
+      to_route: "reader",
+    });
   });
 });

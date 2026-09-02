@@ -32,9 +32,12 @@ export async function POST(request: Request) {
   const parsed = webTelemetryEventSchema.safeParse(body);
   if (!parsed.success) return noStore(400);
 
-  const eventName = CONVERSATION_METRICS.has(parsed.data.metric)
-    ? "conversation_performance"
-    : "web_performance";
+  const eventName =
+    parsed.data.metric === "pdf_render_error"
+      ? "pdf_render"
+      : CONVERSATION_METRICS.has(parsed.data.metric)
+        ? "conversation_performance"
+        : "web_performance";
 
   const ray = request.headers.get("cf-ray") ?? "";
   const country = request.headers.get("cf-ipcountry")?.toUpperCase();

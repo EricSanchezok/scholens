@@ -95,4 +95,36 @@ describe("web performance telemetry route", () => {
     expect(logged).not.toHaveProperty("conversation_id");
     expect(logged).not.toHaveProperty("content");
   });
+
+  it("accepts a content-free PDF render error", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const response = await POST(
+      request({
+        decoder: "jbig2",
+        device_class: "desktop",
+        effective_type: "4g",
+        error_kind: "asset_unavailable",
+        event_id: "fda50c6e-0c2f-46aa-8e3f-4dbdf4a7f11a",
+        metric: "pdf_render_error",
+        release: "development",
+        surface: "document",
+        to_route: "reader",
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    const logged = JSON.parse(info.mock.calls[0]![0] as string) as Record<
+      string,
+      unknown
+    >;
+    expect(logged).toMatchObject({
+      decoder: "jbig2",
+      error_kind: "asset_unavailable",
+      event: "pdf_render",
+      metric: "pdf_render_error",
+      surface: "document",
+    });
+    expect(logged).not.toHaveProperty("document_id");
+    expect(logged).not.toHaveProperty("url");
+  });
 });

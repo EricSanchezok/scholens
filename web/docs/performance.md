@@ -40,14 +40,20 @@ milestone at most once for one submission.
 
 The strict union contract accepts only a release, metric, duration/value,
 coarse route group, device class, Network Information category, Save-Data flag,
-rating, random event ID, and optional direct-or-resume stream kind. It never
-accepts a user/account/Conversation identifier, content, title, query string,
-raw URL, or IP address. The receiver adds only `CN`/`non-CN` and the Cloudflare
-colo, writes structured `web_performance` or `conversation_performance` events,
-and returns `204` without persistence in application state.
+rating, random event ID, and optional direct-or-resume stream kind. PDF failures
+use the separate `pdf_render_error` event with an allowlisted error kind,
+surface, and optional decoder (`jbig2`, `openjpeg`, `qcms`, or `unknown`). It
+never accepts a user/account/Conversation/document identifier, content, title,
+query string, raw URL, signed URL, raw error text, or IP address. The receiver
+adds only `CN`/`non-CN` and the Cloudflare colo, writes structured
+`web_performance`, `conversation_performance`, or `pdf_render` events, and
+returns `204` without persistence in application state.
 
 The production CloudWatch dashboard calculates p75, p95, and sample counts by
-metric, route, device, and country group from the Web log group. Mainland CDN
+metric, route, device, and country group from the Web log group. PDF render
+error counts and PDF.js asset 4xx/5xx rates are grouped by release and decoder
+to catch a broken Web image before it becomes a widespread blank-reader
+incident. Mainland CDN
 or acceleration procurement begins only after two consecutive weeks show that
 non-China targets pass while China mobile primary-content p75 is both above
 1.5 seconds and more than twice the non-China value.

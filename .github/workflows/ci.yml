@@ -385,6 +385,8 @@ jobs:
             NEXT_PUBLIC_API_URL=https://scholens.example.invalid
             NEXT_PUBLIC_ACCOUNT_CENTER_URL=https://account.example.invalid
       - name: Verify canonical Web runtime loopback health
+        env:
+          PDFJS_RELEASE_SHA: ${{ steps.image-revision.outputs.sha }}
         run: |
           web_container=$(docker run --detach \
             --env HOSTNAME=ecs-task-hostname \
@@ -407,6 +409,16 @@ jobs:
             docker logs "$web_container"
             exit 1
           fi
+          asset_root="/app/public/pdfjs/wasm/$PDFJS_RELEASE_SHA"
+          docker exec "$web_container" test -s "$asset_root/jbig2.wasm"
+          docker exec "$web_container" test -s "$asset_root/openjpeg.wasm"
+          docker exec "$web_container" test -s "$asset_root/qcms_bg.wasm"
+          docker exec "$web_container" test -s "$asset_root/jbig2_nowasm_fallback.js"
+          docker exec "$web_container" test -s "$asset_root/openjpeg_nowasm_fallback.js"
+          docker exec "$web_container" sh -c \
+            "wget -q -O - http://127.0.0.1:3000/pdfjs/wasm/$PDFJS_RELEASE_SHA/manifest.json | grep -q 'pdfjs_version'"
+          docker exec "$web_container" sh -c \
+            "wget -q -O /tmp/jbig2.wasm http://127.0.0.1:3000/pdfjs/wasm/$PDFJS_RELEASE_SHA/jbig2.wasm && test \"\$(od -An -tx1 -N4 /tmp/jbig2.wasm | tr -d ' ')\" = 0061736d"
       - name: Verify independent migrations with least-privilege roles
         env:
           PGPASSWORD: migration-test-password
