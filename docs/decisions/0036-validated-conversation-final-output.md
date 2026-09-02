@@ -1,6 +1,6 @@
 # 0036 — Validated Conversation final output
 
-Status: Accepted
+Status: Superseded by [ADR 0044](./0044-text-terminal-conversation-harness.md)
 Date: 2026-08-22
 Owners: Scholens
 Supersedes in part: [ADR 0008](./0008-single-conversation-agent.md)

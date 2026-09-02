@@ -129,25 +129,25 @@ The stream accepts `start`, the stable-ID
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`. Direct requests opt into candidates by advertising
+arrive as bounded `progress`; ordinary text with no tool call is terminal. Direct
+requests opt into candidates by advertising
 `application/vnd.scholens.conversation-events` in `Accept`, and the additive
-`/events/candidates` resume subscription returns sanitized partial `final_answer`
-arguments through
+`/events/candidates` resume subscription returns sanitized terminal text through
 `assistant_candidate_start`, `assistant_candidate_delta`, and
-`assistant_candidate_reset` while the structured answer is still arriving. A
-bounded suffix and all private citation markers stay server-side, and a model
-validation retry resets the candidate before replacement text appears. Clients
+`assistant_candidate_reset`. Candidate projection no longer depends on a
+model-visible finalization tool or JSON envelope. A bounded suffix and all
+private citation markers stay server-side. Clients
 do not fall back to the original `/events` route: an incompatible deployment is
 surfaced and retried instead of silently changing an active answer's event
 contract. All runtime responses retain the standard `text/event-stream`
 Content-Type so browser-facing proxies flush candidate events as SSE. A `final`
-item completes only after structured answer validation.
+item completes after ordinary text and citation sanitization.
 `response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose. A
 sanitized answer candidate renders only in the main answer lane while it is
-streaming; it is replaced by the canonical validated item on completion and is
-cleared before a validation retry. Candidate text never becomes a Worklog row,
+streaming; it is replaced by the canonical published item on completion.
+Candidate text never becomes a Worklog row,
 enables answer actions, or enters persistence. Progress and activity share one
 sequence and become an ordered worklog. The final answer remains outside that
 trace and is always visible.

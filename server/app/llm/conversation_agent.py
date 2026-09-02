@@ -26,7 +26,11 @@ from app.llm.grounded_answer import (
     GroundedAnswerMetrics,
     GroundedAnswerStreamParser,
     grounded_citation_instructions,
-    inspect_grounded_answer,
+)
+from app.llm.conversation_harness import (
+    AnswerPublicationPolicy,
+    ConversationStepClassifier,
+    ConversationStepRole,
 )
 from app.llm.pydantic_models import build_chat_model, profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
@@ -76,7 +80,7 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
-from app.shared.domain import AppError, JsonValue
+from app.shared.domain import AppError, FailureKind, JsonValue
 from app.shared.domain.enums import ConversationScopeType
 from app.tooling import (
     DocumentSourceCandidate,
@@ -88,7 +92,7 @@ from app.tooling import (
 )
 from app.tooling.source_extraction import extract_external_sources
 from app.tooling.workspace import CONVERSATION_TOOL_PROFILE
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import TypeAdapter
 from pydantic_ai import (
     Agent,
     AgentRun,
@@ -103,7 +107,6 @@ from pydantic_ai import (
     TextPart,
     TextPartDelta,
     Tool,
-    ToolOutput,
     UsageLimits,
 )
 from pydantic_ai.messages import (
@@ -124,7 +127,6 @@ _MAX_AGENT_REQUESTS = 32
 _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
-_FINAL_OUTPUT_TOOL_NAME = "final_answer"
 _VISIBLE_CITATION_LABEL = re.compile(
     r"\[A?\d+(?:\s*,\s*A?\d+)*\]",
     re.IGNORECASE,
@@ -168,6 +170,16 @@ _SCOPE_GRAVITY_NOTE = (
     "broaden or narrow freely when the request needs it."
 )
 _MAX_INSTRUCTION_CONNECTOR_NAMES = 32
+
+
+def _conversation_protocol_error(reason: str) -> AppError:
+    return AppError(
+        code="llm_provider_response_invalid",
+        message="The model provider returned an invalid response.",
+        kind=FailureKind.DEPENDENCY_FAILURE,
+        details={"stage": "conversation_agent", "reason": reason},
+        retryable=False,
+    )
 
 
 def _connector_capability_summary(
@@ -300,45 +312,11 @@ class _ConversationAgentDependencies:
     reported_source_keys: set[int] = field(default_factory=set)
     retrieved_source_keys: set[int] = field(default_factory=set)
     validation_reasons: list[str] = field(default_factory=list)
-    citation_retry_count: int = 0
-    validated_final_answer: GroundedAnswerInspection | None = None
     last_sequence: int = 0
 
     def allocate_sequence(self) -> int:
         self.last_sequence += 1
         return self.last_sequence
-
-
-class FinalAnswer(BaseModel):
-    """Validated model output accepted as the user-visible final answer."""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    answer: str = Field(
-        min_length=1,
-        description=(
-            "The complete self-contained answer for the user. Do not include planning, "
-            "hidden reasoning, tool protocol instructions, or a promise to answer later."
-        ),
-    )
-    attributions: list["FinalAnswerAttribution"] = Field(
-        default_factory=list,
-        max_length=32,
-        description=(
-            "Optional structured claim attributions. The server resolves quote "
-            "offsets and silently drops unknown or ambiguous entries."
-        ),
-    )
-
-
-class FinalAnswerAttribution(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    quote: str = Field(min_length=1, max_length=4_000)
-    source_keys: list[int] = Field(min_length=1, max_length=16)
-
-
-_FINAL_ANSWER_ADAPTER = TypeAdapter(FinalAnswer)
 
 
 @dataclass(slots=True)
@@ -355,24 +333,19 @@ class _StreamedAssistantItem:
 
 
 @dataclass(slots=True)
-class _FinalAnswerCandidate:
+class _AnswerCandidate:
     item_id: str | None = None
     sequence: int | None = None
     published_content: str = ""
     started: bool = False
-    attempt_started: bool = False
-    reset_for_retry: bool = False
-    suppressed: bool = False
-    packet: AnswerPacket | None = None
-    parser: GroundedAnswerStreamParser | None = None
-    raw_content: str = ""
-    visible_content: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class _ConsumedModelNode:
     next_node: Any
     progress_item: _StreamedAssistantItem | None
+    terminal_text: str | None = None
+    terminal_chunks: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -417,6 +390,8 @@ class ScholensConversationAgent:
         self._operation_factory = operation_factory
         self._clock = clock
         self._model_factory = model_factory or build_chat_model
+        self._step_classifier = ConversationStepClassifier()
+        self._answer_publication = AnswerPublicationPolicy()
 
     async def stream(
         self,
@@ -505,115 +480,18 @@ class ScholensConversationAgent:
         tools = self._tools(deps)
         profile = profile_for_reasoning(request.reasoning_level)
         model = self._model_factory(request.reasoning_level)
-        agent: Agent[_ConversationAgentDependencies, FinalAnswer] = Agent(
+        agent: Agent[_ConversationAgentDependencies, str] = Agent(
             model,
-            output_type=ToolOutput(
-                FinalAnswer,
-                name=_FINAL_OUTPUT_TOOL_NAME,
-                description="Submit the complete user-visible answer and end the run.",
-                max_retries=2,
-            ),
+            output_type=str,
             deps_type=_ConversationAgentDependencies,
             tools=tools,
             instructions=instructions,
             end_strategy="exhaustive",
+            # Retries are only for tool argument validation raised by our tool
+            # boundary. Plain text terminal answers have no output validator and
+            # therefore cannot enter the old final-answer retry loop.
             retries=2,
         )
-
-        soft_citation_retries = 0
-        citation_normalizer = CitationNormalizer(provider=profile.provider)
-
-        @agent.output_validator
-        def validate_final_answer(
-            ctx: RunContext[_ConversationAgentDependencies],
-            output: FinalAnswer,
-        ) -> FinalAnswer:
-            nonlocal soft_citation_retries
-            ctx.deps.validated_final_answer = None
-
-            def retry(reason: str, message: str) -> None:
-                ctx.deps.validation_reasons.append(reason)
-                ctx.deps.citation_retry_count += 1
-                add_counter(
-                    "scholens.conversation.final_answer.validation_retries",
-                    attributes={
-                        "reason": reason,
-                        "scope": ctx.deps.conversation_scope.scope_type.value,
-                        "provider": profile.provider,
-                        "model_profile": profile.name.value,
-                    },
-                )
-                raise ModelRetry(message)
-
-            if _contains_private_output_protocol(output.answer):
-                retry(
-                    "private_protocol",
-                    "Submit only the self-contained answer for the user. Do not repeat "
-                    "private citation or tool protocol instructions.",
-                )
-            packet = self._answer_packet(ctx.deps)
-            inspection = citation_normalizer.normalize(
-                output.answer,
-                packet.sources,
-                nonce=nonce,
-                attributions=output.attributions,
-            ).inspection
-            if not inspection.visible_content.strip():
-                retry(
-                    "empty_visible_answer",
-                    "The submitted answer has no user-visible content after private "
-                    "citation markers are removed. Submit the complete answer.",
-                )
-            soft_issue: tuple[str, str] | None = None
-            if inspection.metrics.invalid_source_keys:
-                soft_issue = (
-                    "invalid_source_keys",
-                    "One or more private citation markers used source keys that were "
-                    "not supplied by the server. Submit the complete answer again and "
-                    "cite only supplied source_keys.",
-                )
-            elif inspection.metrics.protocol_errors:
-                soft_issue = (
-                    "citation_protocol",
-                    "One or more private citation markers were malformed or could not "
-                    "be attached to a visible passage. Submit the complete answer again "
-                    "with one valid marker after each supported passage.",
-                )
-            elif packet.sources and _VISIBLE_CITATION_LABEL.search(
-                inspection.visible_content
-            ):
-                soft_issue = (
-                    "visible_citation_labels",
-                    "Visible citation labels such as [A1] are not supported. Remove "
-                    "them and attach private SCHOLENS_CITE markers to the supported "
-                    "passages so the product can render real source links.",
-                )
-            elif (
-                ctx.deps.retrieved_source_keys
-                and ctx.deps.retrieved_source_keys.isdisjoint(
-                    inspection.cited_source_keys
-                )
-            ):
-                soft_issue = (
-                    "missing_references",
-                    "Source-backed tools returned validated source_keys, but the final "
-                    "answer cited none of those keys. Add private SCHOLENS_CITE markers "
-                    "after the passages they support. Do not show visible labels such "
-                    "as [A1], Markdown footnotes, or a bibliography.",
-                )
-            if soft_issue is not None:
-                reason, message = soft_issue
-                if soft_citation_retries < 2:
-                    soft_citation_retries += 1
-                    retry(reason, message)
-                # The repair budget is exhausted: retain safe prose and publish
-                # only annotations that survived server-side normalization.
-                cleaned = _VISIBLE_CITATION_LABEL.sub(
-                    "", inspection.visible_content
-                ).strip()
-                inspection = replace(inspection, visible_content=cleaned)
-            ctx.deps.validated_final_answer = inspection
-            return output
 
         result_seen = False
         try:
@@ -644,7 +522,9 @@ class ScholensConversationAgent:
                 "scholens.conversation.citation.hard_failure",
                 attributes={
                     "scope": conversation_scope.scope_type.value,
-                    "reason": classified.code,
+                    "reason": str(
+                        (classified.details or {}).get("reason", classified.code)
+                    ),
                     "provider": profile.provider,
                     "model_profile": profile.name.value,
                 },
@@ -663,7 +543,7 @@ class ScholensConversationAgent:
     async def _run_agent(
         self,
         *,
-        agent: Agent[_ConversationAgentDependencies, FinalAnswer],
+        agent: Agent[_ConversationAgentDependencies, str],
         request: ConversationTurnCreateRequest,
         deps: _ConversationAgentDependencies,
         history: Sequence[object],
@@ -683,21 +563,9 @@ class ScholensConversationAgent:
                 ),
             ) as agent_run:
                 node = agent_run.next_node
-                final_candidate = _FinalAnswerCandidate()
+                final_candidate = _AnswerCandidate()
                 while not isinstance(node, End):
                     if isinstance(node, ModelRequestNode):
-                        if (
-                            final_candidate.attempt_started
-                            and final_candidate.started
-                            and final_candidate.item_id is not None
-                        ):
-                            yield ConversationStreamAssistantCandidateResetEvent(
-                                response_id=request.response_id,
-                                item_id=final_candidate.item_id,
-                            )
-                            final_candidate.published_content = ""
-                            final_candidate.reset_for_retry = True
-                        final_candidate.attempt_started = False
                         consumed: _ConsumedModelNode | None = None
                         async for model_event in self._consume_model_node(
                             node=node,
@@ -706,7 +574,6 @@ class ScholensConversationAgent:
                             turn_id=request.turn_id,
                             response_id=request.response_id,
                             nonce=nonce,
-                            final_candidate=final_candidate,
                         ):
                             if isinstance(model_event, _ConsumedModelNode):
                                 consumed = model_event
@@ -717,6 +584,17 @@ class ScholensConversationAgent:
                                 "Conversation model node did not complete"
                             )
                         next_node = consumed.next_node
+                        if consumed.terminal_text is not None:
+                            for candidate_event in self._terminal_candidate_events(
+                                candidate=final_candidate,
+                                raw_content=consumed.terminal_text,
+                                chunks=consumed.terminal_chunks,
+                                deps=deps,
+                                turn_id=request.turn_id,
+                                response_id=request.response_id,
+                                nonce=nonce,
+                            ):
+                                yield candidate_event
                         item = consumed.progress_item
                         if item is not None:
                             progress = self._progress_entry(item)
@@ -755,24 +633,21 @@ class ScholensConversationAgent:
 
                 result = agent_run.result
                 if result is None:
-                    raise RuntimeError("Conversation agent ended without a result")
-                inspection = deps.validated_final_answer
-                if inspection is None or inspection.raw_content != result.output.answer:
-                    raise RuntimeError(
-                        "Conversation agent ended without its validated final answer"
-                    )
-                final_item = self._assistant_item_from_inspection(
+                    raise _conversation_protocol_error("missing_result")
+                if not isinstance(result.output, str):
+                    raise _conversation_protocol_error("non_text_result")
+                final_item = self._assistant_item_from_text(
                     deps=deps,
                     turn_id=request.turn_id,
-                    inspection=inspection,
-                    sequence=final_candidate.sequence,
+                    raw_content=result.output,
+                    nonce=nonce,
                     profile=profile,
                     citation_normalizer=citation_normalizer,
+                    posthoc=True,
+                    sequence=final_candidate.sequence,
                 )
                 if final_item is None:
-                    raise RuntimeError(
-                        "Conversation agent produced no visible final answer"
-                    )
+                    raise _conversation_protocol_error("empty_visible_answer")
                 yield ConversationStreamAssistantItemStartEvent(
                     response_id=request.response_id,
                     item_id=final_item.id,
@@ -872,17 +747,7 @@ class ScholensConversationAgent:
                     )
                 if summary is not None and summary.status in {"partial", "unavailable"}:
                     add_counter(
-                        "scholens.conversation.citation.repair.exhausted",
-                        attributes={
-                            "scope": deps.conversation_scope.scope_type.value,
-                            "reason": summary.status,
-                            "provider": profile.provider,
-                            "model_profile": profile.name.value,
-                        },
-                    )
-                if deps.citation_retry_count and summary is not None:
-                    add_counter(
-                        "scholens.conversation.citation.repair.success",
+                        "scholens.conversation.citation.soft_failure",
                         attributes={
                             "scope": deps.conversation_scope.scope_type.value,
                             "reason": summary.status,
@@ -894,7 +759,7 @@ class ScholensConversationAgent:
                     trace=trace,
                     artifacts=self._artifacts(deps.agent_state),
                     validation_reasons=tuple(deps.validation_reasons),
-                    retry_count=deps.citation_retry_count,
+                    retry_count=0,
                 )
         finally:
             if not usage_settled:
@@ -918,13 +783,12 @@ class ScholensConversationAgent:
     async def _consume_model_node(
         self,
         *,
-        node: ModelRequestNode[_ConversationAgentDependencies, FinalAnswer],
-        agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
+        node: ModelRequestNode[_ConversationAgentDependencies, str],
+        agent_run: AgentRun[_ConversationAgentDependencies, str],
         deps: _ConversationAgentDependencies,
         turn_id: uuid.UUID,
         response_id: uuid.UUID,
         nonce: str,
-        final_candidate: _FinalAnswerCandidate,
     ) -> AsyncGenerator[ConversationAgentStreamEvent | _ConsumedModelNode, None]:
         text_parts: list[str] = []
         tool_parts: dict[int, ToolCallPart] = {}
@@ -957,29 +821,35 @@ class ScholensConversationAgent:
                 else:
                     continue
 
-                partial_answer = self._partial_final_answer(tool_parts.get(event.index))
-                if partial_answer is None:
-                    continue
-                for candidate_event in self._candidate_events(
-                    candidate=final_candidate,
-                    answer=partial_answer.answer,
-                    deps=deps,
-                    turn_id=turn_id,
-                    response_id=response_id,
-                    nonce=nonce,
-                ):
-                    yield candidate_event
-
         next_node = await agent_run.next(node)
-        if not text_parts or not isinstance(next_node, CallToolsNode):
-            yield _ConsumedModelNode(next_node=next_node, progress_item=None)
+        step = self._step_classifier.classify(
+            next_node=next_node,
+            text_chunks=text_parts,
+            tool_parts=tuple(tool_parts.values()),
+            finish_reason=getattr(
+                getattr(next_node, "model_response", None), "finish_reason", None
+            ),
+        )
+        add_counter(
+            "scholens.conversation.agent.step.completed",
+            attributes={
+                "scope": deps.conversation_scope.scope_type.value,
+                "role": step.role.value,
+                "tool_count": len(step.tool_names),
+                "finish_reason": step.finish_reason or "unknown",
+            },
+        )
+        if step.role == ConversationStepRole.PROTOCOL_ERROR:
+            raise _conversation_protocol_error("unexpected_output_tool")
+        if step.role == ConversationStepRole.TERMINAL:
+            yield _ConsumedModelNode(
+                next_node=next_node,
+                progress_item=None,
+                terminal_text=step.text,
+                terminal_chunks=step.text_chunks,
+            )
             return
-        tool_names = {
-            part.tool_name
-            for part in next_node.model_response.parts
-            if isinstance(part, ToolCallPart)
-        }
-        if not tool_names or _FINAL_OUTPUT_TOOL_NAME in tool_names:
+        if step.role in {ConversationStepRole.EMPTY}:
             yield _ConsumedModelNode(next_node=next_node, progress_item=None)
             return
         yield _ConsumedModelNode(
@@ -992,27 +862,12 @@ class ScholensConversationAgent:
             ),
         )
 
-    @staticmethod
-    def _partial_final_answer(part: ToolCallPart | None) -> FinalAnswer | None:
-        if part is None or part.tool_name != _FINAL_OUTPUT_TOOL_NAME:
-            return None
-        try:
-            if isinstance(part.args, dict):
-                return FinalAnswer.model_validate(part.args)
-            if not isinstance(part.args, str):
-                return None
-            return _FINAL_ANSWER_ADAPTER.validate_json(
-                part.args,
-                experimental_allow_partial="trailing-strings",
-            )
-        except ValueError:
-            return None
-
-    def _candidate_events(
+    def _terminal_candidate_events(
         self,
         *,
-        candidate: _FinalAnswerCandidate,
-        answer: str,
+        candidate: _AnswerCandidate,
+        raw_content: str,
+        chunks: Sequence[str],
         deps: _ConversationAgentDependencies,
         turn_id: uuid.UUID,
         response_id: uuid.UUID,
@@ -1027,68 +882,31 @@ class ScholensConversationAgent:
             | ConversationStreamAssistantCandidateDeltaEvent
             | ConversationStreamAssistantCandidateResetEvent
         ] = []
-        if not candidate.attempt_started:
-            candidate.attempt_started = True
-            candidate.suppressed = False
-            candidate.published_content = ""
-            candidate.packet = self._answer_packet(deps)
-            candidate.parser = GroundedAnswerStreamParser(
-                candidate.packet.sources,
-                nonce=nonce,
+        if _contains_private_output_protocol(raw_content):
+            raise _conversation_protocol_error("private_protocol_prose")
+        packet = self._answer_packet(deps)
+        parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
+        visible_content = ""
+        for chunk in chunks or (raw_content,):
+            visible_content += parser.feed(chunk)
+        visible_content += parser.finish()
+        if not visible_content.strip():
+            return events
+        candidate.published_content = ""
+        if candidate.sequence is None:
+            candidate.sequence = deps.allocate_sequence()
+            candidate.item_id = self._assistant_item_id(turn_id, candidate.sequence)
+        if candidate.item_id is None or candidate.sequence is None:
+            raise RuntimeError("Answer candidate identity is incomplete")
+        candidate.started = True
+        events.append(
+            ConversationStreamAssistantCandidateStartEvent(
+                response_id=response_id,
+                item_id=candidate.item_id,
+                sequence=candidate.sequence,
             )
-            candidate.raw_content = ""
-            candidate.visible_content = ""
-            if candidate.sequence is None:
-                candidate.sequence = deps.allocate_sequence()
-                candidate.item_id = self._assistant_item_id(turn_id, candidate.sequence)
-            if candidate.item_id is None or candidate.sequence is None:
-                raise RuntimeError("Final answer candidate identity is incomplete")
-            if candidate.started:
-                if candidate.reset_for_retry:
-                    candidate.reset_for_retry = False
-                else:
-                    events.append(
-                        ConversationStreamAssistantCandidateResetEvent(
-                            response_id=response_id,
-                            item_id=candidate.item_id,
-                        )
-                    )
-            else:
-                candidate.started = True
-                events.append(
-                    ConversationStreamAssistantCandidateStartEvent(
-                        response_id=response_id,
-                        item_id=candidate.item_id,
-                        sequence=candidate.sequence,
-                    )
-                )
+        )
 
-        parser = candidate.parser
-        if parser is None:
-            raise RuntimeError("Final answer candidate parser is unavailable")
-        if answer.startswith(candidate.raw_content):
-            candidate.visible_content += parser.feed(
-                answer[len(candidate.raw_content) :]
-            )
-        else:
-            packet = candidate.packet
-            if packet is None:
-                raise RuntimeError("Final answer candidate packet is unavailable")
-            candidate.parser = GroundedAnswerStreamParser(
-                packet.sources,
-                nonce=nonce,
-            )
-            candidate.visible_content = candidate.parser.feed(answer)
-            if candidate.published_content:
-                events.append(
-                    ConversationStreamAssistantCandidateResetEvent(
-                        response_id=response_id,
-                        item_id=cast(str, candidate.item_id),
-                    )
-                )
-                candidate.published_content = ""
-        candidate.raw_content = answer
-        visible_content = candidate.visible_content
         visible_normalized = visible_content.casefold()
         unsafe_candidate = bool(
             _VISIBLE_CITATION_LABEL.search(visible_content)
@@ -1103,17 +921,7 @@ class ScholensConversationAgent:
             )
         )
         if unsafe_candidate:
-            if not candidate.suppressed and candidate.published_content:
-                events.append(
-                    ConversationStreamAssistantCandidateResetEvent(
-                        response_id=response_id,
-                        item_id=cast(str, candidate.item_id),
-                    )
-                )
             candidate.published_content = ""
-            candidate.suppressed = True
-            return events
-        if candidate.suppressed:
             return events
 
         publishable_length = len(visible_content) - _unsafe_candidate_suffix_length(
@@ -1124,7 +932,7 @@ class ScholensConversationAgent:
             events.append(
                 ConversationStreamAssistantCandidateResetEvent(
                     response_id=response_id,
-                    item_id=cast(str, candidate.item_id),
+                    item_id=candidate.item_id,
                 )
             )
             candidate.published_content = ""
@@ -1133,7 +941,7 @@ class ScholensConversationAgent:
             events.append(
                 ConversationStreamAssistantCandidateDeltaEvent(
                     response_id=response_id,
-                    item_id=cast(str, candidate.item_id),
+                    item_id=candidate.item_id,
                     delta=delta,
                 )
             )
@@ -1143,8 +951,8 @@ class ScholensConversationAgent:
     async def _stream_tool_activities(
         self,
         *,
-        node: CallToolsNode[_ConversationAgentDependencies, FinalAnswer],
-        agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
+        node: CallToolsNode[_ConversationAgentDependencies, str],
+        agent_run: AgentRun[_ConversationAgentDependencies, str],
         deps: _ConversationAgentDependencies,
         response_id: uuid.UUID,
     ) -> AsyncGenerator[ConversationStreamActivityEvent, None]:
@@ -1154,17 +962,13 @@ class ScholensConversationAgent:
             return
         async with node.stream(agent_run.ctx) as tool_events:
             async for tool_event in tool_events:
-                if isinstance(tool_event, FunctionToolCallEvent) and (
-                    tool_event.part.tool_name != _FINAL_OUTPUT_TOOL_NAME
-                ):
+                if isinstance(tool_event, FunctionToolCallEvent):
                     yield ConversationStreamActivityEvent(
                         response_id=response_id,
                         activity=self._running_activity(deps, tool_event),
                     )
                     continue
-                if not isinstance(tool_event, FunctionToolResultEvent) or (
-                    tool_event.part.tool_name == _FINAL_OUTPUT_TOOL_NAME
-                ):
+                if not isinstance(tool_event, FunctionToolResultEvent):
                     continue
                 call_id = getattr(tool_event.part, "tool_call_id", None)
                 updated_activity = (
@@ -1708,7 +1512,8 @@ Write at most one short progress sentence when you begin research, change
 strategy, discover that evidence is insufficient, or enter synthesis. Do not
 narrate every tool call, repeat that you will continue searching, or expose
 hidden reasoning. After the tools are complete, provide one self-contained
-final answer.
+final answer as ordinary text. There is no finalization tool and no structured
+output envelope.
 
 Respond in {language} unless the user clearly asks for another language.
 The user's current local date and time is {local_now} in {request.time_zone}.
@@ -1849,19 +1654,30 @@ Initial server-validated answer material:
         turn_id: uuid.UUID,
         raw_content: str,
         nonce: str,
+        posthoc: bool = False,
+        profile: Any | None = None,
+        citation_normalizer: CitationNormalizer | None = None,
+        sequence: int | None = None,
     ) -> _StreamedAssistantItem | None:
+        if _contains_private_output_protocol(raw_content):
+            raise _conversation_protocol_error("private_protocol_prose")
         packet = self._answer_packet(deps)
-        inspection = inspect_grounded_answer(
+        inspection = self._answer_publication.publish(
             raw_content,
-            packet.sources,
+            packet,
             nonce=nonce,
+            normalizer=(citation_normalizer if posthoc else None),
+            private_protocol_detector=_contains_private_output_protocol,
         )
         return self._assistant_item_from_inspection(
             deps=deps,
             turn_id=turn_id,
             inspection=inspection,
             packet=packet,
-            posthoc=False,
+            posthoc=posthoc,
+            profile=profile,
+            citation_normalizer=citation_normalizer,
+            sequence=sequence,
         )
 
     def _assistant_item_from_inspection(

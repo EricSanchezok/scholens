@@ -23,17 +23,15 @@ def grounded_citation_instructions(nonce: str) -> str:
     """Instructions that remain valid while an agent discovers sources."""
 
     return (
-        "Tool results may include server-validated integer source_keys. Prefer the "
-        "structured attributions field: quote the exact visible passage and provide "
-        "every supplied key that supports it. For legacy compatibility, when a "
+        "Tool results may include server-validated integer source_keys. When a "
         "factual passage relies on those materials, append exactly one private "
         f"[[SCHOLENS_CITE:{nonce}:1]] marker after the passage, replacing 1 with "
         "every supplied key that supports it. Never cite a key absent from a tool "
         "result or the initial answer packet. Do not invent visible citation labels "
         "such as [A1] or [1], Markdown footnotes, a bibliography, URLs, or document "
-        "IDs; the product renders citations from structured attributions or private "
-        "markers. Never repeat the private markers as prose. If no validated keys "
-        "are supplied, do not emit a citation attribution or marker."
+        "IDs; the product renders citations from private markers. Never repeat the "
+        "private markers as prose. If no validated keys are supplied, do not emit a "
+        "citation marker."
     )
 
 

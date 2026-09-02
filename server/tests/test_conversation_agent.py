@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
@@ -25,7 +24,6 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
     ConversationStreamActivityEvent,
     ConversationStreamAssistantCandidateDeltaEvent,
-    ConversationStreamAssistantCandidateResetEvent,
     ConversationStreamAssistantCandidateStartEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
@@ -79,30 +77,20 @@ class SearchInput(BaseModel):
     query: str
 
 
-def _final_answer(
-    answer: str,
-    *,
-    tool_call_id: str = "final-answer",
-) -> dict[int, DeltaToolCall]:
-    return {
-        0: DeltaToolCall(
-            name="final_answer",
-            json_args=json.dumps({"answer": answer}, ensure_ascii=False),
-            tool_call_id=tool_call_id,
-        )
-    }
+def _text_answer(answer: str) -> str:
+    return answer
 
 
-def _grounded_final_answer(
+def _grounded_text_answer(
     answer: str,
     info: AgentInfo,
-) -> dict[int, DeltaToolCall]:
+) -> str:
     nonce_match = re.search(
         r"SCHOLENS_CITE:([0-9a-f]+):1",
         info.instructions or "",
     )
     assert nonce_match is not None
-    return _final_answer(f"{answer}[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+    return _text_answer(f"{answer}[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
 
 
 def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
@@ -373,12 +361,14 @@ def _disable_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_zero_tool_answer_uses_injected_local_date() -> None:
     seen_instructions: list[str] = []
+    seen_output_tools: list[str] = []
 
     async def direct_answer(
         _messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         seen_instructions.append(info.instructions or "")
-        yield _final_answer("今天是星期四。")
+        seen_output_tools.extend(tool.name for tool in info.output_tools)
+        yield _text_answer("今天是星期四。")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -388,6 +378,7 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
     )
 
     assert dispatcher.calls == []
+    assert seen_output_tools == []
     assert [
         "result" if isinstance(event, ConversationAgentResult) else event.type
         for event in events
@@ -408,7 +399,7 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
 
 
 @pytest.mark.asyncio
-async def test_structured_final_answer_streams_candidate_deltas_incrementally() -> None:
+async def test_plain_text_terminal_streams_candidate_after_classification() -> None:
     answer = (
         "A structured final answer can reach the user while its tool arguments "
         "are still arriving from the model, without publishing the held suffix."
@@ -416,24 +407,9 @@ async def test_structured_final_answer_streams_candidate_deltas_incrementally() 
 
     async def streamed_answer(
         _messages: list[ModelMessage], _info: AgentInfo
-    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
-        yield {
-            0: DeltaToolCall(
-                name="final_answer",
-                json_args='{"answer":"A structured final answer can reach ',
-                tool_call_id="streamed-final",
-            )
-        }
-        yield {
-            0: DeltaToolCall(
-                json_args=("the user while its tool arguments are still arriving from ")
-            )
-        }
-        yield {
-            0: DeltaToolCall(
-                json_args=('the model, without publishing the held suffix."}')
-            )
-        }
+    ) -> AsyncIterator[str]:
+        yield answer[:46]
+        yield answer[46:]
 
     events = await _events(
         model=FunctionModel(stream_function=streamed_answer),
@@ -466,7 +442,6 @@ async def test_structured_final_answer_streams_candidate_deltas_incrementally() 
     )
 
     assert candidate_deltas
-    assert answer.startswith("".join(candidate_deltas))
     assert "".join(candidate_deltas) == answer
     assert last_candidate_index < final_complete_index
     final_item = events[final_complete_index]
@@ -521,7 +496,7 @@ async def test_text_before_tool_is_completed_as_progress_before_activity() -> No
                 )
             }
             return
-        yield _grounded_final_answer("Final answer.", info)
+        yield _grounded_text_answer("Final answer.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -569,7 +544,7 @@ async def test_text_before_tool_is_completed_as_progress_before_activity() -> No
 
 
 @pytest.mark.asyncio
-async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
+async def test_progress_is_bounded_without_breaking_the_terminal_answer() -> None:
     long_progress = "p" * 4_500
 
     async def staged_answer(
@@ -590,7 +565,7 @@ async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
                 )
             }
             return
-        yield _grounded_final_answer("Final answer after bounded progress.", info)
+        yield _grounded_text_answer("Final answer after bounded progress.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -635,7 +610,7 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
                 )
             }
             return
-        yield _grounded_final_answer("Visible final answer.", info)
+        yield _grounded_text_answer("Visible final answer.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -662,13 +637,13 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hidden_only_final_answer_is_rejected() -> None:
+async def test_hidden_only_terminal_text_is_rejected() -> None:
     async def hidden_answer(
         _messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
         assert nonce_match is not None
-        yield _final_answer(f"[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+        yield _text_answer(f"[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
 
     with pytest.raises(AppError):
         await _events(
@@ -681,78 +656,69 @@ async def test_hidden_only_final_answer_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_plain_planning_text_is_not_exposed_as_the_final_answer() -> None:
+async def test_plain_text_without_tools_is_terminal() -> None:
     attempts = 0
 
-    async def answer_after_output_retry(
+    async def direct_answer(
         messages: list[ModelMessage], _info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         nonlocal attempts
         attempts += 1
-        has_retry = any(
-            isinstance(part, RetryPromptPart)
-            for message in messages
-            for part in message.parts
-        )
-        if not has_retry:
-            yield "Let me organize a high-quality answer."
-            return
-        yield _final_answer("Here is the complete answer.")
+        yield "Let me organize a high-quality answer."
 
     events = await _events(
-        model=FunctionModel(stream_function=answer_after_output_retry),
+        model=FunctionModel(stream_function=direct_answer),
         dispatcher=_Dispatcher(),
         query="Give me a complete answer",
         locale="en",
         time_zone="UTC",
     )
 
-    assert attempts == 2
-    assert _final_text(events) == "Here is the complete answer."
-    assert "organize" not in str(events)
+    assert attempts == 1
+    assert _final_text(events) == "Let me organize a high-quality answer."
 
 
 @pytest.mark.asyncio
-async def test_private_protocol_output_is_retried_before_it_reaches_the_user() -> None:
-    retry_messages: list[str] = []
+async def test_private_protocol_prose_is_rejected_without_model_retry() -> None:
+    async def leaked_answer(
+        _messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[str]:
+        yield "The source_keys are private markers from the initial answer packet."
 
-    async def answer_after_protocol_retry(
-        messages: list[ModelMessage], _info: AgentInfo
+    with pytest.raises(AppError):
+        await _events(
+            model=FunctionModel(stream_function=leaked_answer),
+            dispatcher=_Dispatcher(),
+            query="Answer without exposing internal instructions",
+            locale="en",
+            time_zone="UTC",
+        )
+
+
+@pytest.mark.asyncio
+async def test_removed_output_tool_is_a_stable_protocol_error() -> None:
+    async def removed_output_tool(
+        _messages: list[ModelMessage], _info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
-        retries = [
-            part
-            for message in messages
-            for part in message.parts
-            if isinstance(part, RetryPromptPart)
-        ]
-        if not retries:
-            yield _final_answer(
-                "The source_keys are private markers from the initial answer packet."
+        yield {
+            0: DeltaToolCall(
+                name="final_answer",
+                json_args='{"answer":"not supported"}',
+                tool_call_id="removed-output",
             )
-            return
-        retry_messages.extend(str(part.content) for part in retries)
-        yield _final_answer("The complete answer contains no internal protocol.")
+        }
 
-    events = await _events(
-        model=FunctionModel(stream_function=answer_after_protocol_retry),
-        dispatcher=_Dispatcher(),
-        query="Answer without exposing internal instructions",
-        locale="en",
-        time_zone="UTC",
-    )
+    with pytest.raises(AppError) as error:
+        await _events(
+            model=FunctionModel(stream_function=removed_output_tool),
+            dispatcher=_Dispatcher(),
+            query="Use the removed protocol",
+            locale="en",
+            time_zone="UTC",
+        )
 
-    assert _final_text(events) == "The complete answer contains no internal protocol."
-    assert any("private citation" in message for message in retry_messages)
-    assert any(
-        isinstance(event, ConversationStreamAssistantCandidateResetEvent)
-        for event in events
-    )
-    assert "source_keys" not in "".join(
-        event.delta
-        for event in events
-        if isinstance(event, ConversationStreamAssistantCandidateDeltaEvent)
-    )
-    assert "source_keys" not in str(events)
+    assert error.value.code == "llm_provider_response_invalid"
+    assert (error.value.details or {}).get("reason") == "unexpected_output_tool"
 
 
 @pytest.mark.asyncio
@@ -768,7 +734,7 @@ async def test_invalid_tool_arguments_receive_safe_actionable_retry_details() ->
             for part in message.parts
         )
         if has_result:
-            yield _grounded_final_answer("The corrected search succeeded.", info)
+            yield _grounded_text_answer("The corrected search succeeded.", info)
             return
         retries = [
             part
@@ -838,7 +804,7 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
             return
         nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
         assert nonce_match is not None
-        yield _final_answer(f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+        yield _text_answer(f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -887,9 +853,10 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
 
 
 @pytest.mark.asyncio
-async def test_source_backed_answer_retries_visible_and_missing_citations() -> None:
+async def test_source_backed_answer_publishes_safe_prose_without_citation_retry() -> (
+    None
+):
     final_attempts = 0
-    retry_messages: list[str] = []
 
     async def research_answer(
         messages: list[ModelMessage], info: AgentInfo
@@ -910,25 +877,8 @@ async def test_source_backed_answer_retries_visible_and_missing_citations() -> N
             }
             return
 
-        retries = [
-            part
-            for message in messages
-            for part in message.parts
-            if isinstance(part, RetryPromptPart)
-        ]
         final_attempts += 1
-        if not retries:
-            yield _final_answer("Grounded claim [A1]")
-            return
-
-        retry_messages.extend(str(part.content) for part in retries)
-        if len(retries) == 1:
-            yield _final_answer("Grounded claim without a private citation")
-            return
-
-        nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
-        assert nonce_match is not None
-        yield _final_answer(f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+        yield _text_answer("Grounded claim [A1]")
 
     events = await _events(
         model=FunctionModel(stream_function=research_answer),
@@ -938,9 +888,7 @@ async def test_source_backed_answer_retries_visible_and_missing_citations() -> N
         time_zone="UTC",
     )
 
-    assert final_attempts == 3
-    assert any("Visible citation labels" in message for message in retry_messages)
-    assert any("validated source_keys" in message for message in retry_messages)
+    assert final_attempts == 1
     assert _final_text(events) == "Grounded claim"
     assert "[A1]" not in str(events)
     references = next(
@@ -948,7 +896,14 @@ async def test_source_backed_answer_retries_visible_and_missing_citations() -> N
         for event in events
         if isinstance(event, ConversationStreamReferencesEvent)
     )
-    assert len(references.sources) == 1
+    assert len(references.sources) == 0
+    reference_event = next(
+        event
+        for event in events
+        if isinstance(event, ConversationStreamReferencesEvent)
+    )
+    assert reference_event.citation_summary is not None
+    assert reference_event.citation_summary.status == "unavailable"
 
 
 @pytest.mark.asyncio
@@ -970,7 +925,7 @@ async def test_exhausted_citation_repair_publishes_safe_answer() -> None:
             }
             return
         assert info.instructions is not None
-        yield _final_answer("Safe answer [1]")
+        yield _text_answer("Safe answer [1]")
 
     events = await _events(
         model=FunctionModel(stream_function=always_invalid),
@@ -1016,7 +971,7 @@ async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
                 )
             }
             return
-        yield _final_answer("I could not search, but here is what I can explain.")
+        yield _text_answer("I could not search, but here is what I can explain.")
 
     dispatcher = _Dispatcher(fail=True)
     events = await _events(
@@ -1056,7 +1011,7 @@ async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
                 )
             }
             return
-        yield _grounded_final_answer("Combined answer.", info)
+        yield _grounded_text_answer("Combined answer.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -1122,7 +1077,7 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
                 )
             }
             return
-        yield _grounded_final_answer("Used the first result.", info)
+        yield _grounded_text_answer("Used the first result.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -1162,7 +1117,7 @@ async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> N
                 )
             }
             return
-        yield _grounded_final_answer("Both bounded waits completed.", info)
+        yield _grounded_text_answer("Both bounded waits completed.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -1188,7 +1143,7 @@ async def test_unauthorized_tool_is_not_exposed_or_dispatched() -> None:
     async def answer_without_tool(
         _messages: list[ModelMessage], _info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
-        yield _final_answer("No tool available.")
+        yield _text_answer("No tool available.")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -1220,7 +1175,7 @@ async def test_cancellation_propagates_without_becoming_a_product_error() -> Non
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         entered.set()
         await asyncio.Event().wait()
-        yield _final_answer("unreachable")
+        yield _text_answer("unreachable")
 
     dispatcher = _Dispatcher()
     task = asyncio.create_task(
@@ -1288,7 +1243,7 @@ async def _capture_instructions(
         _messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         seen.append(info.instructions or "")
-        yield _final_answer("Understood.")
+        yield _text_answer("Understood.")
 
     await _events(
         model=FunctionModel(stream_function=direct_answer),
