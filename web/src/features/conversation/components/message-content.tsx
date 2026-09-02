@@ -132,8 +132,7 @@ export function MessageContent({
   streaming?: boolean;
 }) {
   const t = useTranslations("Home.conversation");
-  const deferredContent = React.useDeferredValue(content);
-  const visibleContent = streaming ? deferredContent : content;
+  const visibleContent = content;
   const renderedContent = React.useMemo(
     () => annotateMarkdownContent(visibleContent, annotations),
     [annotations, visibleContent],
@@ -184,6 +183,11 @@ export function MessageContent({
     }),
     [onCitationOpen, streaming, t],
   );
+  if (streaming && !annotations?.length) {
+    return (
+      <StreamingMarkdown content={visibleContent} components={components} />
+    );
+  }
   return (
     <AcademicMarkdown
       className="w-full overflow-x-clip text-base leading-7 lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4"
@@ -194,3 +198,57 @@ export function MessageContent({
     </AcademicMarkdown>
   );
 }
+
+function splitStreamingBlocks(content: string): string[] {
+  if (!content) return [];
+  const lines = content.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  let fenced = false;
+  for (const line of lines) {
+    const fence = /^\s*```/.test(line);
+    if (fence) fenced = !fenced;
+    if (!fenced && line.trim() === "" && current.length > 0) {
+      blocks.push(current.join("\n"));
+      current = [];
+      continue;
+    }
+    current.push(line);
+  }
+  if (current.length > 0) blocks.push(current.join("\n"));
+  return blocks;
+}
+
+function StreamingMarkdown({
+  content,
+  components,
+}: {
+  content: string;
+  components: Components;
+}) {
+  const blocks = React.useMemo(() => splitStreamingBlocks(content), [content]);
+  return (
+    <div
+      className="w-full overflow-x-clip text-base leading-7 lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4"
+      data-message-content
+    >
+      {blocks.map((block, index) => (
+        <StreamingMarkdownBlock
+          key={`${index}:${block.slice(0, 24)}`}
+          content={block}
+          components={components}
+        />
+      ))}
+    </div>
+  );
+}
+
+const StreamingMarkdownBlock = React.memo(function StreamingMarkdownBlock({
+  content,
+  components,
+}: {
+  content: string;
+  components: Components;
+}) {
+  return <AcademicMarkdown components={components}>{content}</AcademicMarkdown>;
+});

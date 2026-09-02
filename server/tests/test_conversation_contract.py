@@ -651,6 +651,37 @@ def test_conversation_turns_expose_compatible_and_candidate_stream_contracts() -
     assert "title" in start_schema["description"]
 
 
+def test_conversation_v2_exposes_one_unified_replayable_stream_contract() -> None:
+    contract = app.openapi()
+    paths = contract["paths"]
+    prefix = "/api/v2/conversations/{conversation_id}"
+    assert {
+        f"{prefix}/start",
+        f"{prefix}/turns",
+        f"{prefix}/turns/{{turn_id}}/responses",
+        f"{prefix}/turns/{{turn_id}}/branches",
+        f"{prefix}/turns/{{turn_id}}/responses/{{response_id}}/events",
+        f"{prefix}/turns/{{turn_id}}/responses/{{response_id}}/cancel",
+    } <= set(paths)
+
+    event_schema = contract["components"]["schemas"]["ConversationStreamV2Event"]
+    assert event_schema["properties"]["protocol_version"]["default"] == 2
+    assert event_schema["properties"]["seq"]["minimum"] == 1
+    assert "emitted_at" in event_schema["required"]
+    assert (
+        paths[f"{prefix}/turns"]["post"]["responses"]["202"]["content"][
+            "application/json"
+        ]["schema"]["$ref"]
+        == "#/components/schemas/ConversationStreamV2Accepted"
+    )
+    assert (
+        paths[f"{prefix}/turns/{{turn_id}}/responses/{{response_id}}/events"]["get"][
+            "responses"
+        ]["200"]["content"]["text/event-stream"]["schema"]["$ref"]
+        == "#/components/schemas/ConversationStreamV2Event"
+    )
+
+
 @pytest.mark.parametrize(
     "path",
     [

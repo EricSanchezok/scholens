@@ -775,7 +775,9 @@ export const MobileWorklogExpanded: Story = {
     const disclosure = canvas.getByRole("button", { name: /已完成研究/ });
     await userEvent.click(disclosure);
     await waitFor(() =>
-      expect(canvas.getByText("检索了 2 次 · 已完成")).toBeVisible(),
+      expect(
+        canvas.getByText("已完成研究 · 3 项操作 · 3 个已引用来源"),
+      ).toBeVisible(),
     );
   },
 };

@@ -61,16 +61,18 @@ non-China targets pass while China mobile primary-content p75 is both above
 ## Conversation streaming
 
 Submitting a prompt must publish local feedback within 100 ms at p75 and 200 ms
-at p95. The browser keeps every decoded event in the target state, but ordinary
-answer deltas reach React at most once per 50 ms and align to the next animation
-frame while the document is visible. Terminal, cancellation, error, and reset
-events bypass that cadence. Hidden documents use a bounded timer so a suspended
-animation frame cannot accumulate an unbounded event array.
+at p95. The browser keeps every decoded v2 event in canonical target state, but
+ordinary answer deltas reach React through a bounded target-to-published queue
+and one animation-frame scheduler. Adjacent deltas for the same part are
+coalesced before publication, while terminal, cancellation, error, reset, and
+phase transitions bypass text coalescing. Hidden documents use a bounded timer
+so a suspended animation frame cannot accumulate an unbounded event array.
 
 Only the active assistant answer and worklog subscribe to live state. Historical
 messages, Workspace navigation, and Reader pages must retain stable props while
-tokens arrive. Streaming Markdown may use a deferred value; canonical terminal
-content renders without an artificial typewriter or smoothing delay. A 40-second
+tokens arrive. Streaming Markdown reparses only the active block; settled blocks
+keep stable DOM keys. Canonical terminal content renders without an artificial
+typewriter or smoothing delay. A 40-second
 no-byte watchdog initiates resumable reconnection, while online and visibility
 changes retry immediately. These are deterministic client invariants; provider
 first-token time and tool pauses remain separately observable service latency.

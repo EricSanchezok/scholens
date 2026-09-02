@@ -543,6 +543,11 @@ async def test_sidecars_reuse_one_history_query_after_the_first_public_frame(
     assert not started.is_set()
 
     event_types.append(str(_payload(await anext(iterator))["type"]))
+    assert event_types[-1] == "phase"
+    assert executor.query_calls == 2
+    assert chat_data.history_calls == 1
+
+    event_types.append(str(_payload(await anext(iterator))["type"]))
     assert event_types[-1] == "assistant_item_start"
     assert executor.query_calls == 2
     assert chat_data.history_calls == 1
@@ -662,7 +667,7 @@ async def test_failed_stream_persists_terminal_status_and_duration(
 
     event_types = [_payload(event)["type"] async for event in source]
 
-    assert event_types == ["start", "error"]
+    assert event_types == ["start", "phase", "error"]
     assert chat_data.finished is not None
     assert chat_data.finished[0] == "failed"
     assert chat_data.finished[1] >= 0
@@ -710,6 +715,7 @@ async def test_cancelled_stream_persists_terminal_status_and_duration(
     )
     iterator = source.__aiter__()
     assert _payload(await anext(iterator))["type"] == "start"
+    assert _payload(await anext(iterator))["type"] == "phase"
     pending = asyncio.create_task(anext(iterator))
     await asyncio.wait_for(runtime.started.wait(), timeout=0.5)
 

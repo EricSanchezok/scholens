@@ -49,18 +49,15 @@ export function groupWorklogEntries(
       rows.push(entry);
       continue;
     }
-    const previous = rows.at(-1);
-    if (previous?.kind === "batch" && previous.state === entry.state) {
-      previous.activities.push(entry);
-    } else {
-      rows.push({
-        kind: "batch",
-        id: `batch:${entry.id}`,
-        sequence: entry.sequence,
-        state: entry.state,
-        activities: [entry],
-      });
-    }
+    // Keep one row per real invocation.  Grouping consecutive calls made a
+    // long research run look idle and hid which operation was still running.
+    rows.push({
+      kind: "batch",
+      id: `activity:${entry.id}`,
+      sequence: entry.sequence,
+      state: entry.state,
+      activities: [entry],
+    });
   }
   return rows;
 }

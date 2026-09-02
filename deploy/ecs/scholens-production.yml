@@ -317,6 +317,7 @@ Resources:
       RegularExpressionList:
       - ^/mcp$
       - ^/api/v1/conversations(?:/.*)?$
+      - ^/api/v2/conversations(?:/.*)?$
       - ^/api/v1/paper-ingestions(?:/.*)?$
       Tags:
       - {Key: System, Value: SanchezCloud}

@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.transport.http.contract_artifacts import OUTPUT, public_openapi_schema
+from app.transport.http.contract_artifacts import (
+    OUTPUT,
+    V2_OUTPUT,
+    public_openapi_schema,
+    public_v2_openapi_schema,
+)
 
 
 def test_public_openapi_contains_only_public_v1_routes() -> None:
@@ -29,3 +34,15 @@ def test_public_openapi_declares_auth_failure_contract() -> None:
 def test_public_openapi_snapshot_is_current() -> None:
     committed = json.loads(Path(OUTPUT).read_text(encoding="utf-8"))
     assert committed == public_openapi_schema()
+
+
+def test_public_v2_openapi_contains_only_conversation_stream_routes() -> None:
+    schema = public_v2_openapi_schema()
+    assert schema["paths"]
+    assert all(path.startswith("/api/v2/conversations/") for path in schema["paths"])
+    assert "ConversationStreamV2Event" in schema["components"]["schemas"]
+
+
+def test_public_v2_openapi_snapshot_is_current() -> None:
+    committed = json.loads(Path(V2_OUTPUT).read_text(encoding="utf-8"))
+    assert committed == public_v2_openapi_schema()

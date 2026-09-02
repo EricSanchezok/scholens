@@ -127,6 +127,7 @@ from app.transport.http.error_boundary import UnhandledErrorMiddleware
 from app.transport.http.observability import RequestObservabilityMiddleware
 from app.transport.http.public_v1.identity import router as identity_router
 from app.transport.http.public_v1.onboarding import onboarding_router
+from app.transport.http.public_v2.turns import v2_turn_router
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -363,6 +364,11 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     application.include_router(
         _public_router(),
         prefix=PUBLIC_API_PREFIX,
+    )
+    application.include_router(
+        v2_turn_router,
+        prefix="/api/v2/conversations",
+        tags=["conversations-v2"],
     )
     application.include_router(
         jobs_callback_router,

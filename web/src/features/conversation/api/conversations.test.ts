@@ -62,6 +62,19 @@ describe("conversation SSE parsing", () => {
     });
   });
 
+  it("normalizes a research-agent style v2 envelope", () => {
+    expect(
+      parseConversationEventBlock(
+        'id: 1710000000000-1\nevent: phase.updated\ndata: {"protocol_version":2,"event":"phase.updated","response_id":"60000000-0000-4000-8000-000000000001","seq":1,"emitted_at":"2026-09-02T00:00:00Z","data":{"phase":"tool","elapsed_ms":1200}}',
+      ),
+    ).toEqual({
+      type: "phase",
+      response_id: responseId,
+      phase: "tool",
+      elapsed_ms: 1200,
+    });
+  });
+
   it("joins multiline data fields and ignores comments", () => {
     expect(
       parseConversationEventBlock(
@@ -143,7 +156,7 @@ describe("durable conversation generation", () => {
     expect(post.url).not.toContain("include_candidates");
     expect(post.headers.get("Prefer")).toBeNull();
     expect(post.headers.get("Accept")).toBe(
-      "application/vnd.scholens.conversation-events, text/event-stream, application/json",
+      "text/event-stream, application/json",
     );
     expect(post.signal.aborted).toBe(false);
   });
@@ -187,7 +200,8 @@ describe("durable conversation generation", () => {
     expect(post.headers.get("Accept")).toContain("application/json");
     const subscription = fetchMock.mock.calls[1]?.[0] as Request;
     expect(subscription.method).toBe("GET");
-    expect(subscription.url).toContain(`/${responseId}/events/candidates`);
+    expect(subscription.url).toContain(`/api/v2/conversations/`);
+    expect(subscription.url).toContain(`/${responseId}/events`);
   });
 
   it("atomically creates a conversation and starts its first turn", async () => {

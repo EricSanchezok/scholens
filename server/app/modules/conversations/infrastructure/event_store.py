@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from time import monotonic
@@ -20,6 +21,8 @@ _TTL_REFRESH_INTERVAL_SECONDS = _TERMINAL_TTL_SECONDS // 2
 _BLOCK_MILLISECONDS = 15_000
 _PUBLISH_SOCKET_TIMEOUT_SECONDS = 1.0
 _SUBSCRIBE_SOCKET_TIMEOUT_SECONDS = 20.0
+_PERSISTENCE_QUEUE_MAX_BYTES = 512 * 1024
+_PERSISTENCE_FLUSH_INTERVAL_SECONDS = 0.1
 _TERMINAL_EVENT_KINDS = frozenset({"complete", "cancelled", "error"})
 _EVENT_KINDS = frozenset(
     {
@@ -34,6 +37,7 @@ _EVENT_KINDS = frozenset(
         "references",
         "response_ready",
         "suggestions",
+        "phase",
         *_TERMINAL_EVENT_KINDS,
     }
 )
@@ -140,6 +144,126 @@ class ConversationEventStore:
             if client is not None:
                 await client.aclose()
 
+    async def publish_nonblocking(
+        self,
+        *,
+        response_id: UUID,
+        source: AsyncIterator[str],
+    ) -> AsyncIterator[str]:
+        """Stream frames immediately while persisting them on a bounded sink.
+
+        The worker used to await every Redis ``XADD`` before yielding the next
+        model frame.  That made a slow cache connection indistinguishable from
+        a slow model.  This path keeps the source hot and gives persistence its
+        own bounded queue. Lifecycle and terminal frames are always flushed in
+        order. UI-side text coalescing remains the responsibility of the Web
+        live store, so persistence never waits for a later source frame.
+        """
+        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=256)
+        pending_bytes = 0
+
+        async def writer() -> None:
+            nonlocal pending_bytes
+            client = self._client(socket_timeout=_PUBLISH_SOCKET_TIMEOUT_SECONDS)
+            if client is None:
+                while await queue.get() is not None:
+                    pass
+                return
+            first_frame = True
+            ttl_refresh_due_at: float | None = None
+            try:
+                while True:
+                    frame = await queue.get()
+                    if frame is None:
+                        return
+                    pending_bytes = max(0, pending_bytes - len(frame.encode("utf-8")))
+                    frame_kind = _frame_kind(frame)
+                    append_started = monotonic()
+                    try:
+                        key = _key(response_id)
+                        refresh_ttl = (
+                            first_frame
+                            or frame_kind in _TERMINAL_EVENT_KINDS
+                            or (
+                                ttl_refresh_due_at is not None
+                                and append_started >= ttl_refresh_due_at
+                            )
+                        )
+                        if refresh_ttl:
+                            pipeline = client.pipeline(transaction=True)
+                            pipeline.xadd(
+                                key,
+                                {"sse": frame},
+                                maxlen=_MAX_EVENTS,
+                                approximate=True,
+                            )
+                            pipeline.expire(key, _TERMINAL_TTL_SECONDS)
+                            await pipeline.execute()
+                            ttl_refresh_due_at = (
+                                append_started + _TTL_REFRESH_INTERVAL_SECONDS
+                            )
+                        else:
+                            await client.xadd(
+                                key,
+                                {"sse": frame},
+                                maxlen=_MAX_EVENTS,
+                                approximate=True,
+                            )
+                        record_histogram(
+                            "scholens.conversation.event_store.append_latency",
+                            (monotonic() - append_started) * 1000,
+                            attributes={"frame_kind": frame_kind},
+                        )
+                    except RedisError as error:
+                        add_counter(
+                            "scholens.conversation.event_store_failures",
+                            attributes={"operation": "publish_nonblocking"},
+                        )
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "conversation.events.publish_nonblocking_failed",
+                            exc_info=error,
+                            response_id=str(response_id),
+                        )
+                        return
+                    first_frame = False
+            finally:
+                await client.aclose()
+
+        writer_task = asyncio.create_task(
+            writer(), name=f"conversation-event-persist:{response_id}"
+        )
+
+        async def enqueue(frame: str) -> None:
+            nonlocal pending_bytes
+            if writer_task.done():
+                return
+            encoded_bytes = len(frame.encode("utf-8"))
+            while (
+                pending_bytes + encoded_bytes > _PERSISTENCE_QUEUE_MAX_BYTES
+                and _frame_kind(frame) not in _TERMINAL_EVENT_KINDS
+            ):
+                if writer_task.done():
+                    return
+                await asyncio.sleep(_PERSISTENCE_FLUSH_INTERVAL_SECONDS)
+            if writer_task.done():
+                return
+            await queue.put(frame)
+            pending_bytes += encoded_bytes
+
+        try:
+            async for frame in source:
+                await enqueue(frame)
+                yield frame
+            if not writer_task.done():
+                await queue.put(None)
+                await writer_task
+        finally:
+            if not writer_task.done():
+                await queue.put(None)
+                await asyncio.gather(writer_task, return_exceptions=True)
+
     async def append_terminal(self, *, response_id: UUID, frame: str) -> None:
         """Best-effort append of one terminal frame with a refreshed replay TTL."""
         if _frame_kind(frame) not in _TERMINAL_EVENT_KINDS:
@@ -167,7 +291,7 @@ class ConversationEventStore:
             while True:
                 rows = await client.xread(
                     {_key(response_id): cursor},
-                    count=100,
+                    count=1,
                     block=_BLOCK_MILLISECONDS,
                 )
                 if not rows:
