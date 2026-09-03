@@ -199,11 +199,11 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
         <Icon glyph={glyph} size={16} tone="secondary" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="text-foreground block text-sm leading-5 font-medium lg:text-xs">
+        <span className="text-foreground block text-sm leading-5 font-medium lg:inline lg:text-xs">
           {batchLabel(batch, t)}
         </span>
         {visibleSubjects.length > 0 && (
-          <span className="text-muted mt-0.5 block text-sm leading-5 [overflow-wrap:anywhere] lg:text-xs">
+          <span className="text-muted mt-0.5 block text-sm leading-5 [overflow-wrap:anywhere] lg:ms-2 lg:mt-0 lg:inline lg:text-xs">
             {visibleSubjects.join(" · ")}
             {remaining > 0
               ? ` · ${t("activity.more", { count: remaining })}`

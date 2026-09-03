@@ -813,7 +813,7 @@ export function ResearchComposer({
         </div>
         <div
           className={cn(
-            "flex min-w-0 items-center gap-1",
+            "flex min-w-0 items-center justify-end gap-1",
             expanded
               ? "col-span-2 col-start-2 row-start-2"
               : "col-start-3 row-start-1",
@@ -839,7 +839,7 @@ export function ResearchComposer({
             </span>
           ) : null}
           <ReasoningMenu
-            className="ml-auto hidden lg:flex"
+            className="hidden shrink-0 lg:flex"
             disabled={unavailable}
             onChange={onReasoningLevelChange}
             value={reasoningLevel}
@@ -849,7 +849,7 @@ export function ResearchComposer({
             <IconButton
               aria-busy={!stopAvailable || undefined}
               aria-disabled={!stopAvailable || undefined}
-              className="ms-auto size-9 min-h-9 rounded-full"
+              className="size-9 min-h-9 shrink-0 rounded-full"
               label={t(stopAvailable ? "composer.stop" : "composer.pending")}
               onClick={stopAvailable ? onStop : undefined}
               type="button"
@@ -865,7 +865,7 @@ export function ResearchComposer({
             </IconButton>
           ) : (
             <IconButton
-              className="ms-auto size-9 min-h-9 rounded-full"
+              className="size-9 min-h-9 shrink-0 rounded-full"
               disabled={!composerForm.formState.isValid || busy || unavailable}
               label={t("composer.submit")}
               type="submit"

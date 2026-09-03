@@ -468,8 +468,10 @@ manually chosen a state. Persisted history starts collapsed. Expanded rows
 interleave concise progress with outcome-homogeneous tool batches, show at most
 two safe subject examples per batch, and never create nested tool disclosures.
 Each batch names its visible state, and the summary labels the reference count
-as cited sources rather than retrieval results. The summary is the only polite
-live-region announcement, so screen readers do not
+as cited sources rather than retrieval results. When inline space permits,
+desktop batch state and safe subject examples share one horizontal baseline;
+narrow layouts wrap the subject without widening the conversation lane. The
+summary is the only polite live-region announcement, so screen readers do not
 receive every tool update. The same semantic component is used on desktop and
 mobile, with compact responsive spacing and no inner scrolling surface.
 

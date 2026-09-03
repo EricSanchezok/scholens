@@ -218,7 +218,8 @@ export const ContextPanelVisualWrapExpansion: Story = {
   ],
   globals: { viewport: { value: "desktop" } },
   play: async ({ canvasElement }) => {
-    const textbox = within(canvasElement).getByRole("textbox");
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox");
     const composer = textbox.closest("form");
     await expect(composer).not.toBeNull();
     if (!composer) return;
@@ -242,6 +243,19 @@ export const ContextPanelVisualWrapExpansion: Story = {
       ).toBeCloseTo(24, 0),
     );
     const expandedBounds = composer.getBoundingClientRect();
+    const reasoning = canvas.getByRole("button", {
+      name: "Reasoning strength: Standard",
+    });
+    const submit = canvas.getByRole("button", { name: "Ask Scholens" });
+    await expect(
+      Math.round(
+        submit.getBoundingClientRect().left -
+          reasoning.getBoundingClientRect().right,
+      ),
+    ).toBeLessThanOrEqual(8);
+    await expect(
+      Math.round(expandedBounds.right - submit.getBoundingClientRect().right),
+    ).toBeLessThanOrEqual(12);
     await expect(Math.round(expandedBounds.bottom)).toBe(
       Math.round(restingBounds.bottom),
     );
