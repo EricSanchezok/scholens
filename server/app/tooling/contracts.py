@@ -64,6 +64,7 @@ class DocumentSourceCandidate:
     title: str | None = None
     authors: tuple[str, ...] = ()
     locator: dict[str, JsonValue] | None = None
+    reader_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

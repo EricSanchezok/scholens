@@ -9,6 +9,10 @@ export const webPerformanceMetricNames = [
   "primary_content",
   "route_commit",
   "route_feedback",
+  "reader_annotation_anchor_resolve",
+  "reader_annotation_mutation",
+  "reader_annotation_preview",
+  "pdf_render_restart",
 ] as const;
 
 export const conversationPerformanceMetricNames = [
@@ -102,6 +106,13 @@ export type ConversationPerformanceEvent = z.infer<
 export type PdfRenderErrorEvent = z.infer<typeof pdfRenderErrorEventSchema>;
 export type ConversationPerformanceMetricName =
   (typeof conversationPerformanceMetricNames)[number];
+export type ReaderAnnotationMetricName = Extract<
+  WebPerformanceMetricName,
+  | "reader_annotation_anchor_resolve"
+  | "reader_annotation_mutation"
+  | "reader_annotation_preview"
+  | "pdf_render_restart"
+>;
 export type WebTelemetryEvent = z.infer<typeof webTelemetryEventSchema>;
 export type WebPerformanceMetricName =
   (typeof webPerformanceMetricNames)[number];

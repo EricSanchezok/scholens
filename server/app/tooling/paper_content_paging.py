@@ -357,6 +357,7 @@ def authorized_paper_content_snapshot(
     capability: PaperContentCapabilities,
     actor: Actor,
     document_id: UUID,
+    project_id: UUID | None = None,
     cache: PaperContentSnapshotCache,
 ) -> PaperContentSnapshot:
     """Authorize, preflight, and singleflight one immutable paper revision."""
@@ -365,13 +366,15 @@ def authorized_paper_content_snapshot(
         access = capability.authorize_revision(
             actor=actor,
             document_id=document_id,
+            project_id=project_id,
         )
-        cache_key = (actor.id, document_id, access.revision)
+        cache_key = (actor.id, document_id, project_id, access.revision)
 
         def hydrate() -> AccessiblePaperContent:
             sized_access = capability.authorize_retained_size(
                 actor=actor,
                 document_id=document_id,
+                project_id=project_id,
             )
             if sized_access.revision != access.revision:
                 raise _PaperContentRevisionAdvanced
@@ -389,7 +392,11 @@ def authorized_paper_content_snapshot(
                         "maximum_retained_bytes": cache.max_entry_retained_bytes,
                     },
                 )
-            paper = capability.read_snapshot(actor=actor, document_id=document_id)
+            paper = capability.read_snapshot(
+                actor=actor,
+                document_id=document_id,
+                project_id=project_id,
+            )
             if paper.content_revision != access.revision:
                 raise _PaperContentRevisionAdvanced
             return paper

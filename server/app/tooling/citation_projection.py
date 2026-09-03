@@ -23,6 +23,7 @@ from app.shared.application.json_values import (
 from app.shared.application.text import json_bounded_prefix
 from app.shared.domain import JsonValue
 from app.tooling import workspace_contracts as wc
+from app.tooling.reader_links import READER_LINK_GUIDANCE
 from app.tooling.bounded_projection import (
     bounded_optional_text as _optional_text,
     bounded_text as _text,
@@ -43,13 +44,15 @@ CITATION_DIAGNOSTIC_MAX_DEPTH = 1
 CITATION_READ_GUIDANCE = (
     "Citation fields are bounded previews when content_truncated is true. Use "
     "get_paper_page and continue with next_cursor for lossless stored metadata; "
-    "call resolve_paper_citation only when required fields are missing."
+    "call resolve_paper_citation only when required fields are missing. "
+    f"{READER_LINK_GUIDANCE}"
 )
 CITATION_RESOLUTION_GUIDANCE = (
     "Citation fields and provider steps are bounded diagnostics when "
     "content_truncated is true. No duplicate citation artifact is emitted. Use "
     "resource_uri or get_paper_page for lossless stored metadata; provider steps "
-    "are diagnostic and are not a durable metadata record."
+    "are diagnostic and are not a durable metadata record. "
+    f"{READER_LINK_GUIDANCE}"
 )
 
 
@@ -295,6 +298,7 @@ def _bounded_guidance(value: str) -> str:
 
 def project_paper_citation(outcome: ToolOutcome) -> ToolOutcome:
     envelope = _CitationReadEnvelope.model_validate(outcome.payload)
+    envelope_mapping = cast(Mapping[str, object], outcome.payload)
     document_id = str(envelope.document_id)
     data, data_truncated = _citation_data(
         envelope.data,
@@ -325,6 +329,9 @@ def project_paper_citation(outcome: ToolOutcome) -> ToolOutcome:
     if guidance_truncated:
         content_truncated = True
         guidance = CITATION_READ_GUIDANCE
+    reader_url = envelope_mapping.get("reader_url")
+    if not isinstance(reader_url, str):
+        reader_url = None
     payload = wc.PaperCitationReadOutput(
         document_id=envelope.document_id,
         preferred_style=style,
@@ -332,6 +339,7 @@ def project_paper_citation(outcome: ToolOutcome) -> ToolOutcome:
         missing_fields=missing,
         complete=envelope.complete,
         content_truncated=content_truncated,
+        reader_url=reader_url,
         guidance=_bounded_guidance(guidance),
     )
     return replace(
@@ -412,6 +420,9 @@ def project_resolved_citation(outcome: ToolOutcome) -> ToolOutcome:
             outcome.action is not None,
         )
     )
+    reader_url = payload_mapping.get("reader_url")
+    if not isinstance(reader_url, str):
+        reader_url = None
     payload = wc.ResolvedCitationOutput(
         document_id=document_id,
         preferred_style=style,
@@ -423,6 +434,7 @@ def project_resolved_citation(outcome: ToolOutcome) -> ToolOutcome:
         confidence=confidence,
         steps=steps,
         resource_uri=raw_resource_uri,
+        reader_url=reader_url,
         content_truncated=content_truncated,
         guidance=_bounded_guidance(CITATION_RESOLUTION_GUIDANCE),
     )

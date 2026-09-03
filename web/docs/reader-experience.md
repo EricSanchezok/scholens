@@ -402,6 +402,14 @@ Selection, its Ranges, and all PDF.js text layers:
   presses Escape, clicks elsewhere, or starts a replacement selection. Normal
   continuous scrolling and viewport-driven page changes preserve it.
 
+Persisted annotation fills and underlines are decorative PDF background layers.
+They are pointer-transparent, do not receive focus, and never own click or
+keyboard interaction. A selection can start inside an existing highlight and
+continue across it because the PDF text layer remains the sole owner of native
+text selection. Commented annotations expose one page-edge comment-count
+marker as their in-document entry point; pure highlights have no page button
+and are opened from the Annotations panel instead.
+
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
   automatically.
@@ -450,6 +458,11 @@ and `rects`; multi-page anchors additionally carry ordered `segments`, with the
 legacy fields equal to the first segment. Every action—Ask, Translate,
 Highlight, Add annotation, and Copy—uses the same exact quote and logical
 selection.
+Agent-created quote-only annotations use a `parsed_text` anchor (canonical
+offsets plus the immutable quote). After each PDF.js page render, Reader maps
+that quote back to the text layer and paints the resulting normalized
+rectangles with the same fill/underline rules as a user selection. An
+unresolved parsed anchor is omitted rather than painted at a guessed location.
 The empty Annotations panel is a quiet typographic prompt without a decorative
 list icon; the panel tab already provides the necessary context.
 
@@ -477,9 +490,9 @@ and use a subdued overlay only while the Resolved filter is active.
 Commented anchors add one compact count marker at the PDF page edge; pure
 highlights do not. Exact duplicate anchors paint once and aggregate their
 comment count. Selecting a panel summary centers the first segment of the exact
-anchor in the scroll viewport. Selecting a painted segment or its marker opens
-the same thread in place without jumping away from the page the user is
-reading. The panel's previous and next actions follow the current filtered
+anchor in the scroll viewport. Selecting a comment-count marker or a panel
+summary opens the same thread in place without jumping away from the page the
+user is reading. The panel's previous and next actions follow the current filtered
 summary order across pages while keeping the PDF and panel selection in sync.
 
 The annotation panel is one static, source-ordered list. Every card reduces its
@@ -508,9 +521,9 @@ depend on hover, while fine-pointer controls reveal on row hover or focus.
 
 A comment-free Highlight paints a low-opacity color fill with no underline. A
 Note or Discussion paints only a colored underline across its anchored text,
-with no fill competing with the paper. Hover, keyboard focus, or selection may
-strengthen the corresponding treatment, but persistent fill remains subtle and
-no per-line boxes are drawn.
+with no fill competing with the paper. Panel preview, active selection, or
+selected annotation state may strengthen the corresponding treatment, but the
+persistent layer remains pointer-transparent and no per-line boxes are drawn.
 
 Project members may reply to open Project threads. The thread author may
 recolor it; its author, the Project owner, and collaborators with Project edit
@@ -525,7 +538,10 @@ earliest avatar URL expires, and checks missing avatars again within fifteen
 minutes. The Server's bounded identity adapter cache reuses still-safe signed
 views across those annotation polls and coalesces concurrent reads for the same
 user. Window focus and every successful local mutation invalidate the query
-immediately. The feature does not imply WebSocket delivery,
+immediately while retaining the previous list during the refetch. PDF.js
+canvas/text rendering is isolated from hover, selection, and annotation-list
+updates, so previewing a card or updating a comment does not clear and repaint
+the document. The feature does not imply WebSocket delivery,
 mentions, notifications, unread counts, reactions, or recursive replies.
 
 ## Contextual conversations
@@ -639,7 +655,7 @@ Playwright coverage for the following matrix:
 | Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                                                                                                        |
 | Search and outline | closed, query with no result, one result, multiple results, desktop reflow rail, mobile reflow sheet                                                                                      |
 | Insights           | recording on/off, first reading, all-time summary, absolute/relative heatmap, 30-day trend, top pages, partial history, expired fine detail, keyboard page jump                           |
-| Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled                                                                                    |
+| Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled, reselect inside persisted highlight                                               |
 | Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                                                                                                      |
 | AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link                                                                                         |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                                                                                                          |

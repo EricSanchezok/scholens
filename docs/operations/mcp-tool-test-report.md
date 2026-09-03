@@ -2,13 +2,13 @@
 
 | 元数据 | 值 |
 | --- | --- |
-| 报告状态 | **57 工具历史远端实测基线 + 63 工具本地修复候选（未部署）** |
+| 报告状态 | **57 工具历史远端实测基线 + 64 工具本地修复候选（未部署）** |
 | 测试日期 | 2026-08-24（Asia/Shanghai） |
 | 历史仓库分析基线 | `3d6442fd1f36db3a9a1f22f14b5d6632625a9ee8` |
 | 历史被测接口 | 已配置的 Scholens Remote MCP profile（Streamable HTTP，实测 57 工具） |
-| 当前代码候选 | 本地共享工作树中的 63 工具目录；没有可证明其已部署的远端发布 SHA |
+| 当前代码候选 | 本地共享工作树中的 64 工具目录；没有可证明其已部署的远端发布 SHA |
 | 协议基线 | Model Context Protocol `2025-11-25` |
-| 证据边界 | 57 工具结论来自真实远端调用；63 工具及 MCP-001～008 修复状态仅来自本地代码与自动化 |
+| 证据边界 | 57 工具结论来自真实远端调用；64 工具及 MCP-001～008 修复状态仅来自本地代码与自动化 |
 | 生产操作 | **未执行生产 PDF 修复；未清理远端审计数据** |
 | 数据处理 | 不记录访问密钥、确认令牌、上传/下载签名 URL、邀请邮箱或既有用户内容 |
 
@@ -46,15 +46,16 @@ PASS/FAIL 和 Conditional No-Go 均是历史远端实测结论，不描述当前
 
 ### 1.1 当前本地修复候选
 
-当前工作树的 fully-authorized Remote MCP 目录为 **63 个工具**：保留历史 57 个工具，并
-新增 6 个有界 replacement：`get_paper_page`、`get_library_paper_page`、
+当前工作树的 fully-authorized Remote MCP 目录为 **64 个工具**：保留历史 57 个工具，并
+新增 7 个 agent-native / 有界 replacement：`annotate_paper`、`get_paper_page`、
+`get_library_paper_page`、
 `get_annotation_thread_page`、`get_research_output_page`、
 `list_library_paper_summaries` 和 `list_research_output_summaries`。MCP-001～MCP-008 均已有
 对应代码修复和定向自动化覆盖，旧的完整对象或完整列表读取继续可用并进入有主、至少
 90 天的弃用治理。
 
 这些状态只代表**本地修复候选**。截至本报告更新时，没有对一个可识别部署 SHA 的远端
-环境重跑 63-tool 全矩阵，没有以生产遥测证明旧工具或异常响应归零，也没有把历史远端
+环境重跑 64-tool 全矩阵，没有以生产遥测证明旧工具或异常响应归零，也没有把历史远端
 Conditional No-Go 自动提升为 Go。最终发布结论必须满足第 11 节的部署后验收门槛。
 
 ## 2. 测试目标与范围
@@ -81,7 +82,7 @@ Conditional No-Go 自动提升为 Go。最终发布结论必须满足第 11 节�
   `mcp-connector` 全量自动化门禁，未把它计入 57 个实时调用结果。
 - 内部 conversation profile 的 `wait_for_jobs` 不是历史 Remote MCP profile 的公开工具，
   不计入本次 57 个工具。
-- 当前本地候选新增的 6 个 replacement 未出现在历史远端发现结果中，因此不回填、不重算
+- 当前本地候选新增的 7 个 replacement 未出现在历史远端发现结果中，因此不回填、不重算
   第 5 节 57 工具矩阵的成功/失败数量。
 - 需要 `confirmation_token` 的动作只执行第一阶段影响预览。没有用户针对具体影响的
   明确批准时，不执行公开分享、永久删除、移交所有权、退出项目等第二阶段动作。
@@ -154,18 +155,19 @@ Conditional No-Go 自动提升为 Go。最终发布结论必须满足第 11 节�
 `isError: true` 返回，且没有把错误对象错误地塞入成功输出 Schema；这部分设计与 MCP
 工具规范相符。
 
-### 4.2 当前本地 63 工具候选
+### 4.2 当前本地 64 工具候选
 
 本地代码目录在 fully-authorized 情况下由 62 个共享工具和 Remote-only
-`prepare_paper_upload` 组成，共 63 个；Conversation profile 以内部 `wait_for_jobs` 替代
-Remote upload primitive，同样为 63 个；本地 connector 再以 `upload_local_paper` 替代
-`prepare_paper_upload`，总数仍为 63。相对历史远端新增的 6 个工具如下：
+`prepare_paper_upload` 组成，共 64 个；Conversation profile 以内部 `wait_for_jobs` 替代
+Remote upload primitive，同样为 64 个；本地 connector 再以 `upload_local_paper` 替代
+`prepare_paper_upload`，总数仍为 64。相对历史远端新增的 7 个工具如下：
 
 | 历史工具（继续可用） | 新的有界 replacement | 本地候选语义 |
 | --- | --- | --- |
 | `get_paper` | `get_paper_page` | 规范化论文 metadata JSON 的无损 UTF-8 continuation |
 | `get_library_paper` | `get_library_paper_page` | 个人文库状态与规范化论文 JSON 的无损 UTF-8 continuation |
 | `get_annotation_thread` | `get_annotation_thread_page` | 完整标注线程 JSON 的无损 UTF-8 continuation |
+| `create_annotation_thread` | `annotate_paper` | 仅凭精确引文创建可视化标注并返回解析锚点 |
 | `get_research_output` | `get_research_output_page` | 完整研究产物 JSON 的无损 UTF-8 continuation |
 | `list_library_papers` | `list_library_paper_summaries` | 最多 5 条、以持久化论文为序的有界预览与签名 keyset cursor |
 | `list_research_outputs` | `list_research_output_summaries` | 最多 25 条、SQL 标量投影、签名 keyset cursor 的摘要页 |
@@ -173,7 +175,7 @@ Remote upload primitive，同样为 63 个；本地 connector 再以 `upload_loc
 六个历史工具保留原 input/output shape 和实际 legacy 分支；研究产物列表仅作加法兼容，
 统一支持四种已存储类型并恢复 list→get 闭包。旧工具已经登记 owner、replacement、日期和
 低基数 telemetry key，最早移除日期不早于弃用后 90 天。MCP Resources 的 continuation
-指向新工具。以上均是本地代码事实，不是 63 工具已在远端发现或成功调用的证据。
+指向新工具。以上均是本地代码事实，不是 64 工具已在远端发现或成功调用的证据。
 
 ## 5. 逐工具历史远端测试矩阵（57 工具）
 
@@ -572,7 +574,7 @@ Ruff format、Ruff lint、mypy 均通过
 定向集合包括 MCP transport、输出 Schema、一致权限、导入、知识检索、确认顺序、Access
 Key 架构和 operation context 架构测试。
 
-以上数字属于 57 工具审计基线，不是当前 63 工具候选的最终 CI 结果。
+以上数字属于 57 工具审计基线，不是当前 64 工具候选的最终 CI 结果。
 
 ### 9.2 为什么历史自动化全绿但实时调用失败
 
@@ -604,11 +606,11 @@ Key 架构和 operation context 架构测试。
 | MCP-007 | pre-preview business plan、owner/target 校验、no-op `changed:false` | `test_confirmation_ordering.py` 与 Project/Library lifecycle contract tests | 原五场景有定向覆盖；远端结果待复测 |
 | MCP-008 | UTF-8/JSON 双预算、签名 content-bound cursor、无损长行 paging、80 KiB success envelope | `test_paper_content_paging.py`、`test_workspace_paper_content.py`、MCP complete-envelope budget tests | 本地长行/篡改/重组覆盖；真实 PDF 待复测 |
 
-目录和治理测试同时把 fully-authorized Remote/Conversation/connector 总数更新为 63，并验证
-6 个 replacement、旧工具兼容 schema、deprecation owner/date/telemetry 以及 Resource
+目录和治理测试同时把 fully-authorized Remote/Conversation/connector 总数更新为 64，并验证
+7 个 replacement、旧工具兼容 schema、deprecation owner/date/telemetry 以及 Resource
 continuation。最终 MCP/OpenAPI snapshot 已重新导出，依赖无关的 merge-base
 schema/metadata/deprecation/correction 检查已通过；固定版本 `oasdiff` 由 PR CI 执行。本表仍
-不能替代部署后 63-tool 实测。
+不能替代部署后 64-tool 实测。
 
 ### 9.4 最终本地集成证据
 
@@ -616,7 +618,7 @@ schema/metadata/deprecation/correction 检查已通过；固定版本 `oasdiff` 
 统一门禁 `./scripts/run-gates.sh all` 完整通过：Server 1683 passed / 13 skipped，MCP
 connector 22 passed，Jobs 154 passed，共享包 128 passed，Web unit 274 passed、Storybook
 516 passed、E2E 124 passed，legacy client E2E 2 passed / 2 skipped，deployment contract
-141 passed；两个 Web production build、Storybook build、文档与 63-tool snapshot 对齐检查也
+141 passed；两个 Web production build、Storybook build、文档与 64-tool snapshot 对齐检查也
 通过。Server Ruff、mypy（488 个源文件）和完整 pytest 已包含在该门禁中。
 
 额外执行的 merge-base 契约检查覆盖 deprecation transition、HTTP/MCP compatible-base
@@ -668,8 +670,8 @@ reduced-motion 和外部字体重试均为非失败警告，没有门禁被跳�
 ### 11.1 本地候选已经满足的最低代码门槛
 
 - MCP-001～MCP-008 均有明确 implementation owner、针对原根因的自动化和当前状态说明；
-- 本地 fully-authorized 目录为 63 个工具，6 个 replacement 有 typed schema、handler、
-  permission、Resource continuation 和兼容治理；6 个旧工具继续可解析、可调用；
+- 本地 fully-authorized 目录为 64 个工具，7 个 replacement 有 typed schema、handler、
+  permission、Resource continuation 和兼容治理；7 个旧工具继续可解析、可调用；
 - Resource、Job、paper content、JSON page 和 summary list 有明确 UTF-8/条目预算，并按真实
   `CallToolResult` 或 Resource envelope 测试；
 - research-output 四类型形成 default/explicit/list→get 闭包，标注 exactly-one 在 Schema
@@ -685,8 +687,8 @@ reduced-motion 和外部字体重试均为非失败警告，没有门禁被跳�
 1. PR 必须由固定版本 `oasdiff` 完成 HTTP/MCP merge-base 检查，并保持 required aggregate
    CI 全绿；CI 成功不授权生产部署或 repair；
 2. 部署一个可从 endpoint 或发布记录识别的 immutable SHA，并确认 `tools/list` 返回预期
-   63 个、没有重复/遗漏，旧工具与 6 个 replacement 同时存在；
-3. 对 **63 个 Remote 工具逐一**执行成功路径或可控、可重复的状态夹具；17 个确认工具逐一
+   64 个、没有重复/遗漏，旧工具与 7 个 replacement 同时存在；
+3. 对 **64 个 Remote 工具逐一**执行成功路径或可控、可重复的状态夹具；17 个确认工具逐一
    覆盖 preview/confirm/stale/replay，并区分 no-op、业务拒绝和真正 mutation；
 4. 对 2 个 static 和 4 个 template Resource URI 全部执行真实 `resources/read`，验证正常、
    超限、无权限、not-found 和内部错误均有界且可分类；
@@ -710,9 +712,9 @@ Confirmation 两处采用了同一种不完整 JSON 规范化方式；Job 结果
 Agent；研究产物则复用了过宽的内部枚举。这三类问题共同说明，内部领域模型到公开 MCP
 模型之间还缺少足够严格、独立且经过真实数据验证的投影层。
 
-本报告保留该 57 工具审计时点的原始结论，同时记录 MCP-001～MCP-008 的 63 工具本地
+本报告保留该 57 工具审计时点的原始结论，同时记录 MCP-001～MCP-008 的 64 工具本地
 完整修复。实现已通过最终本地契约生成、依赖无关 merge-base 检查和仓库 `all` 门禁，在
 架构上补齐了严格公共投影、确认前置校验、无损有界 continuation、PDF 质量策略和 rolling
-compatibility；但它尚未部署、尚未完成远端 63-tool/6-resource 全矩阵，也未执行生产 PDF
+compatibility；但它尚未部署、尚未完成远端 64-tool/6-resource 全矩阵，也未执行生产 PDF
 repair 或远端审计数据清理。只有第 11.2 节全部满足后，才能重新判定“全部 MCP 工具与资源
 均可正常使用”。

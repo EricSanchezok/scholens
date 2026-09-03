@@ -76,6 +76,15 @@ the current Actor. MCP resources expose bounded manifests at
 `scholens://library`, `scholens://projects`, and typed Project, paper,
 annotation-thread, and research-output URIs.
 
+Paper-bearing MCP results also expose an optional `reader_url`, built from the
+configured Scholens client origin as `/reader/{document_id}`. When a tool call
+has an explicit authorized `project_id`, the URL includes `?project={project_id}`
+so the Reader opens in that Project context. Agents should use this URL for
+durable user-facing Markdown links, notes, reports, and citations; DOI, arXiv,
+and source URLs remain provenance only. Temporary `file_url`, `preview_url`, and
+upload URLs must never be persisted. The existing `scholens://` ResourceLink
+continues to serve machine-readable resource reads.
+
 Six complete-object or full-page reads remain available as owned rolling-
 compatibility contracts: `get_paper`, `get_library_paper`,
 `get_annotation_thread`, `get_research_output`, `list_library_papers`, and

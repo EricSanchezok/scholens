@@ -291,6 +291,22 @@ Resources:
       - Type: forward
         TargetGroupArn:
           Ref: ApiTargetGroup
+  ConversationV2ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Ref: HttpsListener
+      Priority: 12
+      Conditions:
+      - Field: path-pattern
+        PathPatternConfig:
+          Values:
+          - /api/v2
+          - /api/v2/*
+      Actions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: ApiTargetGroup
   OperatorListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -2799,6 +2815,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn:
     - ApiListenerRule
+    - ConversationV2ListenerRule
     - OperatorListenerRule
     Properties:
       ServiceName: scholens-api

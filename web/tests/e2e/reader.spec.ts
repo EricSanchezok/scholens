@@ -235,6 +235,8 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
 
 const createdAnnotationQuotes: string[] = [];
 const createdAnnotationPositions: Array<Record<string, unknown>> = [];
+let createdAnnotationResponses = 0;
+let annotationCreateDelayMs = 0;
 
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
@@ -402,6 +404,11 @@ async function mockReader(page: Page) {
         };
         createdAnnotationQuotes.push(body.quote_text);
         createdAnnotationPositions.push(body.position);
+        if (annotationCreateDelayMs > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, annotationCreateDelayMs),
+          );
+        }
         const item = {
           id: "20000000-0000-4000-8000-000000000001",
           kind: "annotation_thread",
@@ -460,6 +467,7 @@ async function mockReader(page: Page) {
           contentType: "application/json",
           body: JSON.stringify(item),
         });
+        createdAnnotationResponses += 1;
         return;
       }
       const url = new URL(route.request().url());
@@ -812,6 +820,34 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
   }).toPass({ timeout: 8_000 });
 }
 
+async function selectPdfText(
+  page: Page,
+  pageNumber: number,
+  textToSelect: string,
+) {
+  const textLayer = await waitForPdfTextLayer(page, pageNumber);
+  await expect(async () => {
+    await textLayer.evaluate((layer, text) => {
+      const span = [...layer.querySelectorAll("span")].find((candidate) =>
+        candidate.textContent?.includes(text),
+      );
+      if (!span?.firstChild) return;
+      const start = span.textContent?.indexOf(text) ?? -1;
+      if (start < 0) return;
+      const range = document.createRange();
+      range.setStart(span.firstChild, start);
+      range.setEnd(span.firstChild, start + text.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    }, textToSelect);
+    await expect(
+      page.getByRole("button", { name: "Highlight selection" }),
+    ).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 8_000 });
+}
+
 async function waitForPdfTextLayer(page: Page, pageNumber: number) {
   const textLayer = page.locator(
     `[data-pdf-page-number="${pageNumber}"] .pdf-text-layer`,
@@ -921,6 +957,8 @@ async function pdfScrollTop(page: Page, pageNumber: number) {
 test.beforeEach(async ({ page }) => {
   createdAnnotationQuotes.length = 0;
   createdAnnotationPositions.length = 0;
+  createdAnnotationResponses = 0;
+  annotationCreateDelayMs = 0;
   await mockReader(page);
 });
 
@@ -1288,6 +1326,64 @@ test("creates a persistent document highlight with the full color palette", asyn
     "background-color",
     persistedAppearance.background,
   );
+  await expect(
+    page.locator(
+      'button[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+    ),
+  ).toHaveCount(0);
+  const hitTest = await persistedHighlight.first().evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const target = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    return {
+      hitTextLayer: Boolean(target?.closest(".pdf-text-layer")),
+      paintPointerEvents: getComputedStyle(element).pointerEvents,
+    };
+  });
+  expect(hitTest.paintPointerEvents).toBe("none");
+  expect(hitTest.hitTextLayer).toBe(true);
+
+  const highlightBox = await persistedHighlight.first().boundingBox();
+  expect(highlightBox).not.toBeNull();
+  if (highlightBox) {
+    await page.mouse.move(
+      highlightBox.x + Math.max(2, highlightBox.width * 0.15),
+      highlightBox.y + highlightBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      highlightBox.x + Math.max(4, highlightBox.width * 0.85),
+      highlightBox.y + highlightBox.height / 2,
+    );
+    await page.mouse.up();
+    await expect(
+      page.getByRole("button", { name: "Highlight selection" }),
+    ).toBeVisible({ timeout: 5_000 });
+  }
+});
+
+test("keeps a replacement selection when highlight creation resolves late", async ({
+  page,
+}) => {
+  annotationCreateDelayMs = 750;
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+
+  await selectPdfPassage(page, 2);
+  await page.getByRole("button", { name: "Highlight selection" }).click();
+  await page.getByRole("button", { name: "Yellow highlight" }).click();
+
+  // A new selection is made while the first create request is still pending.
+  await selectPdfText(page, 2, "NLP");
+  await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
+  await expect.poll(() => createdAnnotationResponses).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Highlight selection" }),
+  ).toBeVisible();
 });
 
 test("preserves Reader swatch colors and one focus owner in forced colors", async ({
@@ -1658,12 +1754,12 @@ test("replies to, resolves, restores, and reopens a Project discussion", async (
     '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
   );
   await expect(resolvedHighlight.first()).toBeVisible();
-  await resolvedHighlight.first().click();
+  await page.getByRole("button", { name: "2 comments" }).click();
   await page.getByRole("button", { name: "Reopen" }).click();
 
   await page.getByRole("button", { name: "Filter" }).click();
   await page.getByRole("menuitem", { name: "Current" }).click();
-  await resolvedHighlight.first().click();
+  await page.getByRole("button", { name: "2 comments" }).click();
   await expect(page.getByPlaceholder("Reply to this discussion")).toBeVisible();
 });
 
@@ -1881,7 +1977,7 @@ test("deduplicates exact anchors and reveals resolved Project discussions weakly
   await expect(
     page.locator('[data-reader-annotation-previewed="true"]'),
   ).toHaveCount(0);
-  await grouped.first().click();
+  await page.getByRole("button", { name: "2 comments" }).click();
   await expect(
     page.getByRole("button", { name: "Annotations" }),
   ).toHaveAttribute("data-active", "true");

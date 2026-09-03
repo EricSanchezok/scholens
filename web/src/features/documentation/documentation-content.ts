@@ -6,7 +6,7 @@ import {
   SOURCE_REPOSITORY_URL,
 } from "@/lib/product";
 
-export const MCP_TOOL_COUNT = 63;
+export const MCP_TOOL_COUNT = 64;
 export const MCP_MAX_LOCAL_PDF_BYTES = 30 * 1024 * 1024;
 export const DEVELOPMENT_CONNECTOR_REF = "main";
 
@@ -83,7 +83,7 @@ export const mcpCapabilityGroups = [
   },
   {
     id: "annotations",
-    count: 9,
+    count: 10,
     summary: "Annotation threads and comments",
   },
   {

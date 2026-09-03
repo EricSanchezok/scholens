@@ -8,6 +8,7 @@ import type {
   ConversationPerformanceEvent,
   ConversationPerformanceMetricName,
   PdfRenderErrorEvent,
+  ReaderAnnotationMetricName,
   WebTelemetryEvent,
   WebPerformanceEvent,
   WebPerformanceMetricName,
@@ -120,6 +121,20 @@ export function reportPdfRenderError(
     ...payload,
     metric: "pdf_render_error",
     to_route: "reader",
+  });
+}
+
+/** Low-cardinality Reader annotation metrics; never include quote text or IDs. */
+export function reportReaderAnnotationMetric(
+  metric: ReaderAnnotationMetricName,
+  value = 1,
+) {
+  if (typeof window === "undefined") return;
+  reportWebPerformance({
+    metric,
+    navigation_kind: "soft",
+    to_route: "reader",
+    value: Math.max(0, value),
   });
 }
 

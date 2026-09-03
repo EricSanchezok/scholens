@@ -49,7 +49,7 @@ test("publishes an anonymous, accessible MCP setup guide", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByText(
-      /secure access to 63 tools for your stored research knowledge/,
+      /secure access to 64 tools for your stored research knowledge/,
     ),
   ).toBeVisible();
 

@@ -982,8 +982,8 @@ def test_workspace_profiles_share_one_canonical_definition_set() -> None:
     assert set(conversation_by_name) - set(mcp_by_name) == {"wait_for_jobs"}
     assert "STOP" not in conversation_by_name
     assert "read_file" not in conversation_by_name
-    assert len(conversation_by_name) == 63
-    assert len(mcp_by_name) == 63
+    assert len(conversation_by_name) == 64
+    assert len(mcp_by_name) == 64
     assert mcp_by_name["resolve_paper_citation"].execution is ToolExecutionKind.WORKFLOW
     for name in set(conversation_by_name) & set(mcp_by_name):
         conversation_tool = conversation_by_name[name]

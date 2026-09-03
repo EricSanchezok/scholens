@@ -124,6 +124,7 @@ The Web service accepts bounded, same-origin anonymous performance events at
 `/__telemetry/web-performance`. It writes low-cardinality `web_performance` JSON to the
 Web log group without user IDs, content, query strings, raw URLs, or client IPs. The
 production dashboard owns p75/p95 views for navigation, Core Web Vitals,
+Reader annotation anchor resolution/mutation/preview and PDF render restarts,
 Conversation feedback/stream milestones, durable acceptance, and worker claim age,
 split by route group, device class, and `CN`/`non-CN`; Cloudflare colo remains a diagnostic
 log field rather than a metric dimension.

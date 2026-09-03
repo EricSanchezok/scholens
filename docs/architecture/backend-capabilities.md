@@ -79,7 +79,12 @@ Public resources use canonical identifiers:
 - MCP annotation mutations return a bounded thread summary and obtain comment
   count, last activity, foreign-reply state, and resolve eligibility through
   scalar queries. They never load the historical comment collection. The HTTP
-  update capability retains its complete response contract.
+  update capability retains its complete response contract. `annotate_paper` is
+  the agent-native quote-only entry point: it verifies an optional content
+  digest, resolves one normalized quote against canonical text, and returns a
+  compact parsed-text anchor plus the Reader's fill/underline treatment. The
+  geometry-first `create_annotation_thread` remains for advanced clients and
+  advertises `annotate_paper` as its replacement.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
 - `POST /api/v1/search/conversations` is the private lexical history-search
@@ -388,11 +393,21 @@ an external research repository. `create_project` and `get_project` return its
 immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
 Every later call accepts immutable IDs rather than guessing from titles.
 
-The current shared profile contains 62 tools. With all four workspace
-permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 63
+Paper-bearing MCP tool results and Resource manifests include an optional
+`reader_url` alongside the existing `scholens://` resource URI. It is generated
+from the configured client origin and points to `/reader/{document_id}`; direct
+paper reads and ingestion calls append `?project={project_id}` only when an
+explicit authorized Project context is known. Agents use `reader_url` as the
+durable browser link in Markdown, notes, reports, and citations, while DOI,
+arXiv, and source URLs are provenance. Signed file, preview, and upload URLs are
+ephemeral and must not be persisted. A null value means the ingestion has not
+yet produced a readable document target.
+
+The current shared profile contains 63 tools. With all four workspace
+permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 64
 total. The Conversation profile instead adds the internal-only
-`wait_for_jobs`, also for 63 total. The local stdio bridge hides the remote
-upload primitive and supplies `upload_local_paper`, so it presents 63 tools to
+`wait_for_jobs`, also for 64 total. The local stdio bridge hides the remote
+upload primitive and supplies `upload_local_paper`, so it presents 64 tools to
 a fully authorized key; narrower keys see only their authorized subset. The
 surface covers:
 
@@ -402,7 +417,7 @@ surface covers:
 | Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
 | Personal Library, sharing, and tags                          |           16 | Library state remains user-owned                         |
 | Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency    |
-| Annotation threads and comments                              |            9 | Personal or one-Project audience                         |
+| Annotation threads and comments                              |           10 | Personal or one-Project audience                         |
 | Existing research outputs                                    |            4 | Read-only; no generation tool                            |
 
 Agent-facing catalog validation requires a human-readable title, typed output,

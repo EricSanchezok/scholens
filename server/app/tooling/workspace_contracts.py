@@ -17,9 +17,13 @@ from app.modules.papers.application.contracts.citation import (
     StepKind,
 )
 from app.modules.papers.application.contracts.documents import (
+    DocumentFileUrlResponse,
     DocumentMetadataOverrides,
+    DocumentResponse,
+    CollectPublicPaperResponse,
     LibraryPaperIngestionResponse,
-    LibraryPaperListResponse,
+    LibraryPaperListIngestionEntry,
+    LibraryPaperListPaperEntry,
     LibraryOutputSort,
     LibraryOutputResponse,
     LibraryPaperResponse,
@@ -35,7 +39,8 @@ from app.modules.projects.application.contracts import (
     ProjectCollaboratorListResponse,
     ProjectInvitationResponse,
     ProjectListResponse,
-    ProjectPaperListResponse,
+    ProjectPaperCollectedResponse,
+    ProjectPaperSummaryResponse,
     ProjectPaperSort,
     ProjectPermissionSet,
     ProjectResponse,
@@ -45,7 +50,9 @@ from app.modules.research.application.contracts import (
     AnnotationAudience,
     AnnotationCommentResponse,
     AnnotationThreadSummaryResponse,
+    PersonalResearchAudience,
     ResearchItemResponse,
+    ResearchOutputSummary,
     UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA,
 )
 from app.modules.research.application.positions import ResearchPosition
@@ -59,7 +66,20 @@ from app.shared.domain.enums import (
     PaperStatus,
     ResearchItemKind,
 )
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, RootModel, model_validator
+from app.tooling.reader_links import (
+    READER_LINK_GUIDANCE,
+    READER_URL_DESCRIPTION,
+    READER_URL_MAX_LENGTH,
+)
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    RootModel,
+    SerializeAsAny,
+    model_validator,
+)
 
 PROJECT_ID_DESCRIPTION = (
     "The immutable Scholens Project UUID. In a repository-bound workflow, read it "
@@ -132,6 +152,17 @@ class DocumentInput(ToolInput):
     document_id: DocumentId
 
 
+class PaperReadInput(DocumentInput):
+    model_config = ConfigDict(from_attributes=True)
+    project_id: ProjectId | None = Field(
+        default=None,
+        description=(
+            "Optional authorized Project context for the Reader URL and paper read. "
+            "Use it only when this paper belongs to that Project."
+        ),
+    )
+
+
 class JsonDocumentPageInput(ToolInput):
     cursor: str | None = Field(
         default=None,
@@ -149,7 +180,7 @@ class JsonDocumentPageInput(ToolInput):
     )
 
 
-class PaperMetadataPageInput(DocumentInput, JsonDocumentPageInput):
+class PaperMetadataPageInput(PaperReadInput, JsonDocumentPageInput):
     pass
 
 
@@ -183,6 +214,31 @@ class JsonDocumentPageOutput(BaseModel):
         ),
     )
     guidance: str = Field(max_length=500)
+
+
+class PaperJsonDocumentPageOutput(JsonDocumentPageOutput):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class PaperToolResponse(DocumentResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class PaperDownloadToolResponse(DocumentFileUrlResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+    guidance: str = Field(default=READER_LINK_GUIDANCE, max_length=1_000)
 
 
 class ProjectInput(ToolInput):
@@ -367,6 +423,11 @@ class KnowledgeSearchResult(BaseModel):
     score: float = Field(ge=0)
     document_id: UUID | None = None
     project_id: UUID | None = None
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     entity_id: UUID
     locator: dict[str, JsonValue] | None = None
     updated_at: datetime
@@ -377,12 +438,14 @@ class KnowledgeSearchOutput(BaseModel):
     next_cursor: str | None = None
     searched_scope: KnowledgeScope
     guidance: str = (
-        "Use get_paper_content for surrounding paper text and get_annotation_thread or "
-        "get_research_output for the complete stored item."
+        "Use reader_url as the durable user-facing paper link and write it as "
+        "[title](reader_url) in Markdown. Use get_paper_content for surrounding "
+        "paper text and get_annotation_thread or get_research_output for the "
+        "complete stored item."
     )
 
 
-class PaperContentInput(DocumentInput):
+class PaperContentInput(PaperReadInput):
     cursor: str | None = Field(
         default=None,
         max_length=2_048,
@@ -443,10 +506,15 @@ class PaperContentOutput(BaseModel):
     ends_mid_line: bool
     next_cursor: str | None
     truncated: bool
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     guidance: str
 
 
-class SearchPaperContentInput(DocumentInput):
+class SearchPaperContentInput(PaperReadInput):
     query: str = Field(
         min_length=1,
         max_length=2_000,
@@ -485,10 +553,15 @@ class PaperContentSearchOutput(BaseModel):
     )
     next_cursor: str | None = Field(default=None, max_length=2_048)
     truncated: bool = False
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     guidance: str
 
 
-class PaperCitationInput(DocumentInput):
+class PaperCitationInput(PaperReadInput):
     style: str = Field(
         default="APA",
         min_length=1,
@@ -497,10 +570,6 @@ class PaperCitationInput(DocumentInput):
             "Preferred citation-style key, for example APA. This selects presentation "
             "metadata; it is not a free-form formatting instruction."
         ),
-    )
-    project_id: ProjectId | None = Field(
-        default=None,
-        description="Optional Project context used to authorize a Project-only paper.",
     )
 
 
@@ -556,6 +625,11 @@ class PaperCitationReadOutput(BaseModel):
     )
     complete: bool
     content_truncated: bool = False
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     guidance: str = Field(max_length=1_000)
 
 
@@ -673,13 +747,33 @@ class ProjectMemberListToolOutput(ProjectCollaboratorListResponse):
     )
 
 
-class ProjectPaperListToolOutput(ProjectPaperListResponse):
+class ProjectPaperToolSummary(ProjectPaperSummaryResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class ProjectPaperListToolOutput(BaseModel):
+    items: list[ProjectPaperToolSummary]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
     content_truncated: bool = Field(
         description="True when one or more paper metadata fields are bounded previews."
     )
     guidance: str = Field(
         max_length=500,
         description="How to retrieve complete paper content and continue pagination.",
+    )
+
+
+class ProjectPaperCollectedToolResponse(ProjectPaperCollectedResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
     )
 
 
@@ -808,7 +902,53 @@ class ListLibraryPapersInput(ToolInput):
     limit: int = Field(default=20, ge=1, le=100, description="Page size.")
 
 
-class LibraryPaperListToolOutput(LibraryPaperListResponse):
+class LibraryPaperListPaperToolEntryModel(LibraryPaperListPaperEntry):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class LibraryPaperListIngestionToolEntryModel(LibraryPaperListIngestionEntry):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+LibraryPaperListToolEntry = Annotated[
+    LibraryPaperListPaperToolEntryModel | LibraryPaperListIngestionToolEntryModel,
+    Field(discriminator="entry_type"),
+]
+
+
+_READER_URL_SCHEMA = {
+    "anyOf": [
+        {"maxLength": READER_URL_MAX_LENGTH, "type": "string"},
+        {"type": "null"},
+    ],
+    "default": None,
+    "description": READER_URL_DESCRIPTION,
+    "title": "Reader Url",
+}
+
+_LIBRARY_PAPER_LIST_BASE_ENTRY = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA = Annotated[
+    SerializeAsAny[_LIBRARY_PAPER_LIST_BASE_ENTRY],
+    Field(json_schema_extra={"properties": {"reader_url": _READER_URL_SCHEMA}}),
+]
+
+
+class LibraryPaperListToolOutput(BaseModel):
+    items: list[_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(ge=0)
     content_truncated: bool = Field(
         description="True when one or more Library item fields are bounded previews."
     )
@@ -817,14 +957,50 @@ class LibraryPaperListToolOutput(LibraryPaperListResponse):
         description="How to retrieve lossless Library paper JSON and continue pages.",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_reader_url_entries(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            return value
+        normalized = dict(value)
+        normalized["items"] = [
+            (
+                LibraryPaperListPaperToolEntryModel.model_validate(item)
+                if isinstance(item, dict) and item.get("entry_type") == "paper"
+                else (
+                    LibraryPaperListIngestionToolEntryModel.model_validate(item)
+                    if isinstance(item, dict) and item.get("entry_type") == "ingestion"
+                    else item
+                )
+            )
+            for item in raw_items
+        ]
+        return normalized
+
 
 class LibraryPaperToolOutput(LibraryPaperResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     content_truncated: bool = Field(
         description="True when one or more Library or document fields are previews."
     )
     guidance: str = Field(
         max_length=500,
         description="How to retrieve the lossless Library paper representation.",
+    )
+
+
+class CollectPublicPaperToolResponse(CollectPublicPaperResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
     )
 
 
@@ -1058,11 +1234,30 @@ class JobWaitMetadata(BaseModel):
 
 
 class WaitableJobResponse(JobResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     wait: JobWaitMetadata
 
 
 class PaperIngestionToolResponse(LibraryPaperIngestionResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     job: WaitableJobResponse
+
+
+class LibraryPaperIngestionToolResponse(LibraryPaperIngestionResponse):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
 
 
 class JobBatchWaitMetadata(BaseModel):
@@ -1078,6 +1273,19 @@ class WaitForJobsResponse(BaseModel):
     wait: JobBatchWaitMetadata
 
 
+class JobToolResponse(JobResponse):
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class JobListToolOutput(BaseModel):
+    items: list[JobToolResponse]
+    next_cursor: str | None = None
+
+
 class BatchPaperIngestionItem(BaseModel):
     index: int = Field(ge=0)
     source: PaperSource
@@ -1090,7 +1298,7 @@ class BatchPaperIngestionItem(BaseModel):
         ),
     )
     status: Literal["accepted", "rejected"]
-    ingestion: LibraryPaperIngestionResponse | None = None
+    ingestion: LibraryPaperIngestionToolResponse | None = None
     job: WaitableJobResponse | None = None
     error_code: str | None = None
 
@@ -1194,6 +1402,42 @@ class CreateAnnotationThreadInput(MutationInput):
         min_length=1,
         max_length=100_000,
         description="Optional first discussion comment explaining the marked passage.",
+    )
+
+
+class AnnotatePaperInput(MutationInput):
+    """High-level annotation request that resolves quote text server-side."""
+
+    document_id: DocumentId
+    quote_text: str = Field(
+        min_length=1,
+        max_length=100_000,
+        description=(
+            "Exact visible paper passage to mark. The server resolves it against "
+            "canonical extracted text; do not provide PDF geometry."
+        ),
+    )
+    comment: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100_000,
+        description="Optional note or discussion explaining the marked passage.",
+    )
+    color: AnnotationColor = Field(
+        default=AnnotationColor.YELLOW,
+        description="Reader color for the mark; defaults to yellow.",
+    )
+    audience: AnnotationAudience = Field(
+        default_factory=PersonalResearchAudience,
+        description="Personal or Project visibility; defaults to personal.",
+    )
+    content_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "Optional digest from get_paper_content. When supplied, reject a "
+            "stale write instead of anchoring against changed text."
+        ),
     )
 
 
@@ -1339,8 +1583,53 @@ class ResearchOutputPageInput(ResearchOutputInput, JsonDocumentPageInput):
     )
 
 
+class ResearchItemToolResponse(ResearchItemResponse):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class ResearchOutputSummaryToolResponse(ResearchOutputSummary):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class ResearchOutputSummaryListToolResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ResearchOutputSummaryToolResponse] = Field(max_length=25)
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    previous_cursor: str | None = Field(default=None, max_length=2_048)
+    total_count: int = Field(ge=0)
+
+
+class AnnotationThreadSummaryToolResponse(AnnotationThreadSummaryResponse):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class LibraryOutputToolResponse(LibraryOutputResponse):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
 class ResearchOutputList(BaseModel):
-    items: list[LibraryOutputResponse | ResearchItemResponse]
+    items: list[LibraryOutputToolResponse | ResearchItemToolResponse]
     next_cursor: str | None = None
     previous_cursor: str | None = None
     total_count: int = Field(ge=0)
@@ -1362,6 +1651,11 @@ class ConfirmationAwareAction(RootModel[ConfirmationChallenge | CompletedAction]
 class CommentActionOutput(BaseModel):
     comment: AnnotationCommentResponse
     resource_uri: str
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     content_truncated: bool = Field(
         default=False,
         description="Whether comment.content is a bounded preview of the stored value.",
@@ -1373,8 +1667,13 @@ class CommentActionOutput(BaseModel):
 
 
 class ThreadActionOutput(BaseModel):
-    thread: ResearchItemResponse
+    thread: ResearchItemToolResponse
     resource_uri: str
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     content_truncated: bool = Field(
         default=False,
         description=(
@@ -1385,10 +1684,22 @@ class ThreadActionOutput(BaseModel):
         default=None,
         description="How to continue to the complete stored thread when truncated.",
     )
+    anchor: ResearchPosition | None = Field(
+        default=None,
+        description="Resolved compact anchor when a mutation created one automatically.",
+    )
+    visual_treatment: Literal["highlight", "underline"] | None = Field(
+        default=None,
+        description="Reader rendering: fill for a highlight, underline for a comment.",
+    )
+    next_action: str | None = Field(
+        default=None,
+        description="One bounded next step for an agent continuing this workflow.",
+    )
 
 
 class ThreadListOutput(BaseModel):
-    items: list[AnnotationThreadSummaryResponse]
+    items: list[AnnotationThreadSummaryToolResponse]
     next_cursor: str | None = None
 
 
@@ -1412,6 +1723,11 @@ class ResolvedCitationOutput(BaseModel):
         max_length=CITATION_MAX_STEPS,
     )
     resource_uri: str = Field(max_length=512)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     content_truncated: bool = False
     guidance: str = Field(max_length=1_000)
 

@@ -2369,7 +2369,11 @@ def test_alb_routes_only_reviewed_public_api_prefixes() -> None:
     resources = template["Resources"]
     values = {
         value
-        for rule in ("ApiListenerRule", "OperatorListenerRule")
+        for rule in (
+            "ApiListenerRule",
+            "ConversationV2ListenerRule",
+            "OperatorListenerRule",
+        )
         for value in resources[rule]["Properties"]["Conditions"][0][
             "PathPatternConfig"
         ]["Values"]
@@ -2378,6 +2382,8 @@ def test_alb_routes_only_reviewed_public_api_prefixes() -> None:
     assert values == {
         "/api/v1",
         "/api/v1/*",
+        "/api/v2",
+        "/api/v2/*",
         "/webhooks/v1",
         "/webhooks/v1/*",
         "/mcp",
@@ -2397,6 +2403,7 @@ def test_alb_routes_only_reviewed_public_api_prefixes() -> None:
     )
     assert resources["ApiService"]["DependsOn"] == [
         "ApiListenerRule",
+        "ConversationV2ListenerRule",
         "OperatorListenerRule",
     ]
 
