@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { ApiError } from "@/lib/api";
-import type { ReaderSelection } from "../reader-selection";
+import { readerSelectionKey, type ReaderSelection } from "../reader-selection";
 import {
   streamSelectionTranslation,
   translationKeys,
@@ -35,16 +35,6 @@ const initialState: SelectionTranslationState = {
   translatedText: "",
 };
 
-function selectionKey(selection: ReaderSelection | undefined) {
-  if (!selection) return undefined;
-  return JSON.stringify([
-    selection.document_id,
-    selection.page_number,
-    selection.selected_text,
-    selection.anchor,
-  ]);
-}
-
 export function useReaderTranslation({
   documentId,
   selection,
@@ -66,7 +56,7 @@ export function useReaderTranslation({
   const pendingDeltaRef = React.useRef("");
   const deltaFrameRef = React.useRef<number | undefined>(undefined);
   const deltaTimerRef = React.useRef<number | undefined>(undefined);
-  const key = selectionKey(selection);
+  const key = readerSelectionKey(selection);
   const selectionRef = React.useRef(selection);
   selectionRef.current = selection;
   const preferencesFingerprint = preferencesQuery.data

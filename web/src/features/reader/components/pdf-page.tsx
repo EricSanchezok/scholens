@@ -484,7 +484,11 @@ function PdfPageSurface({
         className="pdf-annotation-layer pointer-events-none absolute inset-0 [&_a]:pointer-events-auto"
         ref={annotationLayerRef}
       />
-      <div className="pointer-events-none absolute inset-0 z-10">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-10"
+        data-reader-annotation-paint-layer
+      >
         {annotationGroups.map((group) => {
           const annotation = group[0];
           const position = annotation?.position;
@@ -505,97 +509,102 @@ function PdfPageSurface({
           );
           const interactionTarget =
             previewGroupItem ?? selectedGroupItem ?? annotation;
-          const commentCount = countReaderAnnotationComments(group);
           const paintMode = readerAnnotationPaintMode(group);
+          const resolved = group.every((item) => item.status === "resolved");
+          return pageRects.map((rect, index) => (
+            <span
+              className={cn(
+                "absolute rounded-[1px]",
+                paintMode === "highlight" && "opacity-20",
+                paintMode === "annotation" && "opacity-75",
+                groupSelected &&
+                  (paintMode === "highlight" ? "opacity-30" : "opacity-100"),
+                groupPreviewed &&
+                  (paintMode === "highlight" ? "opacity-40" : "opacity-100"),
+                resolved && "opacity-20 grayscale",
+              )}
+              data-reader-annotation-count={group.length}
+              data-reader-annotation-highlight={interactionTarget.id}
+              data-reader-annotation-mode={paintMode}
+              data-reader-annotation-previewed={groupPreviewed || undefined}
+              data-reader-annotation-selected={groupSelected || undefined}
+              key={`${annotation.id}:${index}:${group.length}`}
+              style={{
+                backgroundColor:
+                  paintMode === "highlight"
+                    ? readerHighlightColorValue(interactionTarget.color)
+                    : "transparent",
+                borderBottomColor:
+                  paintMode === "annotation"
+                    ? readerHighlightColorValue(interactionTarget.color)
+                    : undefined,
+                borderBottomStyle:
+                  paintMode === "annotation" ? "solid" : undefined,
+                borderBottomWidth:
+                  paintMode === "annotation"
+                    ? groupSelected || groupPreviewed
+                      ? "3px"
+                      : "2px"
+                    : undefined,
+                height: `${rect.height * 100}%`,
+                left: `${rect.x * 100}%`,
+                top: `${rect.y * 100}%`,
+                width: `${rect.width * 100}%`,
+              }}
+            />
+          ));
+        })}
+      </div>
+      <div
+        className="pointer-events-none absolute inset-0 z-10"
+        data-reader-annotation-marker-layer
+      >
+        {annotationGroups.map((group) => {
+          const annotation = group[0];
+          const position = annotation?.position;
+          if (!annotation || position?.kind !== "pdf_text") return null;
+          const pageRects = readerPdfRectsForPage(position, pageNumber);
+          if (!pageRects) return null;
+          const selectedGroupItem = group.find(
+            (item) => item.id === selectedAnnotationId,
+          );
+          const previewGroupItem = group.find(
+            (item) => item.id === previewAnnotationId,
+          );
+          const interactionTarget =
+            previewGroupItem ?? selectedGroupItem ?? annotation;
+          const commentCount = countReaderAnnotationComments(group);
           const markerRect =
             position.page_number === pageNumber ? pageRects[0] : undefined;
           const resolved = group.every((item) => item.status === "resolved");
-          const activateGroup = () =>
-            onAnnotationSelect?.(interactionTarget.id);
-
+          if (commentCount <= 0 || !markerRect) return null;
           return (
-            <React.Fragment key={annotation.id}>
-              {pageRects.map((rect, index) => (
-                <button
-                  aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
-                  aria-pressed={groupSelected}
-                  className={cn(
-                    "motion-control pointer-events-auto absolute rounded-[1px]",
-                    focusSurfaceVariants({ intent: "selection" }),
-                    paintMode === "highlight" &&
-                      "opacity-20 hover:opacity-30 focus-visible:opacity-30",
-                    paintMode === "annotation" &&
-                      "opacity-75 hover:opacity-100 focus-visible:opacity-100",
-                    groupSelected &&
-                      (paintMode === "highlight"
-                        ? "opacity-30"
-                        : "opacity-100"),
-                    groupPreviewed &&
-                      (paintMode === "highlight"
-                        ? "opacity-40"
-                        : "opacity-100"),
-                    resolved && "opacity-20 grayscale",
-                  )}
-                  data-reader-annotation-count={group.length}
-                  data-reader-annotation-highlight={interactionTarget.id}
-                  data-reader-annotation-mode={paintMode}
-                  data-reader-annotation-previewed={groupPreviewed || undefined}
-                  data-reader-annotation-selected={groupSelected || undefined}
-                  key={`${annotation.id}:${index}:${group.length}`}
-                  onClick={activateGroup}
-                  style={{
-                    backgroundColor:
-                      paintMode === "highlight"
-                        ? readerHighlightColorValue(interactionTarget.color)
-                        : "transparent",
-                    borderBottomColor:
-                      paintMode === "annotation"
-                        ? readerHighlightColorValue(interactionTarget.color)
-                        : undefined,
-                    borderBottomStyle:
-                      paintMode === "annotation" ? "solid" : undefined,
-                    borderBottomWidth:
-                      paintMode === "annotation"
-                        ? groupSelected || groupPreviewed
-                          ? "3px"
-                          : "2px"
-                        : undefined,
-                    height: `${rect.height * 100}%`,
-                    left: `${rect.x * 100}%`,
-                    top: `${rect.y * 100}%`,
-                    width: `${rect.width * 100}%`,
-                  }}
-                  type="button"
-                />
-              ))}
-              {commentCount > 0 && markerRect ? (
-                <button
-                  aria-label={annotationCommentLabel(commentCount)}
-                  className={cn(
-                    "shadow-raised text-caption border-line bg-surface text-secondary pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-full border px-1.5 font-semibold",
-                    resolved && "bg-subtle text-muted opacity-70 grayscale",
-                    focusSurfaceVariants({ intent: "status" }),
-                  )}
-                  data-reader-annotation-comment-marker={interactionTarget.id}
-                  onClick={activateGroup}
-                  style={{
-                    top: `${Math.min(Math.max(markerRect.y * 100, 1), 95)}%`,
-                  }}
-                  type="button"
-                >
-                  <span
-                    aria-hidden
-                    className="size-2 rounded-full"
-                    style={{
-                      backgroundColor: readerHighlightColorValue(
-                        interactionTarget.color,
-                      ),
-                    }}
-                  />
-                  {commentCount}
-                </button>
-              ) : null}
-            </React.Fragment>
+            <button
+              aria-label={annotationCommentLabel(commentCount)}
+              className={cn(
+                "shadow-raised text-caption border-line bg-surface text-secondary pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-full border px-1.5 font-semibold",
+                resolved && "bg-subtle text-muted opacity-70 grayscale",
+                focusSurfaceVariants({ intent: "status" }),
+              )}
+              data-reader-annotation-comment-marker={interactionTarget.id}
+              key={`${annotation.id}:marker:${group.length}`}
+              onClick={() => onAnnotationSelect?.(interactionTarget.id)}
+              style={{
+                top: `${Math.min(Math.max(markerRect.y * 100, 1), 95)}%`,
+              }}
+              type="button"
+            >
+              <span
+                aria-hidden
+                className="size-2 rounded-full"
+                style={{
+                  backgroundColor: readerHighlightColorValue(
+                    interactionTarget.color,
+                  ),
+                }}
+              />
+              {commentCount}
+            </button>
           );
         })}
       </div>
@@ -817,6 +826,11 @@ export function PdfPage({
       onGestureChange: (active) => {
         const coordinator = selectionPageCoordinatorRef.current;
         if (active) {
+          // A pointerdown on the text layer starts a replacement selection.
+          // Clear the previous selection immediately so an in-flight
+          // annotation response cannot mistake the new gesture for the old
+          // selection and remove its native Range.
+          onActiveTextSelectionChange?.(undefined);
           pendingGesturePageRef.current = undefined;
           coordinator?.startGesture(routePageRef.current);
           return;
