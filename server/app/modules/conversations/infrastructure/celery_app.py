@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
 from celery import Celery
+from dotenv import load_dotenv
 from scholens_job_contracts import JobQueue
 
 from app.helpers.celery_config import (
@@ -13,7 +16,26 @@ from app.modules.conversations.infrastructure.task_protection import (
     register_task_protection_signals,
 )
 
+load_dotenv()
+
 BROKER_URL = get_celery_broker_url()
+
+
+def _conversation_worker_pool() -> str:
+    """Keep local workers in-process to avoid fork-unsafe native clients.
+
+    The development worker imports psycopg2/libpq before Celery starts its
+    pool. On macOS, a prefork child can then crash inside libpq's GSSAPI
+    credential lookup before the task has a chance to claim its durable job.
+    Production runs in Linux containers and retains the prefork pool for
+    process isolation and throughput.
+    """
+
+    if os.getenv("ENVIRONMENT", "development").casefold() != "production":
+        return "solo"
+    return "prefork"
+
+
 celery_app = Celery(
     "scholens_conversations",
     broker=BROKER_URL,
@@ -40,6 +62,7 @@ celery_app.conf.update(
         visibility_timeout_seconds=60 * 60,
     ),
     worker_prefetch_multiplier=1,
+    worker_pool=_conversation_worker_pool(),
     task_acks_late=True,
     reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=True,

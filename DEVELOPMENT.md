@@ -307,6 +307,12 @@ The default profile is Server API + Conversation worker + Web. Add Jobs only for
 background processing, or Zotero synchronization. The legacy client,
 Storybook, and Flower are opt-in profiles.
 
+The Conversation Celery app selects the `solo` pool for every non-production
+environment. This keeps local workers in one process and avoids fork-unsafe
+native database clients (notably psycopg2/libpq on macOS). The production ECS
+entrypoint sets `ENVIRONMENT=production`, so production workers retain Celery's
+`prefork` pool for process isolation and throughput.
+
 Use separate terminals:
 
 | Profile | Directory       | Command                                                                          |
