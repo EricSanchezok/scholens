@@ -396,8 +396,8 @@ the individual hit target without dividing the row into persistent blocks.
 Mobile hit targets remain 44 px and desktop hit targets are 32 px. Disabled
 arrows retain normal opacity and use the muted semantic color. Follow-up
 suggestions have no visible heading or repeated icon: phones use 44 px pills.
-On desktop, actions and suggestions share one response footer. Suggestion rows
-use secondary text, subtle separators only between rows, and a local rounded
+On desktop, actions and suggestions share the full conversation-lane response
+footer. Suggestion rows use secondary text, subtle separators only between rows, and a local rounded
 hover/focus surface; there is no outer divider or permanent card background.
 Each label stays on the response text baseline while its 12 px internal hit
 inset is preserved by extending the row surface beyond the footer edge. This

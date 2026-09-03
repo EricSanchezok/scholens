@@ -592,6 +592,24 @@ export const ResponseReadyWithSuggestions: Story = {
         name: "Compare the latency of each approach.",
       }),
     ).toBeVisible();
+
+    const assistant = canvas.getByRole("article", {
+      name: "Assistant response",
+    });
+    const footer = assistant.querySelector("footer");
+    const suggestions = canvas.getByRole("region", {
+      name: "Suggested follow-up questions",
+    });
+    if (!footer) {
+      throw new globalThis.Error("Assistant response footer is missing");
+    }
+    const responseWidth = assistant.getBoundingClientRect().width;
+    await expect(
+      Math.abs(footer.getBoundingClientRect().width - responseWidth),
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      Math.abs(suggestions.getBoundingClientRect().width - responseWidth),
+    ).toBeLessThanOrEqual(1);
   },
 };
 
@@ -693,6 +711,37 @@ export const AnswerSources: Story = {
   args: { turns: [researchTurn()] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const assistant = canvas.getByRole("article", { name: "助手回复" });
+    const copy = canvas.getByRole("button", { name: "复制回答" });
+    const retry = canvas.getByRole("button", { name: "重新生成回答" });
+    const sources = canvas.getByRole("button", { name: "3 个来源" });
+    const footer = assistant.querySelector("footer");
+    const suggestions = canvas.getByRole("region", {
+      name: "建议的后续问题",
+    });
+    await expect(footer).not.toBeNull();
+    if (!footer) return;
+    const responseWidth = assistant.getBoundingClientRect().width;
+    await expect(
+      Math.abs(footer.getBoundingClientRect().width - responseWidth),
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      Math.abs(suggestions.getBoundingClientRect().width - responseWidth),
+    ).toBeLessThanOrEqual(1);
+    await expect(copy.getBoundingClientRect().right).toBeLessThanOrEqual(
+      retry.getBoundingClientRect().left,
+    );
+    await expect(retry.getBoundingClientRect().right).toBeLessThanOrEqual(
+      sources.getBoundingClientRect().left,
+    );
+    await expect(
+      Math.abs(
+        responseWidth +
+          assistant.getBoundingClientRect().left -
+          sources.getBoundingClientRect().right,
+      ),
+    ).toBeLessThanOrEqual(1);
+
     await userEvent.click(canvas.getByRole("button", { name: "打开来源 1" }));
     const page = within(canvasElement.ownerDocument.body);
     await expect(
