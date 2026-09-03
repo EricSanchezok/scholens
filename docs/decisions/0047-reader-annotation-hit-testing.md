@@ -1,4 +1,4 @@
-# 0046 — Keep persisted Reader annotations out of text selection hit testing
+# 0047 — Keep persisted Reader annotations out of text selection hit testing
 
 Status: Accepted
 Date: 2026-09-03

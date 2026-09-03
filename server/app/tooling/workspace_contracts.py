@@ -50,6 +50,7 @@ from app.modules.research.application.contracts import (
     AnnotationAudience,
     AnnotationCommentResponse,
     AnnotationThreadSummaryResponse,
+    PersonalResearchAudience,
     ResearchItemResponse,
     ResearchOutputSummary,
     UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA,
@@ -1404,6 +1405,42 @@ class CreateAnnotationThreadInput(MutationInput):
     )
 
 
+class AnnotatePaperInput(MutationInput):
+    """High-level annotation request that resolves quote text server-side."""
+
+    document_id: DocumentId
+    quote_text: str = Field(
+        min_length=1,
+        max_length=100_000,
+        description=(
+            "Exact visible paper passage to mark. The server resolves it against "
+            "canonical extracted text; do not provide PDF geometry."
+        ),
+    )
+    comment: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100_000,
+        description="Optional note or discussion explaining the marked passage.",
+    )
+    color: AnnotationColor = Field(
+        default=AnnotationColor.YELLOW,
+        description="Reader color for the mark; defaults to yellow.",
+    )
+    audience: AnnotationAudience = Field(
+        default_factory=PersonalResearchAudience,
+        description="Personal or Project visibility; defaults to personal.",
+    )
+    content_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "Optional digest from get_paper_content. When supplied, reject a "
+            "stale write instead of anchoring against changed text."
+        ),
+    )
+
+
 class UpdateAnnotationThreadInput(MutationInput):
     model_config = ConfigDict(
         json_schema_extra=UPDATE_ANNOTATION_THREAD_JSON_SCHEMA_EXTRA
@@ -1646,6 +1683,18 @@ class ThreadActionOutput(BaseModel):
     guidance: str | None = Field(
         default=None,
         description="How to continue to the complete stored thread when truncated.",
+    )
+    anchor: ResearchPosition | None = Field(
+        default=None,
+        description="Resolved compact anchor when a mutation created one automatically.",
+    )
+    visual_treatment: Literal["highlight", "underline"] | None = Field(
+        default=None,
+        description="Reader rendering: fill for a highlight, underline for a comment.",
+    )
+    next_action: str | None = Field(
+        default=None,
+        description="One bounded next step for an agent continuing this workflow.",
     )
 
 

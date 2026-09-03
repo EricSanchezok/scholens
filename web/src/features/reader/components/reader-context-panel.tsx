@@ -301,7 +301,7 @@ export function ReaderAnnotationPanel({
       {annotationSelection ? (
         <section
           className="border-line bg-subtle rounded-[var(--radius-lg)] border p-3"
-          key={`${annotationSelection.document_id}:${annotationSelection.page_number}:${projectContext?.id ?? "personal"}`}
+          key={`${annotationSelection.document_id}:${annotationSelection.page_number}:${annotationSelection.selected_text}:${annotationInitialComment ?? ""}:${projectContext?.id ?? "personal"}`}
         >
           <p className="text-secondary line-clamp-4 text-sm leading-5">
             “{annotationSelection.selected_text}”
@@ -1110,7 +1110,6 @@ export function ReaderContextPanel({
                 tabIndex={0}
               >
                 <ReaderAnnotationPanel
-                  key={`${projectContext?.id ?? "personal"}:${annotationSelection?.page_number ?? "none"}:${annotationSelection?.selected_text ?? ""}:${annotationInitialComment ?? ""}`}
                   audienceFilter={annotationAudienceFilter}
                   modeFilter={annotationModeFilter}
                   annotations={annotations}

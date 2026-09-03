@@ -29,7 +29,7 @@ stable section ID is shared by the visible page and machine documentation.
 
 ## Content contract
 
-The typed documentation-content model owns MCP endpoint derivation, the 63-tool
+The typed documentation-content model owns MCP endpoint derivation, the 64-tool
 catalog total, six reviewed capability groups, permissions, resources,
 templates, client examples, local connector configuration, file-size limit,
 release revision state, and repository-binding sample. Localized page prose

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
 from collections.abc import Callable, Hashable
 from datetime import datetime
@@ -73,6 +74,7 @@ from app.modules.research.application.contracts import (
     UpdateAnnotationCommentRequest,
     UpdateAnnotationThreadRequest,
 )
+from app.modules.research.application.positions import ParsedTextPosition
 from app.modules.research.application.catalog import (
     ResearchOutputCatalogScope,
     ResearchOutputCatalogSort,
@@ -104,6 +106,7 @@ from app.tooling.annotation_mutation_projection import (
     project_annotation_comment,
     project_annotation_thread,
 )
+from app.tooling.annotation_target_resolution import resolve_annotation_quote
 from app.tooling.invocations import tool_arguments_hash
 from app.tooling.results import persisted_tool_outcome, restore_tool_outcome
 from app.tooling import workspace_contracts as wc
@@ -168,6 +171,8 @@ from app.tooling.reader_links import (
 )
 from pydantic import BaseModel, TypeAdapter
 from scholens_observability import add_counter
+
+logger = logging.getLogger(__name__)
 
 _JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 _RESEARCH_OUTPUT_KINDS = (
@@ -4309,6 +4314,106 @@ class WorkspaceToolHandlers:
                 )
             ),
             resource_links=(_thread_link(parsed.thread_id),),
+        )
+
+    def annotate_paper(
+        self,
+        capabilities: ApplicationCapabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        """Create a visually paintable annotation from quote text alone."""
+
+        parsed = wc.AnnotatePaperInput.model_validate(arguments)
+        self._require_paper(capabilities, context, parsed.document_id)
+        snapshot = self._authorized_paper_content_snapshot(
+            capabilities=capabilities,
+            context=context,
+            document_id=parsed.document_id,
+        )
+        if (
+            parsed.content_sha256 is not None
+            and parsed.content_sha256 != snapshot.content_sha256
+        ):
+            raise AppError(
+                code="annotation_content_changed",
+                message=(
+                    "Paper text changed since content_sha256 was read; fetch the "
+                    "latest paper content and retry"
+                ),
+                kind=FailureKind.CONFLICT,
+                details={"expected_content_sha256": parsed.content_sha256},
+            )
+        try:
+            target = resolve_annotation_quote(
+                content=snapshot.pager.raw_content,
+                quote_text=parsed.quote_text,
+            )
+        except AppError as error:
+            logger.info(
+                "research.annotation_target_resolution_failed",
+                extra={
+                    "annotation_error_code": error.code,
+                    "document_id": str(parsed.document_id),
+                    "quote_chars": len(parsed.quote_text),
+                },
+            )
+            raise
+        logger.info(
+            "research.annotation_target_resolved",
+            extra={
+                "document_id": str(parsed.document_id),
+                "quote_chars": len(parsed.quote_text),
+                "start_offset": target.start_offset,
+                "end_offset": target.end_offset,
+            },
+        )
+        position = ParsedTextPosition(
+            start_offset=target.start_offset,
+            end_offset=target.end_offset,
+        )
+        result = capabilities.research_items.create_annotation_thread(
+            actor=context.actor,
+            operation=context.operation,
+            content_role=RoleType.ASSISTANT,
+            document_id=parsed.document_id,
+            request=CreateAnnotationThreadRequest(
+                quote_text=parsed.quote_text,
+                position=position,
+                color=parsed.color,
+                audience=parsed.audience,
+                initial_comment=parsed.comment,
+            ),
+        )
+        projection = project_annotation_thread(result)
+        resource_uri = f"scholens://annotation-threads/{result.id}"
+        payload = wc.ThreadActionOutput(
+            thread=projection.thread,
+            resource_uri=resource_uri,
+            content_truncated=projection.content_truncated,
+            guidance=(
+                "Use get_annotation_thread_page to read the complete stored quote, "
+                "position, and comments."
+                if projection.content_truncated
+                else None
+            ),
+            anchor=position,
+            visual_treatment="underline" if parsed.comment else "highlight",
+            next_action=(
+                "Open the returned resource_uri; this anchor is immediately paintable "
+                "in the Reader."
+            ),
+        )
+        return ToolOutcome(
+            payload=_json(payload),
+            action={
+                "kind": "annotation_thread_created",
+                "thread_id": str(result.id),
+                "resource_uri": resource_uri,
+                "content_truncated": projection.content_truncated,
+                "anchor_resolved": True,
+            },
+            resource_links=(_thread_link(result.id), _paper_link(parsed.document_id)),
         )
 
     def create_annotation_thread(

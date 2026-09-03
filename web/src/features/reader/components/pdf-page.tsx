@@ -5,9 +5,11 @@ import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { focusSurfaceVariants } from "@/components/ui";
+import { reportReaderAnnotationMetric } from "@/lib/observability/web-performance";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
 import { readerPdfRectsForPage } from "../reader-pdf-position";
+import { resolveReaderParsedTextRects } from "../reader-parsed-anchor";
 import {
   readerSelectionFocusPage,
   type ReaderSelection,
@@ -274,7 +276,23 @@ function PdfPageSurface({
   );
   const [renderedKey, setRenderedKey] = React.useState("");
   const [renderErrorKey, setRenderErrorKey] = React.useState("");
+  const [parsedAnnotationRects, setParsedAnnotationRects] = React.useState<
+    Record<string, NormalizedSelectionRect[]>
+  >({});
+  const renderedKeyRef = React.useRef("");
   const reportedRenderErrorsRef = React.useRef(new Set<string>());
+  // Hovering an annotation and refreshing its discussion are overlay-only
+  // updates. Keep the PDF.js render callbacks in refs so those updates cannot
+  // invalidate the expensive canvas/text-layer render effect.
+  const onInternalDestinationRef = React.useRef(onInternalDestination);
+  const onRenderErrorRef = React.useRef(onRenderError);
+
+  React.useEffect(() => {
+    onInternalDestinationRef.current = onInternalDestination;
+  }, [onInternalDestination]);
+  React.useEffect(() => {
+    onRenderErrorRef.current = onRenderError;
+  }, [onRenderError]);
 
   React.useEffect(() => {
     const surface = pageSurfaceRef.current;
@@ -342,6 +360,11 @@ function PdfPageSurface({
     const annotationLayer = annotationLayerRef.current;
     if (!shouldRender || !page || !canvas || !textLayer || !annotationLayer)
       return;
+    const previousRenderKey = renderedKeyRef.current;
+    if (previousRenderKey && previousRenderKey !== expectedRenderedKey) {
+      reportReaderAnnotationMetric("pdf_render_restart");
+    }
+    renderedKeyRef.current = expectedRenderedKey;
     let active = true;
     const renderTask = renderPdfPage({
       activeSearchMatchId: activeSearchMatch?.id,
@@ -352,7 +375,8 @@ function PdfPageSurface({
       annotationLinkLabel,
       annotationLayer,
       canvas,
-      onInternalDestination,
+      onInternalDestination: (destination) =>
+        onInternalDestinationRef.current(destination),
       page,
       scale,
       searchMatches,
@@ -397,7 +421,7 @@ function PdfPageSurface({
         setRenderErrorKey(expectedRenderedKey);
         if (!reportedRenderErrorsRef.current.has(expectedRenderedKey)) {
           reportedRenderErrorsRef.current.add(expectedRenderedKey);
-          onRenderError?.(pageNumber, error);
+          onRenderErrorRef.current?.(pageNumber, error);
         }
       });
     return () => {
@@ -408,16 +432,56 @@ function PdfPageSurface({
     annotationLinkLabel,
     activeSearchMatch?.id,
     expectedRenderedKey,
-    onInternalDestination,
     page,
     pageNumber,
-    onRenderError,
     shouldRender,
     scale,
     scrollContainerRef,
     searchMatches,
     searchQuery,
   ]);
+
+  React.useEffect(() => {
+    if (!page || renderedKey !== expectedRenderedKey) return;
+    const pageElement = pageSurfaceRef.current;
+    const textLayer = textLayerRef.current;
+    if (!pageElement || !textLayer) return;
+    const next: Record<string, NormalizedSelectionRect[]> = {};
+    let parsedCount = 0;
+    for (const annotation of annotations) {
+      const position = annotation.position;
+      if (position?.kind !== "parsed_text") continue;
+      parsedCount += 1;
+      if (position.page_number != null && position.page_number !== pageNumber) {
+        continue;
+      }
+      const rects = resolveReaderParsedTextRects({
+        pageElement,
+        quoteText: annotation.quote_text,
+        textLayer,
+      });
+      if (rects.length > 0) next[annotation.id] = rects;
+    }
+    if (parsedCount > 0) {
+      reportReaderAnnotationMetric(
+        "reader_annotation_anchor_resolve",
+        Object.keys(next).length / parsedCount,
+      );
+    }
+    setParsedAnnotationRects((current) => {
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(next);
+      if (
+        currentKeys.length === nextKeys.length &&
+        nextKeys.every(
+          (key) => JSON.stringify(current[key]) === JSON.stringify(next[key]),
+        )
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, [annotations, expectedRenderedKey, page, pageNumber, renderedKey]);
 
   const rendering =
     shouldRender &&
@@ -432,12 +496,20 @@ function PdfPageSurface({
     return () => uninstallTextLayerSelectionGuard(textLayer);
   }, []);
 
-  const pageAnnotations = annotations.filter((annotation) => {
+  const pageAnnotations = annotations.flatMap((annotation) => {
     const position = annotation.position;
-    return (
-      position?.kind === "pdf_text" &&
-      Boolean(readerPdfRectsForPage(position, pageNumber))
-    );
+    if (position?.kind === "pdf_text") {
+      return readerPdfRectsForPage(position, pageNumber) ? [annotation] : [];
+    }
+    if (position?.kind !== "parsed_text") return [];
+    const rects = parsedAnnotationRects[annotation.id];
+    if (!rects?.length) return [];
+    return [
+      {
+        ...annotation,
+        position: { kind: "pdf_text" as const, page_number: pageNumber, rects },
+      },
+    ];
   });
   const annotationGroups = groupReaderAnnotationsByAnchor(pageAnnotations);
 

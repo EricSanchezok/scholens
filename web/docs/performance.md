@@ -32,7 +32,8 @@ feedback, committed route, and primary product content. The targets are:
 ## Real-user measurement
 
 `WebPerformanceReporter` sends Core Web Vitals, the three navigation
-milestones, and Conversation interaction milestones to the same-origin
+milestones, Conversation interaction milestones, and low-cardinality Reader
+annotation/render health metrics to the same-origin
 `POST /__telemetry/web-performance` Web route. Conversation measurements cover
 painted submit feedback, durable acceptance, first SSE event, first visible
 answer content, ready, and the longest event stall. A tracker reports each
@@ -46,7 +47,8 @@ surface, and optional decoder (`jbig2`, `openjpeg`, `qcms`, or `unknown`). It
 never accepts a user/account/Conversation/document identifier, content, title,
 query string, raw URL, signed URL, raw error text, or IP address. The receiver
 adds only `CN`/`non-CN` and the Cloudflare colo, writes structured
-`web_performance`, `conversation_performance`, or `pdf_render` events, and
+`web_performance`, `conversation_performance`, `reader_annotation`, or
+`pdf_render` events, and
 returns `204` without persistence in application state.
 
 The production CloudWatch dashboard calculates p75, p95, and sample counts by

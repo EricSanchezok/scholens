@@ -397,6 +397,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
             "ingest_paper",
             "ingest_papers",
             "retry_paper_ingestion",
+            "annotate_paper",
             "create_annotation_thread",
             "update_annotation_thread",
             "create_annotation_comment",
