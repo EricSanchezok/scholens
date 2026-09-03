@@ -9,6 +9,7 @@ import {
   selectReaderViewportPage,
 } from "./pdf-page";
 import type { ReaderAnnotationSummary } from "../reader-types";
+import { resolveReaderParsedTextRects } from "../reader-parsed-anchor";
 
 describe("normalizeReaderSelectionRects", () => {
   it("normalizes browser rectangles against the rendered PDF page", () => {
@@ -67,6 +68,48 @@ describe("normalizeReaderSelectionRects", () => {
       { x: 0.7, y: 0.1, width: 0.1, height: 0.02 },
       { x: 0.1, y: 0.13, width: 0.25, height: 0.02 },
     ]);
+  });
+});
+
+describe("resolveReaderParsedTextRects", () => {
+  it("maps a normalized quote across text-layer nodes to page rectangles", () => {
+    const page = document.createElement("article");
+    const textLayer = document.createElement("div");
+    const first = document.createElement("span");
+    const second = document.createElement("span");
+    first.textContent = "control matters more ";
+    second.textContent = "than visuals";
+    textLayer.append(first, second);
+    page.append(textLayer);
+    Object.defineProperty(page, "getBoundingClientRect", {
+      value: () => ({ height: 100, left: 0, top: 0, width: 200 }),
+    });
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [{ height: 10, left: 20, top: 30, width: 100 }],
+    });
+
+    expect(
+      resolveReaderParsedTextRects({
+        pageElement: page,
+        quoteText: "control   matters more than visuals",
+        textLayer,
+      }),
+    ).toEqual([{ height: 0.1, width: 0.5, x: 0.1, y: 0.3 }]);
+  });
+
+  it("does not paint an unresolved quote", () => {
+    const page = document.createElement("article");
+    const textLayer = document.createElement("div");
+    textLayer.textContent = "visible text";
+    page.append(textLayer);
+    expect(
+      resolveReaderParsedTextRects({
+        pageElement: page,
+        quoteText: "missing text",
+        textLayer,
+      }),
+    ).toEqual([]);
   });
 });
 

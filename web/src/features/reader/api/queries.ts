@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import { nextAvatarRefreshInterval } from "@/lib/query/avatar-refresh";
@@ -93,6 +93,10 @@ export const readerQueries = {
         if (!data) throw new Error("Reader annotation response was empty");
         return data;
       },
+      // Annotation mutations invalidate the filter family. Keep the last
+      // visible list while the active query refetches so the PDF and panel do
+      // not flash empty/loading states or restart their expensive overlays.
+      placeholderData: keepPreviousData,
       refetchInterval: (query) => {
         const avatarInterval = nextAvatarRefreshInterval(
           query.state.data?.items.flatMap((annotation) => [

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -84,8 +85,8 @@ _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
 
 
 def _normalize_whitespace(text: str) -> str:
-    """Collapse runs of whitespace so selection/OCR differences do not reject."""
-    return " ".join(text.split())
+    """Normalize Unicode/soft hyphens and collapse whitespace for anchors."""
+    return " ".join(unicodedata.normalize("NFKC", text).replace("\u00ad", "").split())
 
 
 @dataclass(frozen=True, slots=True)

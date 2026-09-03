@@ -5536,6 +5536,1658 @@
       "required_permission": "write",
       "title": "Add papers to Project"
     },
+    "annotate_paper": {
+      "behavior": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": false,
+        "read_only": false
+      },
+      "confirmation_policy": "none",
+      "description": "Use when you want to mark an exact passage by quoting paper text. Do not use when you need to edit or delete an existing annotation thread. Returns a paintable anchor, stable resource URI, and visual treatment. Next: open the returned resource_uri or add a reply with the thread UUID.",
+      "execution": "command",
+      "input_schema": {
+        "$defs": {
+          "AnnotationColor": {
+            "enum": [
+              "yellow",
+              "red",
+              "green",
+              "blue",
+              "purple",
+              "magenta",
+              "orange",
+              "gray"
+            ],
+            "title": "AnnotationColor",
+            "type": "string"
+          },
+          "PersonalResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "personal",
+                "default": "personal",
+                "description": "Keep the research item visible only to its creator.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "PersonalResearchAudience",
+            "type": "object"
+          },
+          "ProjectResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "project",
+                "default": "project",
+                "description": "Share the research item with current members of one Project.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "project_id": {
+                "description": "Immutable Scholens Project UUID defining the audience.",
+                "format": "uuid",
+                "title": "Project Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "project_id"
+            ],
+            "title": "ProjectResearchAudience",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "High-level annotation request that resolves quote text server-side.",
+        "properties": {
+          "audience": {
+            "description": "Personal or Project visibility; defaults to personal.",
+            "discriminator": {
+              "mapping": {
+                "personal": "#/$defs/PersonalResearchAudience",
+                "project": "#/$defs/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/$defs/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
+          "color": {
+            "$ref": "#/$defs/AnnotationColor",
+            "default": "yellow",
+            "description": "Reader color for the mark; defaults to yellow."
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional note or discussion explaining the marked passage.",
+            "title": "Comment"
+          },
+          "content_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional digest from get_paper_content. When supplied, reject a stale write instead of anchoring against changed text.",
+            "title": "Content Sha256"
+          },
+          "document_id": {
+            "description": "The immutable Scholens document UUID returned by an ingestion, search, list, or paper tool. Do not substitute a DOI, title, filename, or external provider ID.",
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A client-generated stable key for this one logical mutation. Reuse the exact key after a timeout or lost response; use a new key for a genuinely new action.",
+            "title": "Idempotency Key"
+          },
+          "quote_text": {
+            "description": "Exact visible paper passage to mark. The server resolves it against canonical extracted text; do not provide PDF geometry.",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Quote Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "quote_text"
+        ],
+        "title": "AnnotatePaperInput",
+        "type": "object"
+      },
+      "max_success_envelope_utf8_bytes": 204800,
+      "output_schema": {
+        "$defs": {
+          "AnnotationColor": {
+            "enum": [
+              "yellow",
+              "red",
+              "green",
+              "blue",
+              "purple",
+              "magenta",
+              "orange",
+              "gray"
+            ],
+            "title": "AnnotationColor",
+            "type": "string"
+          },
+          "AnnotationCommentResponse": {
+            "properties": {
+              "can_delete": {
+                "title": "Can Delete",
+                "type": "boolean"
+              },
+              "can_edit": {
+                "title": "Can Edit",
+                "type": "boolean"
+              },
+              "content": {
+                "title": "Content",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "$ref": "#/$defs/ResearchCreatorResponse"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "role": {
+                "title": "Role",
+                "type": "string"
+              },
+              "thread_id": {
+                "format": "uuid",
+                "title": "Thread Id",
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "thread_id",
+              "content",
+              "role",
+              "created_by",
+              "created_at",
+              "updated_at",
+              "can_edit",
+              "can_delete"
+            ],
+            "title": "AnnotationCommentResponse",
+            "type": "object"
+          },
+          "AnnotationThreadCapabilities": {
+            "properties": {
+              "delete": {
+                "title": "Delete",
+                "type": "boolean"
+              },
+              "recolor": {
+                "title": "Recolor",
+                "type": "boolean"
+              },
+              "reopen": {
+                "title": "Reopen",
+                "type": "boolean"
+              },
+              "reply": {
+                "title": "Reply",
+                "type": "boolean"
+              },
+              "resolve": {
+                "title": "Resolve",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "reply",
+              "recolor",
+              "resolve",
+              "reopen",
+              "delete"
+            ],
+            "title": "AnnotationThreadCapabilities",
+            "type": "object"
+          },
+          "AnnotationThreadContent": {
+            "properties": {
+              "capabilities": {
+                "$ref": "#/$defs/AnnotationThreadCapabilities"
+              },
+              "color": {
+                "$ref": "#/$defs/AnnotationColor"
+              },
+              "comment_count": {
+                "minimum": 0,
+                "title": "Comment Count",
+                "type": "integer"
+              },
+              "comments": {
+                "items": {
+                  "$ref": "#/$defs/AnnotationCommentResponse"
+                },
+                "title": "Comments",
+                "type": "array"
+              },
+              "last_activity_at": {
+                "format": "date-time",
+                "title": "Last Activity At",
+                "type": "string"
+              },
+              "mode": {
+                "$ref": "#/$defs/AnnotationThreadMode"
+              },
+              "position": {
+                "anyOf": [
+                  {
+                    "discriminator": {
+                      "mapping": {
+                        "parsed_text": "#/$defs/ParsedTextPosition",
+                        "pdf_text": "#/$defs/PdfTextPosition"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/PdfTextPosition"
+                      },
+                      {
+                        "$ref": "#/$defs/ParsedTextPosition"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Position"
+              },
+              "quote_text": {
+                "title": "Quote Text",
+                "type": "string"
+              },
+              "resolved_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Resolved At"
+              },
+              "resolved_by": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ResearchCreatorResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "role": {
+                "title": "Role",
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/$defs/AnnotationThreadStatus"
+              }
+            },
+            "required": [
+              "quote_text",
+              "position",
+              "color",
+              "role",
+              "mode",
+              "comment_count",
+              "last_activity_at",
+              "status",
+              "resolved_by",
+              "resolved_at",
+              "capabilities",
+              "comments"
+            ],
+            "title": "AnnotationThreadContent",
+            "type": "object"
+          },
+          "AnnotationThreadMode": {
+            "enum": [
+              "highlight",
+              "note",
+              "discussion"
+            ],
+            "title": "AnnotationThreadMode",
+            "type": "string"
+          },
+          "AnnotationThreadStatus": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "title": "AnnotationThreadStatus",
+            "type": "string"
+          },
+          "AudioOverviewContent": {
+            "properties": {
+              "audio_url": {
+                "title": "Audio Url",
+                "type": "string"
+              },
+              "citations": {
+                "items": {
+                  "$ref": "#/$defs/ResponseCitation"
+                },
+                "title": "Citations",
+                "type": "array"
+              },
+              "model_version": {
+                "title": "Model Version",
+                "type": "string"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Title"
+              },
+              "transcript": {
+                "title": "Transcript",
+                "type": "string"
+              },
+              "voice_id": {
+                "title": "Voice Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "transcript",
+              "citations",
+              "audio_url",
+              "voice_id",
+              "model_version"
+            ],
+            "title": "AudioOverviewContent",
+            "type": "object"
+          },
+          "CitationContent": {
+            "properties": {
+              "snapshot": {
+                "$ref": "#/$defs/CitationSnapshot"
+              }
+            },
+            "required": [
+              "snapshot"
+            ],
+            "title": "CitationContent",
+            "type": "object"
+          },
+          "CitationData": {
+            "description": "Structured, populated citation metadata. The client renders this into a\ncitation string in the user's chosen style \u2014 the server does not format it.",
+            "properties": {
+              "authors": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Authors",
+                "type": "array"
+              },
+              "document_id": {
+                "title": "Document Id",
+                "type": "string"
+              },
+              "doi": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Doi"
+              },
+              "journal": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Journal"
+              },
+              "publish_date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Publish Date"
+              },
+              "publisher": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Publisher"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "document_id"
+            ],
+            "title": "CitationData",
+            "type": "object"
+          },
+          "CitationSnapshot": {
+            "additionalProperties": false,
+            "description": "Immutable, validated citation card emitted by the evidence pipeline.",
+            "properties": {
+              "confidence": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Confidence"
+              },
+              "data": {
+                "$ref": "#/$defs/CitationData"
+              },
+              "document_id": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Document Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "citation",
+                "title": "Kind",
+                "type": "string"
+              },
+              "method": {
+                "enum": [
+                  "cached",
+                  "deterministic",
+                  "agentic",
+                  "partial",
+                  "not_found"
+                ],
+                "title": "Method",
+                "type": "string"
+              },
+              "missing_fields": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Missing Fields",
+                "type": "array"
+              },
+              "preferred_style": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Preferred Style",
+                "type": "string"
+              },
+              "style_display": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Style Display",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "document_id",
+              "preferred_style",
+              "style_display",
+              "data",
+              "method"
+            ],
+            "title": "CitationSnapshot",
+            "type": "object"
+          },
+          "DataTableContent": {
+            "properties": {
+              "citations": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Citations",
+                "type": "array"
+              },
+              "columns": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Columns",
+                "type": "array"
+              },
+              "row_failures": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Row Failures",
+                "type": "array"
+              },
+              "rows": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Rows",
+                "type": "array"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Title"
+              }
+            },
+            "required": [
+              "title",
+              "columns",
+              "rows",
+              "citations",
+              "row_failures"
+            ],
+            "title": "DataTableContent",
+            "type": "object"
+          },
+          "DocumentResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "description": "Immutable Scholens document UUID defining the audience.",
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "document",
+                "default": "document",
+                "description": "Share the research item through one authorized document scope.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "document_id"
+            ],
+            "title": "DocumentResearchAudience",
+            "type": "object"
+          },
+          "DocumentSourceCandidate": {
+            "properties": {
+              "authors": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Authors",
+                "type": "array"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "excerpt": {
+                "title": "Excerpt",
+                "type": "string"
+              },
+              "kind": {
+                "const": "document",
+                "default": "document",
+                "title": "Kind",
+                "type": "string"
+              },
+              "locator": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Locator"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "document_id",
+              "excerpt"
+            ],
+            "title": "DocumentSourceCandidate",
+            "type": "object"
+          },
+          "ExternalSourceCandidate": {
+            "properties": {
+              "excerpt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt"
+              },
+              "kind": {
+                "const": "external",
+                "default": "external",
+                "title": "Kind",
+                "type": "string"
+              },
+              "provenance": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ExternalSourceProvenance"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              },
+              "url": {
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "title": "ExternalSourceCandidate",
+            "type": "object"
+          },
+          "ExternalSourceProvenance": {
+            "description": "Exact locations used to derive one external source candidate.",
+            "properties": {
+              "excerpt_end": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt End"
+              },
+              "excerpt_path": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt Path"
+              },
+              "excerpt_start": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt Start"
+              },
+              "url_end": {
+                "title": "Url End",
+                "type": "integer"
+              },
+              "url_origin": {
+                "enum": [
+                  "arguments",
+                  "payload"
+                ],
+                "title": "Url Origin",
+                "type": "string"
+              },
+              "url_path": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "title": "Url Path",
+                "type": "array"
+              },
+              "url_start": {
+                "title": "Url Start",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "url_origin",
+              "url_path",
+              "url_start",
+              "url_end"
+            ],
+            "title": "ExternalSourceProvenance",
+            "type": "object"
+          },
+          "JsonScalar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "JsonValue": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JsonScalar"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "ParsedTextPosition": {
+            "additionalProperties": false,
+            "properties": {
+              "end_offset": {
+                "description": "Exclusive zero-based character offset after the selected quote.",
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "title": "End Offset",
+                "type": "integer"
+              },
+              "kind": {
+                "const": "parsed_text",
+                "default": "parsed_text",
+                "description": "Anchor the quote to offsets in canonical parsed paper text.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "page_number": {
+                "anyOf": [
+                  {
+                    "maximum": 2147483647,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Optional one-based source page projection for the parsed-text span.",
+                "title": "Page Number"
+              },
+              "start_offset": {
+                "description": "Inclusive zero-based character offset in canonical parsed text.",
+                "maximum": 2147483647,
+                "minimum": 0,
+                "title": "Start Offset",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "start_offset",
+              "end_offset"
+            ],
+            "title": "ParsedTextPosition",
+            "type": "object"
+          },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "maximum": 2147483647,
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
+          "PdfTextPosition": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "pdf_text",
+                "default": "pdf_text",
+                "description": "Anchor the quote to visible PDF text rectangles.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "page_number": {
+                "description": "One-based PDF page containing the first supplied segment.",
+                "maximum": 2147483647,
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Legacy projection of the first page segment.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPosition",
+            "type": "object"
+          },
+          "PdfTextRect": {
+            "additionalProperties": false,
+            "description": "A PDF text rectangle normalized to the page's 0\u20131 coordinate space.",
+            "properties": {
+              "height": {
+                "description": "Normalized positive rectangle height within the page.",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "Height",
+                "type": "number"
+              },
+              "width": {
+                "description": "Normalized positive rectangle width within the page.",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "Width",
+                "type": "number"
+              },
+              "x": {
+                "description": "Normalized left coordinate from 0 at the page edge to 1.",
+                "maximum": 1,
+                "minimum": 0,
+                "title": "X",
+                "type": "number"
+              },
+              "y": {
+                "description": "Normalized top coordinate from 0 at the page edge to 1.",
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Y",
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "title": "PdfTextRect",
+            "type": "object"
+          },
+          "PersonalResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "personal",
+                "default": "personal",
+                "description": "Keep the research item visible only to its creator.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "PersonalResearchAudience",
+            "type": "object"
+          },
+          "ProjectResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "project",
+                "default": "project",
+                "description": "Share the research item with current members of one Project.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "project_id": {
+                "description": "Immutable Scholens Project UUID defining the audience.",
+                "format": "uuid",
+                "title": "Project Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "project_id"
+            ],
+            "title": "ProjectResearchAudience",
+            "type": "object"
+          },
+          "ResearchCreatorResponse": {
+            "properties": {
+              "display_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Display Name"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Id"
+              }
+            },
+            "required": [
+              "id",
+              "display_name"
+            ],
+            "title": "ResearchCreatorResponse",
+            "type": "object"
+          },
+          "ResearchItemCapabilities": {
+            "properties": {
+              "delete": {
+                "title": "Delete",
+                "type": "boolean"
+              },
+              "edit": {
+                "title": "Edit",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "edit",
+              "delete"
+            ],
+            "title": "ResearchItemCapabilities",
+            "type": "object"
+          },
+          "ResearchItemKind": {
+            "enum": [
+              "annotation_thread",
+              "citation",
+              "audio_overview",
+              "data_table"
+            ],
+            "title": "ResearchItemKind",
+            "type": "string"
+          },
+          "ResearchItemResponse": {
+            "properties": {
+              "annotation_thread": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AnnotationThreadContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "audience": {
+                "discriminator": {
+                  "mapping": {
+                    "document": "#/$defs/DocumentResearchAudience",
+                    "personal": "#/$defs/PersonalResearchAudience",
+                    "project": "#/$defs/ProjectResearchAudience"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/PersonalResearchAudience"
+                  },
+                  {
+                    "$ref": "#/$defs/DocumentResearchAudience"
+                  },
+                  {
+                    "$ref": "#/$defs/ProjectResearchAudience"
+                  }
+                ],
+                "title": "Audience"
+              },
+              "audio_overview": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AudioOverviewContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "capabilities": {
+                "$ref": "#/$defs/ResearchItemCapabilities"
+              },
+              "citation": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CitationContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "$ref": "#/$defs/ResearchCreatorResponse"
+              },
+              "data_table": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DataTableContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/ResearchItemKind"
+              },
+              "target_document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Target Document Id"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "audience",
+              "target_document_id",
+              "created_by",
+              "created_at",
+              "updated_at",
+              "capabilities"
+            ],
+            "title": "ResearchItemResponse",
+            "type": "object"
+          },
+          "ResponseCitation": {
+            "description": "Schema for a citation in the paper.\nThis is used to represent a single citation with its text and context.",
+            "properties": {
+              "document_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The unique identifier of the paper from which this citation is drawn. This helps to contextualize the citation within the broader multi-paper analysis. This is required when there are multiple papers being analyzed.",
+                "title": "Document Id"
+              },
+              "index": {
+                "description": "The index of the citation in the paper's reference list. This is used to identify the citation in discussions or findings.",
+                "title": "Index",
+                "type": "integer"
+              },
+              "text": {
+                "description": "The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "index"
+            ],
+            "title": "ResponseCitation",
+            "type": "object"
+          },
+          "ThreadActionOutput": {
+            "properties": {
+              "anchor": {
+                "anyOf": [
+                  {
+                    "discriminator": {
+                      "mapping": {
+                        "parsed_text": "#/$defs/ParsedTextPosition",
+                        "pdf_text": "#/$defs/PdfTextPosition"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/PdfTextPosition"
+                      },
+                      {
+                        "$ref": "#/$defs/ParsedTextPosition"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Resolved compact anchor when a mutation created one automatically.",
+                "title": "Anchor"
+              },
+              "content_truncated": {
+                "default": false,
+                "description": "Whether quote, position, or comments were reduced in this mutation receipt.",
+                "title": "Content Truncated",
+                "type": "boolean"
+              },
+              "guidance": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "How to continue to the complete stored thread when truncated.",
+                "title": "Guidance"
+              },
+              "next_action": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "One bounded next step for an agent continuing this workflow.",
+                "title": "Next Action"
+              },
+              "resource_uri": {
+                "title": "Resource Uri",
+                "type": "string"
+              },
+              "thread": {
+                "$ref": "#/$defs/ResearchItemResponse"
+              },
+              "visual_treatment": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "highlight",
+                      "underline"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Reader rendering: fill for a highlight, underline for a comment.",
+                "title": "Visual Treatment"
+              }
+            },
+            "required": [
+              "thread",
+              "resource_uri"
+            ],
+            "title": "ThreadActionOutput",
+            "type": "object"
+          },
+          "ThreadActionOutputToolStructuredResult": {
+            "properties": {
+              "action": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Action"
+              },
+              "artifacts": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Artifacts",
+                "type": "array"
+              },
+              "resource_links": {
+                "items": {
+                  "$ref": "#/$defs/ToolResourceLink"
+                },
+                "title": "Resource Links",
+                "type": "array"
+              },
+              "result": {
+                "$ref": "#/$defs/ThreadActionOutput"
+              },
+              "sources": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/DocumentSourceCandidate"
+                    },
+                    {
+                      "$ref": "#/$defs/ExternalSourceCandidate"
+                    }
+                  ]
+                },
+                "title": "Sources",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "ThreadActionOutputToolStructuredResult",
+            "type": "object"
+          },
+          "ToolErrorEnvelope": {
+            "description": "Compatibility shape retained in the advertised tool output schema.\n\nCurrent ``isError`` results omit ``structuredContent`` and serialize this\nshape under ``content[].text.error`` so strict clients do not validate\nerrors against stale cached output schemas. Retaining the branch keeps old\nstructured error results valid during rolling upgrades.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "correlation_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Correlation Id"
+              },
+              "details": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Details"
+              },
+              "diagnostic_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Diagnostic Id"
+              },
+              "kind": {
+                "title": "Kind",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "remediation": {
+                "title": "Remediation",
+                "type": "string"
+              },
+              "request_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Request Id"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "stage": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stage"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "kind",
+              "retryable",
+              "remediation"
+            ],
+            "title": "ToolErrorEnvelope",
+            "type": "object"
+          },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
+          "ToolResourceLink": {
+            "description": "A stable Scholens resource made available by a tool result.",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "mime_type": {
+                "default": "application/json",
+                "title": "Mime Type",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "uri": {
+                "title": "Uri",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uri",
+              "name"
+            ],
+            "title": "ToolResourceLink",
+            "type": "object"
+          }
+        },
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ThreadActionOutputToolStructuredResult"
+          },
+          {
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
+          }
+        ],
+        "type": "object"
+      },
+      "required_permission": "write",
+      "title": "Annotate paper passage"
+    },
     "cancel_paper_ingestion": {
       "behavior": {
         "destructive": true,
@@ -7898,7 +9550,7 @@
         "read_only": false
       },
       "confirmation_policy": "none",
-      "description": "Use when an exact stored-paper passage needs an anchored note or discussion. Do not use when you cannot provide exact quote text and Reader position. Returns the created thread and stable resource URI. Next: use the URI or thread UUID in durable research notes.",
+      "description": "Use when you already have a validated pdf_text Reader position. Do not use when you only have quote text; use annotate_paper instead. Returns the created thread and stable resource URI. Next: use annotate_paper for future quote-only requests.",
       "execution": "command",
       "input_schema": {
         "$defs": {
@@ -9410,6 +11062,33 @@
           },
           "ThreadActionOutput": {
             "properties": {
+              "anchor": {
+                "anyOf": [
+                  {
+                    "discriminator": {
+                      "mapping": {
+                        "parsed_text": "#/$defs/ParsedTextPosition",
+                        "pdf_text": "#/$defs/PdfTextPosition"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/PdfTextPosition"
+                      },
+                      {
+                        "$ref": "#/$defs/ParsedTextPosition"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Resolved compact anchor when a mutation created one automatically.",
+                "title": "Anchor"
+              },
               "content_truncated": {
                 "default": false,
                 "description": "Whether quote, position, or comments were reduced in this mutation receipt.",
@@ -9429,12 +11108,42 @@
                 "description": "How to continue to the complete stored thread when truncated.",
                 "title": "Guidance"
               },
+              "next_action": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "One bounded next step for an agent continuing this workflow.",
+                "title": "Next Action"
+              },
               "resource_uri": {
                 "title": "Resource Uri",
                 "type": "string"
               },
               "thread": {
                 "$ref": "#/$defs/ResearchItemResponse"
+              },
+              "visual_treatment": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "highlight",
+                      "underline"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Reader rendering: fill for a highlight, underline for a comment.",
+                "title": "Visual Treatment"
               }
             },
             "required": [
@@ -9659,6 +11368,7 @@
         ],
         "type": "object"
       },
+      "replacement_tool": "annotate_paper",
       "required_permission": "write",
       "title": "Create annotation thread"
     },
@@ -50874,6 +52584,33 @@
           },
           "ThreadActionOutput": {
             "properties": {
+              "anchor": {
+                "anyOf": [
+                  {
+                    "discriminator": {
+                      "mapping": {
+                        "parsed_text": "#/$defs/ParsedTextPosition",
+                        "pdf_text": "#/$defs/PdfTextPosition"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/PdfTextPosition"
+                      },
+                      {
+                        "$ref": "#/$defs/ParsedTextPosition"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Resolved compact anchor when a mutation created one automatically.",
+                "title": "Anchor"
+              },
               "content_truncated": {
                 "default": false,
                 "description": "Whether quote, position, or comments were reduced in this mutation receipt.",
@@ -50893,12 +52630,42 @@
                 "description": "How to continue to the complete stored thread when truncated.",
                 "title": "Guidance"
               },
+              "next_action": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "One bounded next step for an agent continuing this workflow.",
+                "title": "Next Action"
+              },
               "resource_uri": {
                 "title": "Resource Uri",
                 "type": "string"
               },
               "thread": {
                 "$ref": "#/$defs/ResearchItemResponse"
+              },
+              "visual_treatment": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "highlight",
+                      "underline"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Reader rendering: fill for a highlight, underline for a comment.",
+                "title": "Visual Treatment"
               }
             },
             "required": [

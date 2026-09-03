@@ -9,6 +9,12 @@ const MAX_CONTENT_LENGTH = 4_096;
 const CONVERSATION_METRICS = new Set<string>(
   conversationPerformanceMetricNames,
 );
+const READER_ANNOTATION_METRICS = new Set([
+  "reader_annotation_anchor_resolve",
+  "reader_annotation_mutation",
+  "reader_annotation_preview",
+  "pdf_render_restart",
+]);
 
 function noStore(status = 204) {
   return new NextResponse(null, {
@@ -32,8 +38,9 @@ export async function POST(request: Request) {
   const parsed = webTelemetryEventSchema.safeParse(body);
   if (!parsed.success) return noStore(400);
 
-  const eventName =
-    parsed.data.metric === "pdf_render_error"
+  const eventName = READER_ANNOTATION_METRICS.has(parsed.data.metric)
+    ? "reader_annotation"
+    : parsed.data.metric === "pdf_render_error"
       ? "pdf_render"
       : CONVERSATION_METRICS.has(parsed.data.metric)
         ? "conversation_performance"

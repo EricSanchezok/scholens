@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 import {
   reportPdfRenderError,
+  reportReaderAnnotationMetric,
   usePrimaryContentReady,
 } from "@/lib/observability/web-performance";
 
@@ -377,8 +378,10 @@ function ReaderDocumentWorkspace({
       : undefined;
 
   async function refreshAnnotations() {
+    reportReaderAnnotationMetric("reader_annotation_mutation");
     await queryClient.invalidateQueries({
       queryKey: readerKeys.annotationLists(documentId),
+      refetchType: "active",
     });
   }
 
@@ -646,13 +649,39 @@ function ReaderDocumentWorkspace({
     }
   }
 
-  async function handleDownload() {
+  const handleDownload = React.useCallback(async () => {
     try {
       window.open(await refreshFileUrl(), "_blank", "noopener,noreferrer");
     } catch {
       notifyActionError();
     }
-  }
+  }, [notifyActionError, refreshFileUrl]);
+
+  const handlePdfRenderError = React.useCallback(
+    (_pageNumber: number, error: unknown) => {
+      reportPdfRenderError({
+        decoder: pdfDecoderForError(error),
+        error_kind: "page_render",
+        surface: "page",
+      });
+    },
+    [],
+  );
+
+  const handlePdfInternalDestination = React.useCallback(
+    (destination: unknown) => void resolveDestination(destination),
+    [resolveDestination],
+  );
+
+  const handleAnnotationPreviewChange = React.useCallback(
+    (annotationId: string | undefined) => {
+      if (annotationId) {
+        reportReaderAnnotationMetric("reader_annotation_preview");
+      }
+      setPreviewAnnotationId(annotationId);
+    },
+    [],
+  );
 
   const toolbarLabels = React.useMemo<ReaderToolbarLabels>(
     () => ({
@@ -796,7 +825,7 @@ function ReaderDocumentWorkspace({
       await refreshAnnotations();
     },
     onAnnotationSelect: openAnnotation,
-    onAnnotationPreviewChange: setPreviewAnnotationId,
+    onAnnotationPreviewChange: handleAnnotationPreviewChange,
     onAnnotationStatusChange: async (id, status) => {
       await updateReaderAnnotationThread(id, { status });
       if (status !== annotationStatusFilter) setSelectedAnnotationId(undefined);
@@ -1131,14 +1160,8 @@ function ReaderDocumentWorkspace({
                       pageErrorDescription={t("pageErrorDescription")}
                       pageErrorTitle={t("pageErrorTitle")}
                       downloadLabel={t("downloadInstead")}
-                      onDownload={() => void handleDownload()}
-                      onRenderError={(_pageNumber, error) => {
-                        reportPdfRenderError({
-                          decoder: pdfDecoderForError(error),
-                          error_kind: "page_render",
-                          surface: "page",
-                        });
-                      }}
+                      onDownload={handleDownload}
+                      onRenderError={handlePdfRenderError}
                       onActiveTextSelectionChange={
                         handleActiveTextSelectionChange
                       }
@@ -1178,9 +1201,7 @@ function ReaderDocumentWorkspace({
                         updateLocation({ panel: "translation" });
                         void translation.translate("manual");
                       }}
-                      onInternalDestination={(destination) =>
-                        void resolveDestination(destination)
-                      }
+                      onInternalDestination={handlePdfInternalDestination}
                       onVisiblePageChange={handleVisiblePageChange}
                       pageCount={pageCount}
                       pageNumber={pageNumber}

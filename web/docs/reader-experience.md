@@ -450,6 +450,11 @@ and `rects`; multi-page anchors additionally carry ordered `segments`, with the
 legacy fields equal to the first segment. Every action—Ask, Translate,
 Highlight, Add annotation, and Copy—uses the same exact quote and logical
 selection.
+Agent-created quote-only annotations use a `parsed_text` anchor (canonical
+offsets plus the immutable quote). After each PDF.js page render, Reader maps
+that quote back to the text layer and paints the resulting normalized
+rectangles with the same fill/underline rules as a user selection. An
+unresolved parsed anchor is omitted rather than painted at a guessed location.
 The empty Annotations panel is a quiet typographic prompt without a decorative
 list icon; the panel tab already provides the necessary context.
 
@@ -525,7 +530,10 @@ earliest avatar URL expires, and checks missing avatars again within fifteen
 minutes. The Server's bounded identity adapter cache reuses still-safe signed
 views across those annotation polls and coalesces concurrent reads for the same
 user. Window focus and every successful local mutation invalidate the query
-immediately. The feature does not imply WebSocket delivery,
+immediately while retaining the previous list during the refetch. PDF.js
+canvas/text rendering is isolated from hover, selection, and annotation-list
+updates, so previewing a card or updating a comment does not clear and repaint
+the document. The feature does not imply WebSocket delivery,
 mentions, notifications, unread counts, reactions, or recursive replies.
 
 ## Contextual conversations

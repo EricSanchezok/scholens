@@ -27,7 +27,7 @@ def test_public_mcp_snapshot_is_current_and_complete() -> None:
 
     assert committed == public_mcp_contract()
     assert committed["endpoint"] == "/mcp"
-    assert len(committed["tools"]) == 63
+    assert len(committed["tools"]) == 64
     assert len(committed["resources"]) == 2
     assert len(committed["resource_templates"]) == 4
     assert committed["resource_limits"] == {"max_utf8_bytes": 200_000}
