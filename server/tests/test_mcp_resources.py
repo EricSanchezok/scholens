@@ -644,6 +644,10 @@ async def test_mcp_reads_every_resource_kind_as_typed_bounded_json() -> None:
     assert payloads["library"]["papers"]["items"][0]["document"]["title"] == (
         "论文 café 🔬"
     )
+    expected_reader_url = f"https://scholens.local/reader/{PAPER_ID}"
+    assert payloads["library"]["papers"]["items"][0]["reader_url"] == (
+        expected_reader_url
+    )
     assert payloads["projects"]["projects"]["items"][0]["updated_at"] == (
         "2026-08-24T09:30:00Z"
     )
@@ -652,8 +656,11 @@ async def test_mcp_reads_every_resource_kind_as_typed_bounded_json() -> None:
         "1: 第一行",
         "2: second line",
     ]
+    assert payloads["paper"]["reader_url"] == expected_reader_url
     assert payloads["annotation"]["thread"]["item_id"] == str(THREAD_ID)
+    assert payloads["annotation"]["reader_url"] == expected_reader_url
     assert payloads["output"]["research_output"]["item_id"] == str(OUTPUT_ID)
+    assert payloads["output"]["reader_url"] == expected_reader_url
     assert payloads["project"]["members"]["next_cursor"] is None
     assert payloads["project"]["members"]["total_count"] == 75
     assert payloads["paper"]["projects"]["next_cursor"] is None

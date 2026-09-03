@@ -3,26 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
 from app.shared.domain import JsonValue
 
 from app.modules.papers.application.contracts.documents import (
     DocumentResponse,
-    LibraryPaperListResponse,
+    LibraryPaperListIngestionEntry,
+    LibraryPaperListPaperEntry,
     LibrarySummaryResponse,
 )
 from app.modules.projects.application.contracts import (
     ProjectCollaboratorListResponse,
     ProjectListResponse,
-    ProjectPaperListResponse,
+    ProjectPaperSummaryResponse,
     ProjectResponse,
 )
 from app.modules.research.application.contracts import (
     ResearchOutputSummary,
-    ResearchOutputSummaryListResponse,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from app.tooling.reader_links import READER_URL_DESCRIPTION, READER_URL_MAX_LENGTH
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 
 
 class ResourceContinuation(BaseModel):
@@ -57,10 +58,118 @@ class TruncatedResourcePayload(McpResourcePayload):
     guidance: str
 
 
+class LibraryPaperResourcePaperEntryModel(LibraryPaperListPaperEntry):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class LibraryPaperResourceIngestionEntryModel(LibraryPaperListIngestionEntry):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+LibraryPaperResourceEntry = Annotated[
+    LibraryPaperResourcePaperEntryModel | LibraryPaperResourceIngestionEntryModel,
+    Field(discriminator="entry_type"),
+]
+
+
+_READER_URL_SCHEMA = {
+    "anyOf": [
+        {"maxLength": READER_URL_MAX_LENGTH, "type": "string"},
+        {"type": "null"},
+    ],
+    "default": None,
+    "description": READER_URL_DESCRIPTION,
+    "title": "Reader Url",
+}
+
+_LIBRARY_PAPER_LIST_BASE_ENTRY = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA = Annotated[
+    SerializeAsAny[_LIBRARY_PAPER_LIST_BASE_ENTRY],
+    Field(json_schema_extra={"properties": {"reader_url": _READER_URL_SCHEMA}}),
+]
+
+
+class LibraryPaperResourceList(BaseModel):
+    items: list[_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_reader_url_entries(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            return value
+        normalized = dict(value)
+        normalized["items"] = [
+            (
+                LibraryPaperResourcePaperEntryModel.model_validate(item)
+                if isinstance(item, dict) and item.get("entry_type") == "paper"
+                else (
+                    LibraryPaperResourceIngestionEntryModel.model_validate(item)
+                    if isinstance(item, dict) and item.get("entry_type") == "ingestion"
+                    else item
+                )
+            )
+            for item in raw_items
+        ]
+        return normalized
+
+
+class ProjectPaperResourceSummary(ProjectPaperSummaryResponse):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class ProjectPaperResourceList(BaseModel):
+    items: list[ProjectPaperResourceSummary]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
+
+
+class ResearchOutputSummaryResource(ResearchOutputSummary):
+    model_config = ConfigDict(from_attributes=True)
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
+
+
+class ResearchOutputSummaryResourceList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ResearchOutputSummaryResource] = Field(max_length=25)
+    next_cursor: str | None = Field(default=None, max_length=2_048)
+    previous_cursor: str | None = Field(default=None, max_length=2_048)
+    total_count: int = Field(ge=0)
+
+
 class LibraryResourcePayload(McpResourcePayload):
     summary: LibrarySummaryResponse
-    papers: LibraryPaperListResponse
-    research_outputs: ResearchOutputSummaryListResponse
+    papers: LibraryPaperResourceList
+    research_outputs: ResearchOutputSummaryResourceList
 
 
 class ProjectIndexResourcePayload(McpResourcePayload):
@@ -69,9 +178,9 @@ class ProjectIndexResourcePayload(McpResourcePayload):
 
 class ProjectResourcePayload(McpResourcePayload):
     project: ProjectResponse
-    papers: ProjectPaperListResponse
+    papers: ProjectPaperResourceList
     members: ProjectCollaboratorListResponse
-    research_outputs: ResearchOutputSummaryListResponse
+    research_outputs: ResearchOutputSummaryResourceList
 
 
 class PaperContentPreview(BaseModel):
@@ -86,16 +195,31 @@ class PaperContentPreview(BaseModel):
 
 class PaperResourcePayload(McpResourcePayload):
     paper: DocumentResponse
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
     content_preview: PaperContentPreview
     projects: ProjectListResponse
 
 
 class AnnotationThreadResourcePayload(McpResourcePayload):
     thread: ResearchOutputSummary
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
 
 
 class ResearchOutputResourcePayload(McpResourcePayload):
     research_output: ResearchOutputSummary
+    reader_url: str | None = Field(
+        default=None,
+        max_length=READER_URL_MAX_LENGTH,
+        description=READER_URL_DESCRIPTION,
+    )
 
 
 type ScholensResourcePayload = (
@@ -178,6 +302,10 @@ RESOURCE_TEMPLATE_CONTRACTS = (
 
 __all__ = [
     "AnnotationThreadResourcePayload",
+    "LibraryPaperResourceEntry",
+    "LibraryPaperResourceIngestionEntryModel",
+    "LibraryPaperResourceList",
+    "LibraryPaperResourcePaperEntryModel",
     "LibraryResourcePayload",
     "MCP_RESOURCE_MAX_UTF8_BYTES",
     "RESOURCE_TEMPLATE_CONTRACTS",
@@ -185,7 +313,11 @@ __all__ = [
     "PaperContentPreview",
     "PaperResourcePayload",
     "ProjectIndexResourcePayload",
+    "ProjectPaperResourceList",
+    "ProjectPaperResourceSummary",
     "ProjectResourcePayload",
+    "ResearchOutputSummaryResource",
+    "ResearchOutputSummaryResourceList",
     "ResearchOutputResourcePayload",
     "ResourceContinuation",
     "ScholensResourcePayload",

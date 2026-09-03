@@ -75,6 +75,8 @@ from app.tooling.workspace_contracts import (
     ProjectOutputScope,
     ResearchOutputInput,
     ResearchOutputList,
+    ResearchOutputSummaryListToolResponse,
+    ResearchItemToolResponse,
     ThreadActionOutput,
     UpdateAnnotationCommentInput,
     UpdateAnnotationThreadInput,
@@ -317,9 +319,13 @@ def test_summary_catalog_pages_all_four_kinds_with_resource_closure() -> None:
     )
 
     result = handler.list_research_output_summaries(capabilities, _context(), request)
-    page = ResearchOutputSummaryListResponse.model_validate(result.payload)
+    page = ResearchOutputSummaryListToolResponse.model_validate(result.payload)
     assert [item.kind for item in page.items] == list(ResearchItemKind)
     assert page.total_count == 4
+    assert all(
+        item.reader_url == f"https://scholens.example/reader/{document_id}"
+        for item in page.items
+    )
     assert [link.uri for link in result.resource_links] == [
         item.resource_uri for item in items
     ]
@@ -513,7 +519,14 @@ def test_legacy_project_and_paper_scopes_keep_their_historical_item_branches() -
     )
 
     assert LibraryOutputResponse.model_validate(project_page.items[0]).item == citation
-    assert ResearchItemResponse.model_validate(paper_page.items[0]) == citation
+    paper_item = ResearchItemToolResponse.model_validate(paper_page.items[0])
+    assert (
+        ResearchItemResponse.model_validate(
+            paper_item.model_dump(exclude={"reader_url"})
+        )
+        == citation
+    )
+    assert paper_item.reader_url == f"https://scholens.example/reader/{document_id}"
     capabilities.projects.outputs.assert_called_once()
     capabilities.paper_library.list_outputs.assert_not_called()
     capabilities.research_items.list_document.assert_not_called()

@@ -1563,6 +1563,11 @@ call wait_for_jobs once with all active job IDs; if it times out again, repeat i
 only for the IDs that remain active. Do not reissue a mutation merely to observe
 its job.
 
+When any Scholens tool result includes reader_url, use it as the durable browser
+link in user-facing Markdown, notes, reports, and citations (for example
+[paper title](reader_url)). Keep DOI, arXiv, and source URLs only as provenance;
+never persist temporary file_url, preview_url, or upload URLs.
+
 Initial server-validated answer material:
 {initial_packet.model_dump_json()}
 

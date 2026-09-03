@@ -312,6 +312,7 @@ def project_updated_library_paper(outcome: ToolOutcome) -> ToolOutcome:
     except ValidationError:
         value = LibraryPaperResponse.model_validate(outcome.payload)
         prior_content_truncated = False
+        prior_reader_url = None
     else:
         value = LibraryPaperResponse.model_validate(
             tool_value.model_dump(
@@ -320,11 +321,13 @@ def project_updated_library_paper(outcome: ToolOutcome) -> ToolOutcome:
             )
         )
         prior_content_truncated = tool_value.content_truncated
+        prior_reader_url = tool_value.reader_url
 
     projection = project_library_paper(value)
     content_truncated = prior_content_truncated or projection.content_truncated
     payload = wc.LibraryPaperToolOutput(
         **projection.value.model_dump(),
+        reader_url=prior_reader_url,
         content_truncated=content_truncated,
         guidance=LIBRARY_PAPER_GUIDANCE,
     )
