@@ -338,6 +338,15 @@ class _AnswerCandidate:
     sequence: int | None = None
     published_content: str = ""
     started: bool = False
+    visible_content: str = ""
+
+    def reset(self) -> None:
+        """Discard speculative playback when the model step becomes progress."""
+        self.item_id = None
+        self.sequence = None
+        self.published_content = ""
+        self.started = False
+        self.visible_content = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,6 +583,7 @@ class ScholensConversationAgent:
                             turn_id=request.turn_id,
                             response_id=request.response_id,
                             nonce=nonce,
+                            candidate=final_candidate,
                         ):
                             if isinstance(model_event, _ConsumedModelNode):
                                 consumed = model_event
@@ -584,19 +594,17 @@ class ScholensConversationAgent:
                                 "Conversation model node did not complete"
                             )
                         next_node = consumed.next_node
-                        if consumed.terminal_text is not None:
-                            for candidate_event in self._terminal_candidate_events(
-                                candidate=final_candidate,
-                                raw_content=consumed.terminal_text,
-                                chunks=consumed.terminal_chunks,
-                                deps=deps,
-                                turn_id=request.turn_id,
-                                response_id=request.response_id,
-                                nonce=nonce,
-                            ):
-                                yield candidate_event
                         item = consumed.progress_item
                         if item is not None:
+                            if (
+                                final_candidate.started
+                                and final_candidate.item_id is not None
+                            ):
+                                yield ConversationStreamAssistantCandidateResetEvent(
+                                    response_id=request.response_id,
+                                    item_id=final_candidate.item_id,
+                                )
+                                final_candidate.reset()
                             progress = self._progress_entry(item)
                             deps.progress_entries.append(progress)
                             yield ConversationStreamAssistantItemStartEvent(
@@ -789,19 +797,42 @@ class ScholensConversationAgent:
         turn_id: uuid.UUID,
         response_id: uuid.UUID,
         nonce: str,
+        candidate: _AnswerCandidate,
     ) -> AsyncGenerator[ConversationAgentStreamEvent | _ConsumedModelNode, None]:
         text_parts: list[str] = []
         tool_parts: dict[int, ToolCallPart] = {}
+        parser = GroundedAnswerStreamParser(
+            self._answer_packet(deps).sources,
+            nonce=nonce,
+        )
         async with node.stream(agent_run.ctx) as stream:
             async for event in stream:
                 if isinstance(event, PartStartEvent) and isinstance(
                     event.part, TextPart
                 ):
                     text_parts.append(event.part.content)
+                    for candidate_event in self._candidate_events_for_chunk(
+                        candidate=candidate,
+                        chunk=event.part.content,
+                        parser=parser,
+                        deps=deps,
+                        turn_id=turn_id,
+                        response_id=response_id,
+                    ):
+                        yield candidate_event
                 elif isinstance(event, PartDeltaEvent) and isinstance(
                     event.delta, TextPartDelta
                 ):
                     text_parts.append(event.delta.content_delta)
+                    for candidate_event in self._candidate_events_for_chunk(
+                        candidate=candidate,
+                        chunk=event.delta.content_delta,
+                        parser=parser,
+                        deps=deps,
+                        turn_id=turn_id,
+                        response_id=response_id,
+                    ):
+                        yield candidate_event
                 elif isinstance(event, PartStartEvent) and isinstance(
                     event.part, ToolCallPart
                 ):
@@ -842,6 +873,17 @@ class ScholensConversationAgent:
         if step.role == ConversationStepRole.PROTOCOL_ERROR:
             raise _conversation_protocol_error("unexpected_output_tool")
         if step.role == ConversationStepRole.TERMINAL:
+            for candidate_event in self._candidate_events_for_chunk(
+                candidate=candidate,
+                chunk=parser.finish(),
+                parser=None,
+                deps=deps,
+                turn_id=turn_id,
+                response_id=response_id,
+            ):
+                yield candidate_event
+            if candidate.sequence is not None:
+                deps.last_sequence = max(deps.last_sequence, candidate.sequence)
             yield _ConsumedModelNode(
                 next_node=next_node,
                 progress_item=None,
@@ -862,79 +904,63 @@ class ScholensConversationAgent:
             ),
         )
 
-    def _terminal_candidate_events(
+    def _candidate_events_for_chunk(
         self,
         *,
         candidate: _AnswerCandidate,
-        raw_content: str,
-        chunks: Sequence[str],
+        chunk: str,
+        parser: GroundedAnswerStreamParser | None,
         deps: _ConversationAgentDependencies,
         turn_id: uuid.UUID,
         response_id: uuid.UUID,
-        nonce: str,
     ) -> list[
         ConversationStreamAssistantCandidateStartEvent
         | ConversationStreamAssistantCandidateDeltaEvent
-        | ConversationStreamAssistantCandidateResetEvent
     ]:
+        if parser is not None:
+            visible_delta = parser.feed(chunk) if chunk else ""
+        else:
+            visible_delta = chunk
+        if not visible_delta:
+            return []
+        candidate.visible_content += visible_delta
+        visible_content = candidate.visible_content
+        if _contains_private_output_protocol(visible_content):
+            raise _conversation_protocol_error("private_protocol_prose")
         events: list[
             ConversationStreamAssistantCandidateStartEvent
             | ConversationStreamAssistantCandidateDeltaEvent
-            | ConversationStreamAssistantCandidateResetEvent
         ] = []
-        if _contains_private_output_protocol(raw_content):
-            raise _conversation_protocol_error("private_protocol_prose")
-        packet = self._answer_packet(deps)
-        parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
-        visible_content = ""
-        for chunk in chunks or (raw_content,):
-            visible_content += parser.feed(chunk)
-        visible_content += parser.finish()
         if not visible_content.strip():
             return events
-        candidate.published_content = ""
-        if candidate.sequence is None:
-            candidate.sequence = deps.allocate_sequence()
+        if candidate.item_id is None:
+            candidate.sequence = (
+                candidate.sequence
+                if candidate.sequence is not None
+                else deps.last_sequence + 1
+            )
             candidate.item_id = self._assistant_item_id(turn_id, candidate.sequence)
-        if candidate.item_id is None or candidate.sequence is None:
-            raise RuntimeError("Answer candidate identity is incomplete")
-        candidate.started = True
-        events.append(
-            ConversationStreamAssistantCandidateStartEvent(
-                response_id=response_id,
-                item_id=candidate.item_id,
-                sequence=candidate.sequence,
-            )
-        )
-
-        visible_normalized = visible_content.casefold()
-        unsafe_candidate = bool(
-            _VISIBLE_CITATION_LABEL.search(visible_content)
-            or any(
-                marker in visible_normalized
-                for marker in (
-                    "source_keys",
-                    "private marker",
-                    "initial answer packet",
-                    "scholens_cite",
-                )
-            )
-        )
-        if unsafe_candidate:
-            candidate.published_content = ""
-            return events
-
-        publishable_length = len(visible_content) - _unsafe_candidate_suffix_length(
-            visible_content
-        )
-        publishable = visible_content[:publishable_length]
-        if not publishable.startswith(candidate.published_content):
+            candidate.started = True
             events.append(
-                ConversationStreamAssistantCandidateResetEvent(
+                ConversationStreamAssistantCandidateStartEvent(
                     response_id=response_id,
                     item_id=candidate.item_id,
+                    sequence=candidate.sequence,
                 )
             )
+
+        # Visible citation labels are never part of the public answer. Removing
+        # them from the cumulative projection lets playback continue after a
+        # label without waiting for final post-processing.
+        sanitized_content = _VISIBLE_CITATION_LABEL.sub("", visible_content)
+        publishable_length = len(sanitized_content) - _unsafe_candidate_suffix_length(
+            sanitized_content
+        )
+        publishable = sanitized_content[:publishable_length]
+        if not publishable.startswith(candidate.published_content):
+            # A reset is only needed when an already-published prefix can no
+            # longer be represented by the sanitized stream.  The caller emits
+            # the reset when a model step is reclassified as progress.
             candidate.published_content = ""
         delta = publishable[len(candidate.published_content) :]
         if delta:

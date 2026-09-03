@@ -417,11 +417,17 @@ test("shows streamed answer text before the response completes", async ({
   const conversation = homeConversations[2]!;
   const partialAnswer =
     "The first evidence-backed sentence is already visible.";
+  const firstDelta = partialAnswer.slice(0, 24);
+  const secondDelta = partialAnswer.slice(24);
   const finalAnswer = `${partialAnswer} The validated response is now complete.`;
   let submitted:
     { response_id: string; turn_id: string; user_query: string } | undefined;
+  let releaseSecondDelta: (() => void) | undefined;
   let releaseFinalResponse: (() => void) | undefined;
   let finalResponseReleased = false;
+  const secondDeltaGate = new Promise<void>((resolve) => {
+    releaseSecondDelta = resolve;
+  });
   const finalResponseGate = new Promise<void>((resolve) => {
     releaseFinalResponse = resolve;
   });
@@ -463,10 +469,17 @@ test("shows streamed answer text before the response completes", async ({
       type: "assistant_candidate_delta",
       response_id: submitted.response_id,
       item_id: itemId,
-      delta: partialAnswer,
+      delta: firstDelta,
+    });
+    await secondDeltaGate;
+    send(3, {
+      type: "assistant_candidate_delta",
+      response_id: submitted.response_id,
+      item_id: itemId,
+      delta: secondDelta,
     });
     await finalResponseGate;
-    send(3, {
+    send(4, {
       type: "assistant_item_complete",
       response_id: submitted.response_id,
       item: {
@@ -491,8 +504,8 @@ test("shows streamed answer text before the response completes", async ({
       ],
       selected_response_id: submitted.response_id,
     };
-    send(4, { type: "response_ready", turn });
-    send(5, {
+    send(5, { type: "response_ready", turn });
+    send(6, {
       type: "complete",
       response_id: submitted.response_id,
       turn_id: submitted.turn_id,
@@ -568,18 +581,21 @@ test("shows streamed answer text before the response completes", async ({
     await composer.fill("Stream this answer");
     await composer.press("Enter");
 
-    const partial = page.getByText(partialAnswer, { exact: true });
-    await expect(partial).toBeVisible();
+    const first = page.getByText(firstDelta, { exact: true });
+    await expect(first).toBeVisible();
+    expect(page.getByText(partialAnswer, { exact: true })).not.toBeVisible();
     expect(finalResponseReleased).toBe(false);
     expect(
-      await partial.evaluate((element) =>
+      await first.evaluate((element) =>
         Boolean(element.closest("[data-message-content]")),
       ),
     ).toBe(true);
     expect(
-      await partial.evaluate((element) => Boolean(element.closest("li"))),
+      await first.evaluate((element) => Boolean(element.closest("li"))),
     ).toBe(false);
 
+    releaseSecondDelta?.();
+    await expect(page.getByText(partialAnswer, { exact: true })).toBeVisible();
     finalResponseReleased = true;
     releaseFinalResponse?.();
     await expect(page.getByText(finalAnswer, { exact: true })).toBeVisible();

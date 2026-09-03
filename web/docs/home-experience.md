@@ -129,10 +129,12 @@ candidate, references, final-answer, and terminal events all share the same
 publishing to React, ignores duplicate or stale versions, and keeps canonical
 state separate from the visible confirmed-playback projection. Candidate text
 is provisional and resettable; `response.ready` promotes the selected part in
-place and unlocks actions without waiting for visual playback or sidecars. The
-runtime buffers model text until the complete node establishes its role:
-ordinary text with no tool call is terminal, while tool-adjacent text is bounded
-progress. The v1 adapter retains its explicit vendor Accept negotiation and
+place and unlocks actions without waiting for visual playback or sidecars.
+Provider text deltas are forwarded to the provisional candidate as they arrive,
+so ordinary answers visibly play back one provider chunk at a time. If a later
+tool-call part makes that model step progress instead, the speculative candidate
+is reset and the bounded progress item takes its place. The v1 adapter retains
+its explicit vendor Accept negotiation and
 `/events/candidates` resume route during the rolling deployment window; v2
 remains the active unified stream and never silently downgrades its contract.
 The stream's legacy event names (`start`, `assistant_item_start → delta →
