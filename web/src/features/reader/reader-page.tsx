@@ -67,6 +67,7 @@ import {
   type ReaderPdfSourceTarget,
 } from "./components/pdf-page";
 import {
+  readerSelectionKey,
   readerSelectionTurnContext,
   type ReaderSelection,
 } from "./reader-selection";
@@ -176,6 +177,9 @@ function ReaderDocumentWorkspace({
   const [searchIndex, setSearchIndex] = React.useState(-1);
   const [activeTextSelection, setActiveTextSelection] =
     React.useState<ReaderSelection>();
+  const activeTextSelectionRef = React.useRef<ReaderSelection | undefined>(
+    undefined,
+  );
   const [pendingTurnContext, setPendingTurnContext] =
     React.useState<ReaderSelection>();
   const [annotationSelection, setAnnotationSelection] =
@@ -212,6 +216,10 @@ function ReaderDocumentWorkspace({
   >([]);
   const [reflowSourceTarget, setReflowSourceTarget] =
     React.useState<ReaderPdfSourceTarget>();
+
+  React.useEffect(() => {
+    activeTextSelectionRef.current = activeTextSelection;
+  }, [activeTextSelection]);
   const projectId = searchParams.get("project") ?? undefined;
   const documentQuery = useQuery(readerQueries.document(documentId));
   usePrimaryContentReady(documentQuery.isSuccess);
@@ -389,6 +397,7 @@ function ReaderDocumentWorkspace({
     audience: ReaderAnnotationAudience = "personal",
   ) {
     if (!targetSelection) return;
+    const submittedSelectionKey = readerSelectionKey(targetSelection);
     const item = await createReaderAnnotationThread(documentId, {
       audience:
         audience === "project" && projectId
@@ -400,22 +409,28 @@ function ReaderDocumentWorkspace({
       quote_text: targetSelection.selected_text,
     });
     await refreshAnnotations();
-    setSelectedAnnotationId(item.id);
+    const selectionStillActive =
+      readerSelectionKey(activeTextSelectionRef.current) ===
+      submittedSelectionKey;
+    if (selectionStillActive) {
+      setSelectedAnnotationId(item.id);
+      activeTextSelectionRef.current = undefined;
+      setActiveTextSelection(undefined);
+      window.getSelection()?.removeAllRanges();
+    }
     setAnnotationNavigation(undefined);
-    setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
     setAnnotationInitialComment(undefined);
-    window.getSelection()?.removeAllRanges();
   }
 
   const handleActiveTextSelectionChange = React.useCallback(
     (nextSelection: ReaderSelection | undefined) => {
       setSelectedAnnotationId(undefined);
-      setActiveTextSelection(
-        nextSelection
-          ? { ...nextSelection, document_id: documentId }
-          : undefined,
-      );
+      const nextSelectionWithDocument = nextSelection
+        ? { ...nextSelection, document_id: documentId }
+        : undefined;
+      activeTextSelectionRef.current = nextSelectionWithDocument;
+      setActiveTextSelection(nextSelectionWithDocument);
     },
     [documentId],
   );
