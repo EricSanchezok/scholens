@@ -3,6 +3,20 @@ from app.bootstrap.settings import AppSettings
 from pydantic import ValidationError
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep dotenv-loaded cache settings from overriding constructor inputs."""
+    for name in (
+        "CACHE_URL",
+        "CACHE_HOST",
+        "CACHE_PORT",
+        "CACHE_USERNAME",
+        "CACHE_PASSWORD",
+        "CACHE_TLS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_production_requires_a_dedicated_search_cursor_secret() -> None:
     with pytest.raises(ValidationError):
         AppSettings(
