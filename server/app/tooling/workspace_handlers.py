@@ -4325,7 +4325,12 @@ class WorkspaceToolHandlers:
         """Create a visually paintable annotation from quote text alone."""
 
         parsed = wc.AnnotatePaperInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=getattr(parsed.audience, "project_id", None),
+        )
         snapshot = self._authorized_paper_content_snapshot(
             capabilities=capabilities,
             context=context,
@@ -4387,9 +4392,17 @@ class WorkspaceToolHandlers:
         )
         projection = project_annotation_thread(result)
         resource_uri = f"scholens://annotation-threads/{result.id}"
+        reader_url = self._research_reader_url(
+            projection.thread,
+            project_id=getattr(parsed.audience, "project_id", None),
+        )
         payload = wc.ThreadActionOutput(
-            thread=projection.thread,
+            thread=wc.ResearchItemToolResponse(
+                **projection.thread.model_dump(),
+                reader_url=reader_url,
+            ),
             resource_uri=resource_uri,
+            reader_url=reader_url,
             content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored quote, "
