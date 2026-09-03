@@ -16,12 +16,13 @@ from app.bootstrap.workflows.citation import CitationWorkflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.action_confirmations.application import confirmation_digest
 from app.modules.action_confirmations.contracts import ActionImpact
-from app.modules.jobs.application.contracts import JobListResponse, JobResponse
+from app.modules.jobs.application.contracts import JobResponse
 from app.modules.papers.application.content import PAPER_CONTENT_SEARCH_TIMEOUT_SECONDS
 from app.modules.papers.application.contracts.citation import CitationData
 from app.modules.papers.application.contracts.documents import (
     LibraryOutputResponse,
     LibraryPaperIngestionResponse,
+    LibraryPaperListResponse,
     LibraryPaperUpdateRequest,
 )
 from app.modules.papers.application.contracts.search import (
@@ -67,6 +68,7 @@ from app.modules.research.application.contracts import (
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
     ResearchItemResponse,
+    ResearchOutputSummary,
     ResearchOutputSummaryListResponse,
     UpdateAnnotationCommentRequest,
     UpdateAnnotationThreadRequest,
@@ -158,6 +160,11 @@ from app.tooling.project_summary_projection import (
     PROJECT_PAPER_LIST_MAX_PAGE_ITEMS,
     project_project_detail,
     project_project_member_list,
+)
+from app.tooling.reader_links import (
+    READER_LINK_GUIDANCE,
+    build_reader_url,
+    normalize_web_base_url,
 )
 from pydantic import BaseModel, TypeAdapter
 from scholens_observability import add_counter
@@ -257,7 +264,8 @@ def _paper_link(document_id: UUID, title: str | None = None) -> ToolResourceLink
     return _resource_link(
         f"scholens://papers/{document_id}",
         title or f"Paper {document_id}",
-        "Canonical Scholens paper metadata. Use get_paper_content for bounded text.",
+        "Canonical Scholens paper metadata. Use reader_url for browser reading and "
+        "get_paper_content for bounded text.",
     )
 
 
@@ -310,6 +318,7 @@ def _document_source(
     authors: list[str] | None = None,
     start_line: int | None = None,
     end_line: int | None = None,
+    reader_url: str | None = None,
 ) -> DocumentSourceCandidate:
     locator: dict[str, JsonValue] = {}
     if start_line is not None:
@@ -327,6 +336,7 @@ def _document_source(
             for author in (authors or ())[:20]
         ),
         locator=locator or None,
+        reader_url=reader_url,
     )
 
 
@@ -345,8 +355,9 @@ class WorkspaceToolHandlers:
         self._ingestion = ingestion
         self._job_waiter = JobWaiter(executor=executor)
         self._citations = citations
-        self._web_base_url = web_base_url.rstrip("/")
+        self._web_base_url = normalize_web_base_url(web_base_url)
         self._json_document_page_cache = JsonDocumentPagerCache()
+        self._research_reader_urls: dict[UUID, str | None] = {}
         self._paper_content_snapshot_cache = (
             paper_content_snapshot_cache
             if paper_content_snapshot_cache is not None
@@ -529,11 +540,13 @@ class WorkspaceToolHandlers:
         capabilities: ApplicationCapabilities,
         context: ToolExecutionContext,
         document_id: UUID,
+        project_id: UUID | None = None,
     ) -> PaperContentSnapshot:
         return authorized_paper_content_snapshot(
             capability=capabilities.paper_content,
             actor=context.actor,
             document_id=document_id,
+            project_id=project_id,
             cache=self._paper_content_snapshot_cache,
         )
 
@@ -542,13 +555,167 @@ class WorkspaceToolHandlers:
         capabilities: ApplicationCapabilities,
         context: ToolExecutionContext,
         document_id: UUID,
+        project_id: UUID | None = None,
     ) -> None:
         capabilities.paper_collection_access(
             actor=context.actor,
-            collection=context.paper_collection,
+            collection=(
+                SelectedPaperCollection(project_ids=[project_id])
+                if project_id is not None
+                else context.paper_collection
+            ),
             document_id=document_id,
             anchor_document_id=context.anchor_document_id,
         )
+
+    def _reader_url(
+        self,
+        document_id: UUID | None,
+        *,
+        project_id: UUID | None = None,
+    ) -> str | None:
+        if document_id is None:
+            return None
+        return build_reader_url(
+            web_base_url=self._web_base_url,
+            document_id=document_id,
+            project_id=project_id,
+        )
+
+    def _library_paper_list_output(
+        self,
+        value: object,
+        *,
+        content_truncated: bool,
+        guidance: str,
+    ) -> wc.LibraryPaperListToolOutput:
+        response = wc.LibraryPaperListToolOutput.model_validate(
+            {
+                **LibraryPaperListResponse.model_validate(value).model_dump(
+                    exclude={"items"}
+                ),
+                "items": [],
+                "content_truncated": content_truncated,
+                "guidance": guidance,
+            }
+        )
+        items: list[wc.LibraryPaperListToolEntry] = []
+        for item in LibraryPaperListResponse.model_validate(value).items:
+            if item.entry_type == "paper":
+                items.append(
+                    wc.LibraryPaperListPaperToolEntry(
+                        **item.model_dump(),
+                        reader_url=self._reader_url(item.document.document_id),
+                    )
+                )
+            else:
+                items.append(
+                    wc.LibraryPaperListIngestionToolEntry(
+                        **item.model_dump(),
+                        reader_url=self._reader_url(
+                            item.ingestion.document_id,
+                            project_id=item.ingestion.project_id,
+                        ),
+                    )
+                )
+        return response.model_copy(update={"items": items})
+
+    def _job_with_reader_url(
+        self, job: wc.WaitableJobResponse
+    ) -> wc.WaitableJobResponse:
+        return job.model_copy(
+            update={
+                "reader_url": self._reader_url(
+                    job.document_id,
+                    project_id=job.project_id,
+                )
+            }
+        )
+
+    def _research_reader_url(
+        self,
+        item: ResearchItemResponse,
+        *,
+        project_id: UUID | None = None,
+    ) -> str | None:
+        audience_project_id = getattr(item.audience, "project_id", None)
+        return self._reader_url(
+            item.target_document_id,
+            project_id=audience_project_id or project_id,
+        )
+
+    def _thread_summary_reader_url(
+        self,
+        item: object,
+        *,
+        project_id: UUID | None = None,
+    ) -> str | None:
+        target_document_id = getattr(item, "target_document_id", None)
+        audience = getattr(item, "audience", None)
+        audience_project_id = getattr(audience, "project_id", None)
+        return self._reader_url(
+            target_document_id,
+            project_id=audience_project_id or project_id,
+        )
+
+    def _research_item_tool_response(
+        self,
+        item: ResearchItemResponse,
+        *,
+        project_id: UUID | None = None,
+    ) -> wc.ResearchItemToolResponse:
+        return wc.ResearchItemToolResponse(
+            **item.model_dump(),
+            reader_url=self._research_reader_url(item, project_id=project_id),
+        )
+
+    def _research_output_tool_entry(
+        self,
+        entry: LibraryOutputResponse | ResearchItemResponse,
+        *,
+        project_id: UUID | None = None,
+    ) -> wc.LibraryOutputToolResponse | wc.ResearchItemToolResponse:
+        if isinstance(entry, LibraryOutputResponse):
+            return wc.LibraryOutputToolResponse(
+                **entry.model_dump(),
+                reader_url=self._research_reader_url(
+                    entry.item,
+                    project_id=project_id,
+                ),
+            )
+        return self._research_item_tool_response(entry, project_id=project_id)
+
+    def _research_summary_tool_response(
+        self,
+        summary: ResearchOutputSummary,
+        *,
+        project_id: UUID | None = None,
+    ) -> wc.ResearchOutputSummaryToolResponse:
+        audience_project_id = getattr(summary.audience, "project_id", None)
+        return wc.ResearchOutputSummaryToolResponse(
+            **summary.model_dump(),
+            reader_url=self._reader_url(
+                summary.target_document_id,
+                project_id=audience_project_id or project_id,
+            ),
+        )
+
+    def _comment_reader_url(
+        self,
+        capabilities: ApplicationCapabilities,
+        context: ToolExecutionContext,
+        thread_id: UUID,
+    ) -> str | None:
+        try:
+            thread = capabilities.research_items.get_annotation_thread(
+                actor=context.actor,
+                thread_id=thread_id,
+            )
+        except AppError:
+            return None
+        if not isinstance(thread, ResearchItemResponse):
+            return None
+        return self._research_reader_url(thread)
 
     @staticmethod
     def _confirmation(
@@ -683,7 +850,12 @@ class WorkspaceToolHandlers:
             )
         elif isinstance(parsed.scope, wc.PaperKnowledgeScope):
             paper_collection = SelectedPaperCollection(
-                document_ids=[parsed.scope.document_id]
+                project_ids=(
+                    [parsed.scope.project_id]
+                    if parsed.scope.project_id is not None
+                    else []
+                ),
+                document_ids=[parsed.scope.document_id],
             )
         else:  # pragma: no cover - the discriminated union is exhaustive
             raise AssertionError("unsupported knowledge scope")
@@ -816,8 +988,19 @@ class WorkspaceToolHandlers:
                 position.model_copy(update={"exhausted": not producer_has_more}),
             )
 
+        result_items = [
+            candidate.item.model_copy(
+                update={
+                    "reader_url": self._reader_url(
+                        candidate.item.document_id,
+                        project_id=candidate.item.project_id,
+                    )
+                }
+            )
+            for candidate in selected
+        ]
         result = wc.KnowledgeSearchOutput(
-            items=[candidate.item for candidate in selected],
+            items=result_items,
             next_cursor=(
                 encode_knowledge_cursor(
                     codec=self._knowledge_cursors,
@@ -836,6 +1019,7 @@ class WorkspaceToolHandlers:
                 title=item.title,
                 start_line=cast(int | None, (item.locator or {}).get("start_line")),
                 end_line=cast(int | None, (item.locator or {}).get("end_line")),
+                reader_url=item.reader_url,
             )
             for item in result.items
             if item.document_id is not None and item.kind in {"paper", "paper_passage"}
@@ -882,7 +1066,7 @@ class WorkspaceToolHandlers:
             source_pages[source_key] = response
         papers = response.items[:KNOWLEDGE_SEARCH_PRODUCER_CANDIDATE_LIMIT]
         candidates: list[RankedKnowledgeCandidate] = []
-        project_id = scope.project_id if scope.kind == "project" else None
+        project_id = getattr(scope, "project_id", None)
         for paper_index, paper in enumerate(papers):
             rank = position.offset + paper_index
             paper_title = bounded_knowledge_title(paper.title)
@@ -1245,7 +1429,11 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.DocumentInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+        )
         access = capabilities.paper_details.authorize_retained_size(
             actor=context.actor,
             document_id=parsed.document_id,
@@ -1260,7 +1448,12 @@ class WorkspaceToolHandlers:
             document_id=parsed.document_id,
         )
         return ToolOutcome(
-            payload=_json(result),
+            payload=_json(
+                wc.PaperToolResponse(
+                    **result.model_dump(),
+                    reader_url=self._reader_url(parsed.document_id),
+                )
+            ),
             resource_links=(_paper_link(parsed.document_id, result.title),),
         )
 
@@ -1271,7 +1464,12 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.PaperMetadataPageInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
         resource_uri = f"scholens://papers/{parsed.document_id}"
         pager: JsonDocumentPager | None = None
         revision = ""
@@ -1279,6 +1477,7 @@ class WorkspaceToolHandlers:
             access = capabilities.paper_details.authorize_revision(
                 actor=context.actor,
                 document_id=parsed.document_id,
+                project_id=parsed.project_id,
             )
             revision = access.revision
 
@@ -1286,6 +1485,7 @@ class WorkspaceToolHandlers:
                 sized_access = capabilities.paper_details.authorize_retained_size(
                     actor=context.actor,
                     document_id=parsed.document_id,
+                    project_id=parsed.project_id,
                 )
                 if sized_access.revision != access.revision:
                     raise _JsonDocumentRevisionAdvanced
@@ -1295,10 +1495,12 @@ class WorkspaceToolHandlers:
                 result = capabilities.paper_details(
                     actor=context.actor,
                     document_id=parsed.document_id,
+                    project_id=parsed.project_id,
                 )
                 latest = capabilities.paper_details.authorize_revision(
                     actor=context.actor,
                     document_id=parsed.document_id,
+                    project_id=parsed.project_id,
                 )
                 if (
                     result.updated_at.isoformat() != access.revision
@@ -1313,6 +1515,9 @@ class WorkspaceToolHandlers:
                         context.actor.id,
                         resource_uri,
                         str(access.document_id),
+                        str(parsed.project_id)
+                        if parsed.project_id is not None
+                        else None,
                         revision,
                     ),
                     value_factory=durable_value,
@@ -1337,7 +1542,15 @@ class WorkspaceToolHandlers:
             revision=revision,
         )
         return ToolOutcome(
-            payload=_json(page),
+            payload=_json(
+                wc.PaperJsonDocumentPageOutput(
+                    **page.model_dump(),
+                    reader_url=self._reader_url(
+                        parsed.document_id,
+                        project_id=parsed.project_id,
+                    ),
+                )
+            ),
             resource_links=(_paper_link(parsed.document_id),),
         )
 
@@ -1348,11 +1561,17 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.PaperContentInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
         snapshot = self._authorized_paper_content_snapshot(
             capabilities=capabilities,
             context=context,
             document_id=parsed.document_id,
+            project_id=parsed.project_id,
         )
         raw_content = snapshot.pager.raw_content
         pager = snapshot.pager
@@ -1361,6 +1580,9 @@ class WorkspaceToolHandlers:
             {
                 "actor_id": context.actor.id,
                 "document_id": str(parsed.document_id),
+                "project_id": (
+                    str(parsed.project_id) if parsed.project_id is not None else None
+                ),
                 "content_revision": snapshot.revision,
                 "content_sha256": content_sha,
             },
@@ -1467,9 +1689,14 @@ class WorkspaceToolHandlers:
             ends_mid_line=page.ends_mid_line,
             next_cursor=next_cursor,
             truncated=next_cursor is not None,
+            reader_url=self._reader_url(
+                parsed.document_id,
+                project_id=parsed.project_id,
+            ),
             guidance=(
                 "Continue with next_cursor until it is null. next_start_line is "
-                "provided only when the page ends exactly at a line boundary."
+                "provided only when the page ends exactly at a line boundary. "
+                f"{READER_LINK_GUIDANCE}"
             ),
         )
         return ToolOutcome(
@@ -1484,6 +1711,10 @@ class WorkspaceToolHandlers:
                     title=snapshot.title,
                     start_line=page.start_line,
                     end_line=page.end_line,
+                    reader_url=self._reader_url(
+                        parsed.document_id,
+                        project_id=parsed.project_id,
+                    ),
                 ),
             )
             if page.content
@@ -1498,16 +1729,25 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.SearchPaperContentInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
         snapshot = self._authorized_paper_content_snapshot(
             capabilities=capabilities,
             context=context,
             document_id=parsed.document_id,
+            project_id=parsed.project_id,
         )
         fingerprint = json.dumps(
             {
                 "actor_id": context.actor.id,
                 "document_id": str(parsed.document_id),
+                "project_id": (
+                    str(parsed.project_id) if parsed.project_id is not None else None
+                ),
                 "content_revision": snapshot.revision,
                 "query": parsed.query,
             },
@@ -1582,10 +1822,15 @@ class WorkspaceToolHandlers:
             ),
             next_cursor=next_cursor,
             truncated=next_cursor is not None,
+            reader_url=self._reader_url(
+                parsed.document_id,
+                project_id=parsed.project_id,
+            ),
             guidance=(
                 "Continue with next_cursor until total_match_count is present. Match "
                 "lines are UTF-8 bounded previews; use get_paper_content with the "
-                "returned line number for complete surrounding evidence."
+                "returned line number for complete surrounding evidence. "
+                f"{READER_LINK_GUIDANCE}"
             ),
         )
         sources: list[DocumentSourceCandidate] = []
@@ -1598,6 +1843,10 @@ class WorkspaceToolHandlers:
                     excerpt=excerpt if separator else match,
                     start_line=line,
                     end_line=line,
+                    reader_url=self._reader_url(
+                        parsed.document_id,
+                        project_id=parsed.project_id,
+                    ),
                 )
             )
         return ToolOutcome(
@@ -1613,7 +1862,12 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.PaperCitationInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
         fields = capabilities.citations.read(
             actor=context.actor,
             document_id=parsed.document_id,
@@ -1643,6 +1897,10 @@ class WorkspaceToolHandlers:
             ),
             "missing_fields": _json(missing),
             "complete": not missing,
+            "reader_url": self._reader_url(
+                parsed.document_id,
+                project_id=parsed.project_id,
+            ),
             "guidance": (
                 "Use resolve_paper_citation only if required fields are missing; that "
                 "workflow may contact metadata providers and persist recovered fields."
@@ -1706,6 +1964,10 @@ class WorkspaceToolHandlers:
                 citation.model_dump(mode="python"),
             )
             payload["resource_uri"] = f"scholens://papers/{parsed.document_id}"
+            payload["reader_url"] = self._reader_url(
+                parsed.document_id,
+                project_id=parsed.project_id,
+            )
             outcome = finalize_outcome(
                 ToolOutcome(
                     payload=payload,
@@ -1732,13 +1994,26 @@ class WorkspaceToolHandlers:
         context: ToolExecutionContext,
         arguments: BaseModel,
     ) -> ToolOutcome:
-        parsed = wc.DocumentInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        parsed = wc.PaperReadInput.model_validate(arguments)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
+        download = capabilities.paper_download(
+            actor=context.actor,
+            document_id=parsed.document_id,
+            project_id=parsed.project_id,
+        )
         return ToolOutcome(
             payload=_json(
-                capabilities.paper_download(
-                    actor=context.actor,
-                    document_id=parsed.document_id,
+                wc.PaperDownloadToolResponse(
+                    **download.model_dump(),
+                    reader_url=self._reader_url(
+                        parsed.document_id,
+                        project_id=parsed.project_id,
+                    ),
                 )
             ),
             resource_links=(_paper_link(parsed.document_id),),
@@ -1934,10 +2209,22 @@ class WorkspaceToolHandlers:
             cursor=parsed.cursor,
             limit=min(parsed.limit, PROJECT_PAPER_LIST_MAX_PAGE_ITEMS),
         )
+        paper_list = summary.value
+        paper_items = [
+            wc.ProjectPaperToolSummary(
+                **item.model_dump(),
+                reader_url=self._reader_url(
+                    item.document_id,
+                    project_id=parsed.project_id,
+                ),
+            )
+            for item in paper_list.items
+        ]
         return ToolOutcome(
             payload=_json(
                 wc.ProjectPaperListToolOutput(
-                    **summary.value.model_dump(),
+                    **paper_list.model_dump(exclude={"items"}),
+                    items=paper_items,
                     content_truncated=summary.content_truncated,
                     guidance=PROJECT_PAPER_LIST_GUIDANCE,
                 )
@@ -2029,7 +2316,11 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.ListPaperProjectsInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+        )
         summary = capabilities.projects.project_summaries_for_document_page(
             actor=context.actor,
             document_id=parsed.document_id,
@@ -2671,16 +2962,21 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.ListLibraryPapersInput.model_validate(arguments)
+        result = capabilities.paper_library.list(
+            actor=context.actor,
+            query=parsed.query,
+            tag_ids=tuple(parsed.tag_ids),
+            sort=parsed.sort,
+            cursor=parsed.cursor,
+            limit=parsed.limit,
+            maximum_retained_bytes=_LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES,
+        )
         return ToolOutcome(
             payload=_json(
-                capabilities.paper_library.list(
-                    actor=context.actor,
-                    query=parsed.query,
-                    tag_ids=tuple(parsed.tag_ids),
-                    sort=parsed.sort,
-                    cursor=parsed.cursor,
-                    limit=parsed.limit,
-                    maximum_retained_bytes=_LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES,
+                self._library_paper_list_output(
+                    result,
+                    content_truncated=False,
+                    guidance=LIBRARY_PAPER_LIST_GUIDANCE,
                 )
             ),
             resource_links=(
@@ -2709,8 +3005,8 @@ class WorkspaceToolHandlers:
         )
         return ToolOutcome(
             payload=_json(
-                wc.LibraryPaperListToolOutput(
-                    **summary.value.model_dump(),
+                self._library_paper_list_output(
+                    summary.value,
                     content_truncated=summary.content_truncated,
                     guidance=LIBRARY_PAPER_LIST_GUIDANCE,
                 )
@@ -2744,7 +3040,14 @@ class WorkspaceToolHandlers:
             actor=context.actor, document_id=parsed.document_id
         )
         return ToolOutcome(
-            payload=_json(result),
+            payload=_json(
+                wc.LibraryPaperToolOutput(
+                    **result.model_dump(),
+                    reader_url=self._reader_url(result.document.document_id),
+                    content_truncated=False,
+                    guidance=LIBRARY_PAPER_GUIDANCE,
+                )
+            ),
             resource_links=(_paper_link(parsed.document_id, result.document.title),),
         )
 
@@ -2820,7 +3123,12 @@ class WorkspaceToolHandlers:
             revision=revision,
         )
         return ToolOutcome(
-            payload=_json(page),
+            payload=_json(
+                wc.PaperJsonDocumentPageOutput(
+                    **page.model_dump(),
+                    reader_url=self._reader_url(parsed.document_id),
+                )
+            ),
             resource_links=(_paper_link(parsed.document_id),),
         )
 
@@ -2843,6 +3151,9 @@ class WorkspaceToolHandlers:
         content_truncated = result.content_truncated or projection.content_truncated
         payload = wc.LibraryPaperToolOutput(
             **projection.value.model_dump(),
+            reader_url=self._reader_url(
+                projection.value.document.document_id,
+            ),
             content_truncated=content_truncated,
             guidance=LIBRARY_PAPER_GUIDANCE,
         )
@@ -2934,7 +3245,15 @@ class WorkspaceToolHandlers:
             ),
         )
         return ToolOutcome(
-            payload=_json(result),
+            payload=_json(
+                wc.ProjectPaperCollectedToolResponse(
+                    **result.model_dump(),
+                    reader_url=self._reader_url(
+                        result.document_id,
+                        project_id=parsed.source_project_id,
+                    ),
+                )
+            ),
             action={"kind": "project_paper_collected", "result": _json(result)},
             resource_links=(
                 _paper_link(parsed.document_id),
@@ -3057,7 +3376,12 @@ class WorkspaceToolHandlers:
             share_token=parsed.share_token,
         )
         return ToolOutcome(
-            payload=_json(result),
+            payload=_json(
+                wc.CollectPublicPaperToolResponse(
+                    **result.model_dump(),
+                    reader_url=self._reader_url(result.document_id),
+                )
+            ),
             action={"kind": "shared_paper_collected", "result": _json(result)},
             resource_links=(_paper_link(result.document_id),),
         )
@@ -3198,27 +3522,35 @@ class WorkspaceToolHandlers:
             add_to_library=parsed.add_to_library,
             idempotency_key=idempotency_key,
         )
-        job = await self._job_waiter.wait_for_one(
-            actor=context.actor,
-            job_id=result.id,
-            wait_seconds=parsed.wait_seconds,
+        job = self._job_with_reader_url(
+            await self._job_waiter.wait_for_one(
+                actor=context.actor,
+                job_id=result.id,
+                wait_seconds=parsed.wait_seconds,
+            )
         )
+        document_id = result.document_id or job.document_id
+        project_id = result.project_id or job.project_id
+        ingestion_payload = result.model_dump()
+        if document_id is not None:
+            ingestion_payload["document_id"] = document_id
+        if project_id is not None:
+            ingestion_payload["project_id"] = project_id
         response = wc.PaperIngestionToolResponse.model_validate(
-            {**result.model_dump(), "job": job}
+            {
+                **ingestion_payload,
+                "job": job,
+                "reader_url": self._reader_url(
+                    document_id,
+                    project_id=project_id,
+                ),
+            }
         )
         links = tuple(
             link
             for link in (
-                (
-                    _paper_link(result.document_id)
-                    if result.document_id is not None
-                    else None
-                ),
-                (
-                    _project_link(result.project_id)
-                    if result.project_id is not None
-                    else None
-                ),
+                (_paper_link(document_id) if document_id is not None else None),
+                (_project_link(project_id) if project_id is not None else None),
             )
             if link is not None
         )
@@ -3227,12 +3559,8 @@ class WorkspaceToolHandlers:
             action={
                 "kind": "paper_ingestion_started",
                 "job_id": str(job.id),
-                "document_id": (
-                    str(result.document_id) if result.document_id is not None else None
-                ),
-                "project_id": (
-                    str(result.project_id) if result.project_id is not None else None
-                ),
+                "document_id": (str(document_id) if document_id is not None else None),
+                "project_id": (str(project_id) if project_id is not None else None),
                 "status": job.status,
             },
             resource_links=links,
@@ -3365,7 +3693,9 @@ class WorkspaceToolHandlers:
                 job_ids=[result.id for result in accepted_results],
                 wait_seconds=parsed.wait_seconds,
             )
-            jobs_by_id = {job.id: job for job in waited.items}
+            jobs_by_id = {
+                job.id: self._job_with_reader_url(job) for job in waited.items
+            }
 
         items: list[wc.BatchPaperIngestionItem] = []
         links_by_uri: dict[str, ToolResourceLink] = {}
@@ -3389,7 +3719,17 @@ class WorkspaceToolHandlers:
                     index=index,
                     source=source,
                     status="accepted",
-                    ingestion=ingestion,
+                    ingestion=wc.LibraryPaperIngestionToolResponse.model_validate(
+                        {
+                            **ingestion.model_dump(),
+                            "document_id": ingestion.document_id or job.document_id,
+                            "project_id": ingestion.project_id or job.project_id,
+                            "reader_url": self._reader_url(
+                                ingestion.document_id or job.document_id,
+                                project_id=ingestion.project_id or job.project_id,
+                            ),
+                        }
+                    ),
                     job=job,
                 )
             )
@@ -3474,25 +3814,37 @@ class WorkspaceToolHandlers:
             idempotency_key=parsed.idempotency_key
             or "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest(),
         )
-        job = await self._job_waiter.wait_for_one(
-            actor=context.actor,
-            job_id=result.id,
-            wait_seconds=parsed.wait_seconds,
+        job = self._job_with_reader_url(
+            await self._job_waiter.wait_for_one(
+                actor=context.actor,
+                job_id=result.id,
+                wait_seconds=parsed.wait_seconds,
+            )
         )
+        document_id = result.document_id or job.document_id
+        project_id = result.project_id or job.project_id
+        ingestion_payload = result.model_dump()
+        if document_id is not None:
+            ingestion_payload["document_id"] = document_id
+        if project_id is not None:
+            ingestion_payload["project_id"] = project_id
         response = wc.PaperIngestionToolResponse.model_validate(
-            {**result.model_dump(), "job": job}
+            {
+                **ingestion_payload,
+                "job": job,
+                "reader_url": self._reader_url(
+                    document_id,
+                    project_id=project_id,
+                ),
+            }
         )
         return ToolOutcome(
             payload=_json(response),
             action={
                 "kind": "paper_ingestion_retried",
                 "job_id": str(job.id),
-                "document_id": (
-                    str(result.document_id) if result.document_id is not None else None
-                ),
-                "project_id": (
-                    str(result.project_id) if result.project_id is not None else None
-                ),
+                "document_id": (str(document_id) if document_id is not None else None),
+                "project_id": (str(project_id) if project_id is not None else None),
                 "status": job.status,
             },
             resource_links=_job_resource_links(job),
@@ -3706,8 +4058,15 @@ class WorkspaceToolHandlers:
         )
         page = jobs[: parsed.limit]
         status_page = [
-            JobResponse.model_validate(
+            wc.JobToolResponse.model_validate(
                 {**job.model_dump(mode="json", exclude={"result"}), "result": None}
+            ).model_copy(
+                update={
+                    "reader_url": self._reader_url(
+                        job.document_id,
+                        project_id=job.project_id,
+                    )
+                }
             )
             for job in page
         ]
@@ -3721,7 +4080,7 @@ class WorkspaceToolHandlers:
         )
         return ToolOutcome(
             payload=_json(
-                JobListResponse(
+                wc.JobListToolOutput(
                     items=status_page,
                     next_cursor=next_cursor,
                 )
@@ -3737,10 +4096,12 @@ class WorkspaceToolHandlers:
     ) -> ToolOutcome:
         del invocation_key, finalize_outcome
         parsed = wc.GetJobInput.model_validate(arguments)
-        job = await self._job_waiter.wait_for_one(
-            actor=context.actor,
-            job_id=parsed.job_id,
-            wait_seconds=parsed.wait_seconds,
+        job = self._job_with_reader_url(
+            await self._job_waiter.wait_for_one(
+                actor=context.actor,
+                job_id=parsed.job_id,
+                wait_seconds=parsed.wait_seconds,
+            )
         )
         return ToolOutcome(
             payload=_json(job),
@@ -3761,6 +4122,9 @@ class WorkspaceToolHandlers:
             job_ids=parsed.job_ids,
             wait_seconds=parsed.wait_seconds,
         )
+        response = response.model_copy(
+            update={"items": [self._job_with_reader_url(job) for job in response.items]}
+        )
         links_by_uri = {
             link.uri: link
             for job in response.items
@@ -3778,7 +4142,12 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.ListAnnotationThreadsInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=parsed.project_id,
+        )
         fingerprint = json.dumps(
             {
                 "actor_id": context.actor.id,
@@ -3853,7 +4222,21 @@ class WorkspaceToolHandlers:
             else None
         )
         return ToolOutcome(
-            payload=_json(wc.ThreadListOutput(items=page, next_cursor=next_cursor)),
+            payload=_json(
+                wc.ThreadListOutput(
+                    items=[
+                        wc.AnnotationThreadSummaryToolResponse(
+                            **item.model_dump(),
+                            reader_url=self._thread_summary_reader_url(
+                                item,
+                                project_id=parsed.project_id,
+                            ),
+                        )
+                        for item in page
+                    ],
+                    next_cursor=next_cursor,
+                )
+            ),
             resource_links=tuple(_thread_link(item.id) for item in page),
         )
 
@@ -3893,7 +4276,13 @@ class WorkspaceToolHandlers:
                 kind=FailureKind.CONFLICT,
             )
         return ToolOutcome(
-            payload=_json(result), resource_links=(_thread_link(parsed.thread_id),)
+            payload=_json(
+                wc.ResearchItemToolResponse(
+                    **result.model_dump(),
+                    reader_url=self._research_reader_url(result),
+                )
+            ),
+            resource_links=(_thread_link(parsed.thread_id),),
         )
 
     def get_annotation_thread_page(
@@ -3911,8 +4300,15 @@ class WorkspaceToolHandlers:
             max_utf8_bytes=parsed.max_utf8_bytes,
             required_kind=ResearchItemKind.ANNOTATION_THREAD,
         )
+        reader_url = self._research_reader_urls.get(parsed.thread_id)
         return ToolOutcome(
-            payload=_json(page), resource_links=(_thread_link(parsed.thread_id),)
+            payload=_json(
+                wc.PaperJsonDocumentPageOutput(
+                    **page.model_dump(),
+                    reader_url=reader_url,
+                )
+            ),
+            resource_links=(_thread_link(parsed.thread_id),),
         )
 
     def create_annotation_thread(
@@ -3922,7 +4318,12 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.CreateAnnotationThreadInput.model_validate(arguments)
-        self._require_paper(capabilities, context, parsed.document_id)
+        self._require_paper(
+            capabilities,
+            context,
+            parsed.document_id,
+            project_id=getattr(parsed.audience, "project_id", None),
+        )
         result = capabilities.research_items.create_annotation_thread(
             actor=context.actor,
             operation=context.operation,
@@ -3938,9 +4339,17 @@ class WorkspaceToolHandlers:
         )
         projection = project_annotation_thread(result)
         resource_uri = f"scholens://annotation-threads/{result.id}"
+        reader_url = self._research_reader_url(
+            projection.thread,
+            project_id=getattr(parsed.audience, "project_id", None),
+        )
         payload = wc.ThreadActionOutput(
-            thread=projection.thread,
+            thread=wc.ResearchItemToolResponse(
+                **projection.thread.model_dump(),
+                reader_url=reader_url,
+            ),
             resource_uri=resource_uri,
+            reader_url=reader_url,
             content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored quote, "
@@ -3977,9 +4386,14 @@ class WorkspaceToolHandlers:
         )
         projection = project_annotation_thread(result)
         resource_uri = f"scholens://annotation-threads/{result.id}"
+        reader_url = self._research_reader_url(projection.thread)
         payload = wc.ThreadActionOutput(
-            thread=projection.thread,
+            thread=wc.ResearchItemToolResponse(
+                **projection.thread.model_dump(),
+                reader_url=reader_url,
+            ),
             resource_uri=resource_uri,
+            reader_url=reader_url,
             content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored quote, "
@@ -4054,6 +4468,11 @@ class WorkspaceToolHandlers:
         payload = wc.CommentActionOutput(
             comment=projection.comment,
             resource_uri=resource_uri,
+            reader_url=self._comment_reader_url(
+                capabilities,
+                context,
+                parsed.thread_id,
+            ),
             content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored comment."
@@ -4091,6 +4510,11 @@ class WorkspaceToolHandlers:
         payload = wc.CommentActionOutput(
             comment=projection.comment,
             resource_uri=resource_uri,
+            reader_url=self._comment_reader_url(
+                capabilities,
+                context,
+                result.thread_id,
+            ),
             content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored comment."
@@ -4177,7 +4601,15 @@ class WorkspaceToolHandlers:
                 limit=parsed.limit,
                 maximum_payload_json_bytes=_LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES,
             )
-            output = wc.ResearchOutputList.model_validate(library_page.model_dump())
+            output = wc.ResearchOutputList(
+                items=[
+                    self._research_output_tool_entry(entry)
+                    for entry in library_page.items
+                ],
+                next_cursor=library_page.next_cursor,
+                previous_cursor=library_page.previous_cursor,
+                total_count=library_page.total_count,
+            )
         elif parsed.scope.kind == "project":
             project_page = capabilities.projects.outputs(
                 actor=context.actor,
@@ -4189,7 +4621,18 @@ class WorkspaceToolHandlers:
                 limit=parsed.limit,
                 maximum_payload_json_bytes=_LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES,
             )
-            output = wc.ResearchOutputList.model_validate(project_page.model_dump())
+            output = wc.ResearchOutputList(
+                items=[
+                    self._research_output_tool_entry(
+                        entry,
+                        project_id=parsed.scope.project_id,
+                    )
+                    for entry in project_page.items
+                ],
+                next_cursor=project_page.next_cursor,
+                previous_cursor=project_page.previous_cursor,
+                total_count=project_page.total_count,
+            )
         else:
             paper_page = capabilities.research_items.list_document_legacy(
                 actor=context.actor,
@@ -4200,9 +4643,13 @@ class WorkspaceToolHandlers:
                 limit=parsed.limit,
                 maximum_payload_json_bytes=_LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES,
             )
-            output_items: list[LibraryOutputResponse | ResearchItemResponse] = list(
-                paper_page.items
-            )
+            output_items = [
+                self._research_output_tool_entry(
+                    entry,
+                    project_id=parsed.scope.project_id,
+                )
+                for entry in paper_page.items
+            ]
             output = wc.ResearchOutputList(
                 items=output_items,
                 total_count=paper_page.total_count,
@@ -4230,15 +4677,25 @@ class WorkspaceToolHandlers:
             parsed=parsed,
             limit=parsed.limit,
         )
+        project_id = parsed.scope.project_id if parsed.scope.kind == "project" else None
+        projected = wc.ResearchOutputSummaryListToolResponse(
+            items=[
+                self._research_summary_tool_response(item, project_id=project_id)
+                for item in result.items
+            ],
+            next_cursor=result.next_cursor,
+            previous_cursor=result.previous_cursor,
+            total_count=result.total_count,
+        )
         links = tuple(
             (
                 _thread_link(item.item_id)
                 if item.kind is ResearchItemKind.ANNOTATION_THREAD
                 else _output_link(item.item_id)
             )
-            for item in result.items
+            for item in projected.items
         )
-        return ToolOutcome(payload=_json(result), resource_links=links)
+        return ToolOutcome(payload=_json(projected), resource_links=links)
 
     @staticmethod
     def _list_research_output_summaries(
@@ -4310,7 +4767,8 @@ class WorkspaceToolHandlers:
                 kind=FailureKind.CONFLICT,
             )
         return ToolOutcome(
-            payload=_json(result), resource_links=(_research_item_link(result),)
+            payload=_json(self._research_item_tool_response(result)),
+            resource_links=(_research_item_link(result),),
         )
 
     def get_research_output_page(
@@ -4327,8 +4785,14 @@ class WorkspaceToolHandlers:
             cursor=parsed.cursor,
             max_utf8_bytes=parsed.max_utf8_bytes,
         )
+        reader_url = self._research_reader_urls.get(parsed.item_id)
         return ToolOutcome(
-            payload=_json(page),
+            payload=_json(
+                wc.PaperJsonDocumentPageOutput(
+                    **page.model_dump(),
+                    reader_url=reader_url,
+                )
+            ),
             resource_links=(
                 _thread_link(parsed.item_id)
                 if kind is ResearchItemKind.ANNOTATION_THREAD
@@ -4405,6 +4869,7 @@ class WorkspaceToolHandlers:
                 if isinstance(audio, dict):
                     audio.pop("audio_url", None)
                     audio["audio_access"] = "Use the page-level access_url."
+                self._research_reader_urls[item_id] = self._research_reader_url(result)
                 return export
 
             try:

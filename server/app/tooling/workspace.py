@@ -13,13 +13,7 @@ from typing import cast
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
-from app.modules.jobs.application.contracts import JobListResponse
 from app.modules.papers.application.contracts.documents import (
-    CollectPublicPaperResponse,
-    DocumentFileUrlResponse,
-    DocumentResponse,
-    LibraryPaperListResponse,
-    LibraryPaperResponse,
     LibrarySummaryResponse,
 )
 from app.modules.papers.application.contracts.tags import (
@@ -30,14 +24,7 @@ from app.modules.papers.application.upload_sessions import (
     PreparePaperUploadRequest,
     PreparePaperUploadResponse,
 )
-from app.modules.projects.application.contracts import (
-    ProjectPaperCollectedResponse,
-    ProjectPapersAddedResponse,
-)
-from app.modules.research.application.contracts import (
-    ResearchItemResponse,
-    ResearchOutputSummaryListResponse,
-)
+from app.modules.projects.application.contracts import ProjectPapersAddedResponse
 from app.shared.application import ApplicationExecutor
 from app.shared.domain import WorkspacePermission
 from app.tooling import workspace_contracts as wc
@@ -86,7 +73,9 @@ MCP_TOOL_PROFILE = "mcp"
 def _description(*, use: str, avoid: str, result: str, next_step: str) -> str:
     """Build a consistent decision-oriented description without implementation detail."""
     return (
-        f"Use when {use}. Do not use when {avoid}. Returns {result}. Next: {next_step}"
+        f"Use when {use}. Do not use when {avoid}. Returns {result}. Next: {next_step} "
+        "When a result includes reader_url, use it as the durable user-facing "
+        "Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only."
     )
 
 
@@ -220,7 +209,7 @@ def build_workspace_tool_catalog(
                 next_step="use get_paper_page for bounded metadata or get_paper_content for evidence.",
             ),
             input_model=wc.DocumentInput,
-            output_model=DocumentResponse,
+            output_model=wc.PaperToolResponse,
             permission=read,
             handler=handlers.get_paper,
             replacement_tool="get_paper_page",
@@ -235,7 +224,7 @@ def build_workspace_tool_catalog(
                 next_step="continue with next_cursor until complete, then parse the concatenated JSON.",
             ),
             input_model=wc.PaperMetadataPageInput,
-            output_model=wc.JsonDocumentPageOutput,
+            output_model=wc.PaperJsonDocumentPageOutput,
             permission=read,
             handler=handlers.get_paper_page,
         ),
@@ -325,8 +314,8 @@ def build_workspace_tool_catalog(
                 result="a short-lived authenticated download URL and expiry",
                 next_step="download promptly and never persist the temporary URL.",
             ),
-            input_model=wc.DocumentInput,
-            output_model=DocumentFileUrlResponse,
+            input_model=wc.PaperReadInput,
+            output_model=wc.PaperDownloadToolResponse,
             permission=read,
             handler=handlers.get_paper_download_url,
         ),
@@ -706,7 +695,7 @@ def build_workspace_tool_catalog(
                 ),
             ),
             input_model=wc.ListLibraryPapersInput,
-            output_model=LibraryPaperListResponse,
+            output_model=wc.LibraryPaperListToolOutput,
             permission=read,
             handler=handlers.list_library_papers,
             replacement_tool="list_library_paper_summaries",
@@ -750,7 +739,7 @@ def build_workspace_tool_catalog(
                 ),
             ),
             input_model=wc.DocumentInput,
-            output_model=LibraryPaperResponse,
+            output_model=wc.LibraryPaperToolOutput,
             permission=read,
             handler=handlers.get_library_paper,
             replacement_tool="get_library_paper_page",
@@ -771,7 +760,7 @@ def build_workspace_tool_catalog(
                 ),
             ),
             input_model=wc.LibraryPaperPageInput,
-            output_model=wc.JsonDocumentPageOutput,
+            output_model=wc.PaperJsonDocumentPageOutput,
             permission=read,
             handler=handlers.get_library_paper_page,
         ),
@@ -825,7 +814,7 @@ def build_workspace_tool_catalog(
                 next_step="use get_library_paper for personal status and tags.",
             ),
             input_model=wc.CollectProjectPaperInput,
-            output_model=ProjectPaperCollectedResponse,
+            output_model=wc.ProjectPaperCollectedToolResponse,
             permission=write,
             handler=handlers.collect_project_paper_to_library,
             execution=command,
@@ -876,7 +865,7 @@ def build_workspace_tool_catalog(
                 next_step="use get_library_paper or add_papers_to_project.",
             ),
             input_model=wc.CollectSharedPaperInput,
-            output_model=CollectPublicPaperResponse,
+            output_model=wc.CollectPublicPaperToolResponse,
             permission=write,
             handler=handlers.collect_shared_paper,
             execution=command,
@@ -1078,7 +1067,7 @@ def build_workspace_tool_catalog(
                 next_step="use get_job for one exact status and actionable failure.",
             ),
             input_model=wc.ListJobsInput,
-            output_model=JobListResponse,
+            output_model=wc.JobListToolOutput,
             permission=read,
             handler=handlers.list_jobs,
             outcome_projector=project_list_jobs,
@@ -1148,7 +1137,7 @@ def build_workspace_tool_catalog(
                 next_step="use get_annotation_thread_page when the complete discussion may be large.",
             ),
             input_model=wc.AnnotationThreadInput,
-            output_model=ResearchItemResponse,
+            output_model=wc.ResearchItemToolResponse,
             permission=read,
             handler=handlers.get_annotation_thread,
             replacement_tool="get_annotation_thread_page",
@@ -1163,7 +1152,7 @@ def build_workspace_tool_catalog(
                 next_step="continue with next_cursor until complete before replying or citing it.",
             ),
             input_model=wc.AnnotationThreadPageInput,
-            output_model=wc.JsonDocumentPageOutput,
+            output_model=wc.PaperJsonDocumentPageOutput,
             permission=read,
             handler=handlers.get_annotation_thread_page,
         ),
@@ -1291,7 +1280,7 @@ def build_workspace_tool_catalog(
                 next_step="open one item with its page tool using the immutable item UUID.",
             ),
             input_model=wc.ListResearchOutputSummariesInput,
-            output_model=ResearchOutputSummaryListResponse,
+            output_model=wc.ResearchOutputSummaryListToolResponse,
             permission=read,
             handler=handlers.list_research_output_summaries,
         ),
@@ -1305,7 +1294,7 @@ def build_workspace_tool_catalog(
                 next_step="migrate to get_research_output_page for lossless bounded reads.",
             ),
             input_model=wc.ResearchOutputInput,
-            output_model=ResearchItemResponse,
+            output_model=wc.ResearchItemToolResponse,
             permission=read,
             handler=handlers.get_research_output,
             replacement_tool="get_research_output_page",
@@ -1320,7 +1309,7 @@ def build_workspace_tool_catalog(
                 next_step="continue with next_cursor, concatenate every content fragment, then parse the JSON.",
             ),
             input_model=wc.ResearchOutputPageInput,
-            output_model=wc.JsonDocumentPageOutput,
+            output_model=wc.PaperJsonDocumentPageOutput,
             permission=read,
             handler=handlers.get_research_output_page,
         ),

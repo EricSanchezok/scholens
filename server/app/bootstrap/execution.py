@@ -254,6 +254,7 @@ def create_mcp_transport(
         authenticate=authenticate,
         operation_factory=operation_factory,
         diagnostic_recorder=diagnostic_recorder,
+        web_base_url=settings.client_domain,
     )
 
 

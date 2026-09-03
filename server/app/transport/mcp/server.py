@@ -849,6 +849,7 @@ def build_mcp_transport(
     authenticate: AccessKeyAuthenticator,
     operation_factory: OperationContextFactory,
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
+    web_base_url: str = "https://scholens.local",
 ) -> tuple[StreamableHTTPSessionManager, AuthenticatedMcpApplication]:
     server: Server[object] = Server(
         "scholens",
@@ -863,7 +864,10 @@ def build_mcp_transport(
             "sources. Read bounded content before citing it. Risky actions first return "
             "an impact preview and execute only when the same arguments are retried with "
             "the approved confirmation token. Never put credentials or local paths in "
-            "tool arguments."
+            "tool arguments. Always use a paper result's reader_url as the durable, "
+            "user-facing Scholens Markdown link (for example [paper](reader_url)); "
+            "keep DOI, arXiv, and source URLs only as provenance. Never persist a "
+            "temporary file_url, preview_url, or upload URL."
         ),
     )
     register_list_tools = cast(
@@ -1057,7 +1061,11 @@ def build_mcp_transport(
             isError=False,
         )
 
-    resource_loader = ScholensResourceLoader(executor=executor) if executor else None
+    resource_loader = (
+        ScholensResourceLoader(executor=executor, web_base_url=web_base_url)
+        if executor
+        else None
+    )
     register_list_resources = cast(
         Callable[[], Callable[[ListResourcesHandler], ListResourcesHandler]],
         server.list_resources,

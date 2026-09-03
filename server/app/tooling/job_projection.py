@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID
 
-from app.modules.jobs.application.contracts import JobListResponse, JobResponse
+from app.modules.jobs.application.contracts import JobResponse
 from app.modules.papers.application.contracts.uploads import PaperSource
 from app.shared.application.text import json_bounded_prefix
 from app.shared.domain import JsonValue
@@ -78,8 +78,8 @@ def _resource_links(
                 uri=f"scholens://papers/{document_id}",
                 name=f"Paper {document_id}",
                 description=(
-                    "Canonical Scholens paper metadata. Use get_paper_content for "
-                    "bounded text."
+                    "Canonical Scholens paper metadata. Use reader_url for browser "
+                    "reading and get_paper_content for bounded text."
                 ),
             )
         )
@@ -142,7 +142,7 @@ def project_list_jobs(outcome: ToolOutcome) -> ToolOutcome:
         field="items",
         projector=_without_job_result,
     )
-    response = JobListResponse.model_validate(payload)
+    response = wc.JobListToolOutput.model_validate(payload)
     return replace(
         outcome,
         payload=response.model_dump(mode="json"),

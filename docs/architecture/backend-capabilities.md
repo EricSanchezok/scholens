@@ -388,6 +388,16 @@ an external research repository. `create_project` and `get_project` return its
 immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
 Every later call accepts immutable IDs rather than guessing from titles.
 
+Paper-bearing MCP tool results and Resource manifests include an optional
+`reader_url` alongside the existing `scholens://` resource URI. It is generated
+from the configured client origin and points to `/reader/{document_id}`; direct
+paper reads and ingestion calls append `?project={project_id}` only when an
+explicit authorized Project context is known. Agents use `reader_url` as the
+durable browser link in Markdown, notes, reports, and citations, while DOI,
+arXiv, and source URLs are provenance. Signed file, preview, and upload URLs are
+ephemeral and must not be persisted. A null value means the ingestion has not
+yet produced a readable document target.
+
 The current shared profile contains 62 tools. With all four workspace
 permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 63
 total. The Conversation profile instead adds the internal-only

@@ -263,6 +263,27 @@ def test_paper_content_retains_legacy_line_continuation_at_a_boundary() -> None:
     assert page.ends_mid_line is False
 
 
+def test_paper_content_returns_project_scoped_reader_url() -> None:
+    document_id = uuid4()
+    project_id = uuid4()
+    capabilities = _capabilities(document_id=document_id, raw_content="evidence")
+
+    outcome = _handler().get_paper_content(
+        capabilities,
+        _context(),
+        PaperContentInput(document_id=document_id, project_id=project_id),
+    )
+    page = PaperContentOutput.model_validate(outcome.payload)
+
+    assert page.reader_url == (
+        f"https://scholens.example/reader/{document_id}?project={project_id}"
+    )
+    authorized_collection = capabilities.paper_collection_access.call_args.kwargs[
+        "collection"
+    ]
+    assert authorized_collection.project_ids == [project_id]
+
+
 def test_paper_content_envelope_bounds_json_escape_heavy_source_excerpt() -> None:
     document_id = uuid4()
     outcome = _handler().get_paper_content(

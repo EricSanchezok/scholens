@@ -23,6 +23,7 @@ from app.tooling.library_paper_projection import (
     LIBRARY_PAPER_LIST_MAX_PAGE_ITEMS,
     project_document,
 )
+from app.tooling.reader_links import build_reader_url, normalize_web_base_url
 from app.tooling.project_summary_projection import (
     PROJECT_PAPER_LIST_MAX_PAGE_ITEMS,
     bounded_project_title,
@@ -33,14 +34,21 @@ from app.tooling.project_summary_projection import (
 )
 from app.transport.mcp.resource_contracts import (
     AnnotationThreadResourcePayload,
+    LibraryPaperResourceIngestionEntry,
+    LibraryPaperResourceList,
+    LibraryPaperResourcePaperEntry,
     LibraryResourcePayload,
     MCP_RESOURCE_MAX_UTF8_BYTES,
     PaperContentPreview,
     PaperResourcePayload,
     ProjectIndexResourcePayload,
+    ProjectPaperResourceList,
+    ProjectPaperResourceSummary,
     ProjectResourcePayload,
     RESOURCE_TEMPLATE_CONTRACTS,
     ResearchOutputResourcePayload,
+    ResearchOutputSummaryResource,
+    ResearchOutputSummaryResourceList,
     ResourceContinuation,
     ScholensResourcePayload,
     STATIC_RESOURCE_CONTRACTS,
@@ -95,8 +103,24 @@ class ScholensResourceLoader:
         self,
         *,
         executor: ApplicationExecutor[ApplicationCapabilities],
+        web_base_url: str = "https://scholens.local",
     ) -> None:
         self._executor = executor
+        self._web_base_url = normalize_web_base_url(web_base_url)
+
+    def _reader_url(
+        self,
+        document_id: uuid.UUID | None,
+        *,
+        project_id: uuid.UUID | None = None,
+    ) -> str | None:
+        if document_id is None:
+            return None
+        return build_reader_url(
+            web_base_url=self._web_base_url,
+            document_id=document_id,
+            project_id=project_id,
+        )
 
     async def list_resources(self, *, actor: Actor) -> list[mcp_types.Resource]:
         project_catalog = await asyncio.to_thread(
@@ -226,8 +250,8 @@ class ScholensResourceLoader:
             kind=FailureKind.NOT_FOUND,
         )
 
-    @staticmethod
     def _load_library(
+        self,
         *,
         capabilities: ApplicationCapabilities,
         actor: Actor,
@@ -236,6 +260,45 @@ class ScholensResourceLoader:
         papers = capabilities.paper_library.list_summaries(
             actor=actor,
             limit=LIBRARY_PAPER_LIST_MAX_PAGE_ITEMS,
+        )
+        paper_items = [
+            (
+                LibraryPaperResourcePaperEntry(
+                    **item.model_dump(),
+                    reader_url=self._reader_url(item.document.document_id),
+                )
+                if item.entry_type == "paper"
+                else LibraryPaperResourceIngestionEntry(
+                    **item.model_dump(),
+                    reader_url=self._reader_url(
+                        item.ingestion.document_id,
+                        project_id=item.ingestion.project_id,
+                    ),
+                )
+            )
+            for item in papers.value.items
+        ]
+        paper_list = LibraryPaperResourceList(
+            **papers.value.model_dump(exclude={"items"}),
+            items=paper_items,
+        )
+        research_outputs = capabilities.research_output_catalog.list(
+            actor=actor,
+            scope=ResearchOutputCatalogScope.library(),
+            limit=20,
+        )
+        research_output_list = ResearchOutputSummaryResourceList(
+            **research_outputs.model_dump(exclude={"items"}),
+            items=[
+                ResearchOutputSummaryResource(
+                    **item.model_dump(),
+                    reader_url=self._reader_url(
+                        item.target_document_id,
+                        project_id=getattr(item.audience, "project_id", None),
+                    ),
+                )
+                for item in research_outputs.items
+            ],
         )
         return LibraryResourcePayload(
             resource_uri=uri,
@@ -267,15 +330,11 @@ class ScholensResourceLoader:
             guidance=(
                 "Paper fields are bounded previews. Continue with "
                 "list_library_paper_summaries, and use list_jobs for active "
-                "ingestions."
+                "ingestions. Use each paper's reader_url for durable browser links."
             ),
             summary=capabilities.paper_library.summary(actor=actor),
-            papers=papers.value,
-            research_outputs=capabilities.research_output_catalog.list(
-                actor=actor,
-                scope=ResearchOutputCatalogScope.library(),
-                limit=20,
-            ),
+            papers=paper_list,
+            research_outputs=research_output_list,
         )
 
     @staticmethod
@@ -313,8 +372,8 @@ class ScholensResourceLoader:
             projects=projects.value,
         )
 
-    @staticmethod
     def _load_project(
+        self,
         *,
         capabilities: ApplicationCapabilities,
         actor: Actor,
@@ -333,12 +392,43 @@ class ScholensResourceLoader:
             limit=PROJECT_PAPER_LIST_MAX_PAGE_ITEMS,
         )
         papers = project_project_paper_list(resource_papers.value)
+        paper_list = ProjectPaperResourceList(
+            **papers.value.model_dump(exclude={"items"}),
+            items=[
+                ProjectPaperResourceSummary(
+                    **item.model_dump(),
+                    reader_url=self._reader_url(
+                        item.document_id,
+                        project_id=project_id,
+                    ),
+                )
+                for item in papers.value.items
+            ],
+        )
         resource_members = capabilities.projects.resource_members(
             actor=actor,
             project_id=project_id,
             limit=50,
         )
         members = project_project_member_list(resource_members.value)
+        research_outputs = capabilities.research_output_catalog.list(
+            actor=actor,
+            scope=ResearchOutputCatalogScope.project(project_id),
+            limit=20,
+        )
+        research_output_list = ResearchOutputSummaryResourceList(
+            **research_outputs.model_dump(exclude={"items"}),
+            items=[
+                ResearchOutputSummaryResource(
+                    **item.model_dump(),
+                    reader_url=self._reader_url(
+                        item.target_document_id,
+                        project_id=project_id,
+                    ),
+                )
+                for item in research_outputs.items
+            ],
+        )
         return ProjectResourcePayload(
             resource_uri=uri,
             continuations=[
@@ -384,16 +474,13 @@ class ScholensResourceLoader:
             ),
             guidance=(
                 "Project, paper, and collaborator fields are bounded previews; "
-                "use the listed paginated tools for complete collections."
+                "use the listed paginated tools for complete collections. Use each "
+                "paper's reader_url for durable browser links."
             ),
             project=project.value,
-            papers=papers.value,
+            papers=paper_list,
             members=members.value,
-            research_outputs=capabilities.research_output_catalog.list(
-                actor=actor,
-                scope=ResearchOutputCatalogScope.project(project_id),
-                limit=20,
-            ),
+            research_outputs=research_output_list,
         )
 
     def _load_paper(
@@ -446,6 +533,7 @@ class ScholensResourceLoader:
         )
         return PaperResourcePayload(
             resource_uri=uri,
+            reader_url=self._reader_url(document_id),
             continuations=[
                 ResourceContinuation(
                     tool="get_paper_content",
@@ -481,7 +569,8 @@ class ScholensResourceLoader:
             ),
             guidance=(
                 "Metadata and content are bounded previews. Use get_paper_page and "
-                "get_paper_content for lossless continuation."
+                "get_paper_content for lossless continuation; use reader_url for "
+                "durable browser links."
             ),
             paper=paper.value,
             content_preview=PaperContentPreview(
@@ -497,8 +586,8 @@ class ScholensResourceLoader:
             projects=projects.value,
         )
 
-    @staticmethod
     def _load_annotation_thread(
+        self,
         *,
         capabilities: ApplicationCapabilities,
         actor: Actor,
@@ -517,6 +606,10 @@ class ScholensResourceLoader:
             )
         return AnnotationThreadResourcePayload(
             resource_uri=uri,
+            reader_url=self._reader_url(
+                thread.target_document_id,
+                project_id=getattr(thread.audience, "project_id", None),
+            ),
             continuations=[
                 ResourceContinuation(
                     tool="get_annotation_thread_page",
@@ -535,8 +628,8 @@ class ScholensResourceLoader:
             thread=thread,
         )
 
-    @staticmethod
     def _load_research_output(
+        self,
         *,
         capabilities: ApplicationCapabilities,
         actor: Actor,
@@ -549,6 +642,10 @@ class ScholensResourceLoader:
         )
         return ResearchOutputResourcePayload(
             resource_uri=uri,
+            reader_url=self._reader_url(
+                research_output.target_document_id,
+                project_id=getattr(research_output.audience, "project_id", None),
+            ),
             continuations=[
                 ResourceContinuation(
                     tool="get_research_output_page",
