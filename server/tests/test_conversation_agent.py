@@ -399,7 +399,7 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
 
 
 @pytest.mark.asyncio
-async def test_plain_text_terminal_streams_candidate_after_classification() -> None:
+async def test_plain_text_terminal_streams_candidate_deltas_incrementally() -> None:
     answer = (
         "A structured final answer can reach the user while its tool arguments "
         "are still arriving from the model, without publishing the held suffix."
@@ -442,6 +442,7 @@ async def test_plain_text_terminal_streams_candidate_after_classification() -> N
     )
 
     assert candidate_deltas
+    assert len(candidate_deltas) >= 2
     assert "".join(candidate_deltas) == answer
     assert last_candidate_index < final_complete_index
     final_item = events[final_complete_index]

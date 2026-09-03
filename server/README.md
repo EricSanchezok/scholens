@@ -517,14 +517,15 @@ provider heartbeats, and model reasoning never leave the server. Candidate text
 is provisional and resettable, while `response.ready` carries the complete
 persisted turn snapshot and unblocks response actions. The v1 endpoints remain a
 compatibility adapter for the legacy event union during the rolling deployment
-window. The v2 adapter maps the classified candidate lifecycle to
-`message.part.*`; the v1 compatibility adapter retains the explicit
+window. The v2 adapter maps the live candidate lifecycle to `message.part.*`;
+provider text deltas are emitted as they arrive and a later tool call resets
+that speculative candidate before bounded progress is published. The v1
+compatibility adapter retains the explicit
 `application/vnd.scholens.conversation-events` negotiation and
 `/events/candidates` resume route.
-The runtime buffers model text until the complete model node establishes its
-role. Text accompanying an ordinary tool call may be published as bounded
-`progress`; ordinary text with no tool call is the terminal answer. Candidate
-events do not depend on a model-visible finalization tool or JSON envelope.
+Text accompanying an ordinary tool call may be published as bounded `progress`;
+ordinary text with no tool call is the terminal answer. Candidate events do not
+depend on a model-visible finalization tool or JSON envelope.
 Every runtime response uses the standard `text/event-stream` Content-Type; the
 vendor media type is an Accept negotiation token rather than a replacement for
 SSE. Private citation protocol never enters the candidate.

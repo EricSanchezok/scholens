@@ -18,6 +18,9 @@ detachable requests use one replayable event sequence with a response-local
 `seq`, stable part IDs, and part versions. The public event set follows
 research-agent's lifecycle semantics: explicit phases, safe activity snapshots,
 provisional candidates, a selected `response.ready`, and one terminal event.
+Provider text deltas are forwarded to the provisional candidate as they arrive;
+if the same model step later reveals a tool call, the speculative candidate is
+reset and published as bounded progress instead.
 Raw tool arguments, provider heartbeats, internal iteration, and chain-of-thought
 remain private.
 
