@@ -396,8 +396,8 @@ the individual hit target without dividing the row into persistent blocks.
 Mobile hit targets remain 44 px and desktop hit targets are 32 px. Disabled
 arrows retain normal opacity and use the muted semantic color. Follow-up
 suggestions have no visible heading or repeated icon: phones use 44 px pills.
-On desktop, actions and suggestions share one response footer. Suggestion rows
-use secondary text, subtle separators only between rows, and a local rounded
+On desktop, actions and suggestions share the full conversation-lane response
+footer. Suggestion rows use secondary text, subtle separators only between rows, and a local rounded
 hover/focus surface; there is no outer divider or permanent card background.
 Each label stays on the response text baseline while its 12 px internal hit
 inset is preserved by extending the row surface beyond the footer edge. This
@@ -468,8 +468,10 @@ manually chosen a state. Persisted history starts collapsed. Expanded rows
 interleave concise progress with outcome-homogeneous tool batches, show at most
 two safe subject examples per batch, and never create nested tool disclosures.
 Each batch names its visible state, and the summary labels the reference count
-as cited sources rather than retrieval results. The summary is the only polite
-live-region announcement, so screen readers do not
+as cited sources rather than retrieval results. When inline space permits,
+desktop batch state and safe subject examples share one horizontal baseline;
+narrow layouts wrap the subject without widening the conversation lane. The
+summary is the only polite live-region announcement, so screen readers do not
 receive every tool update. The same semantic component is used on desktop and
 mobile, with compact responsive spacing and no inner scrolling surface.
 

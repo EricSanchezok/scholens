@@ -301,7 +301,7 @@ function AssistantMessage({
         />
       ) : null}
       {(completedActionsVisible || terminalRetryVisible || suggestions) && (
-        <footer className="grid gap-2 lg:max-w-2xl lg:gap-1">
+        <footer className="grid gap-2 lg:gap-1">
           {(completedActionsVisible || terminalRetryVisible) && (
             <div
               className="settled-content-enter flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
@@ -366,17 +366,6 @@ function AssistantMessage({
                     successLabel={t("copied")}
                     value={visibleContent}
                   />
-                  <ConversationSources
-                    citationSummary={citationSummary}
-                    onDocumentOpen={onDocumentSourceOpen}
-                    onOpenChange={(open) => {
-                      setSourcesOpen(open);
-                      if (!open) setSelectedSourceKey(undefined);
-                    }}
-                    open={sourcesOpen}
-                    references={references}
-                    selectedSourceKey={selectedSourceKey}
-                  />
                 </>
               )}
               {canRetry && onRetryResponse && (
@@ -388,6 +377,19 @@ function AssistantMessage({
                 >
                   <Icon glyph={RegenerateIcon} size={16} tone="secondary" />
                 </IconButton>
+              )}
+              {completedActionsVisible && (
+                <ConversationSources
+                  citationSummary={citationSummary}
+                  onDocumentOpen={onDocumentSourceOpen}
+                  onOpenChange={(open) => {
+                    setSourcesOpen(open);
+                    if (!open) setSelectedSourceKey(undefined);
+                  }}
+                  open={sourcesOpen}
+                  references={references}
+                  selectedSourceKey={selectedSourceKey}
+                />
               )}
             </div>
           )}

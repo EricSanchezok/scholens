@@ -165,7 +165,7 @@ export function ConversationSources({
       <DialogTrigger asChild>
         <button
           className={cn(
-            "motion-control bg-subtle hover:bg-hover active:bg-pressed ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:min-h-8",
+            "motion-control bg-subtle hover:bg-hover active:bg-pressed ms-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:min-h-8",
             focusSurfaceVariants({ intent: "neutral" }),
           )}
           type="button"

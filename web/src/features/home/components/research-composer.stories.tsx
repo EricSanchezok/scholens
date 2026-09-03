@@ -188,6 +188,42 @@ export const MultilineInput: Story = {
   },
 };
 
+export const DesktopLongInputKeepsControlsTrailing: Story = {
+  globals: {
+    locale: "zh-CN",
+    viewport: { value: "desktop", isRotated: false },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole("textbox", { name: "问任何问题" });
+    const form = composer.closest("form");
+    await expect(form).not.toBeNull();
+    if (!form) return;
+
+    await fireEvent.change(composer, {
+      target: { value: "这是一段足够长的桌面端测试内容 ".repeat(80) },
+    });
+    await waitFor(() => expect(form).toHaveAttribute("data-expanded", "true"));
+
+    const reasoning = canvas.getByRole("button", {
+      name: "思考强度：标准",
+    });
+    const submit = canvas.getByRole("button", { name: "询问 Scholens" });
+    await expect(
+      Math.round(
+        submit.getBoundingClientRect().left -
+          reasoning.getBoundingClientRect().right,
+      ),
+    ).toBeLessThanOrEqual(8);
+    await expect(
+      Math.round(
+        form.getBoundingClientRect().right -
+          submit.getBoundingClientRect().right,
+      ),
+    ).toBeLessThanOrEqual(16);
+  },
+};
+
 export const ImeCandidateConfirmation: Story = {
   args: { onSubmit: fn(async () => undefined) },
   play: async ({ args, canvasElement }) => {

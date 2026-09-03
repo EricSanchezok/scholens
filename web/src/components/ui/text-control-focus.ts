@@ -6,7 +6,6 @@ type FocusOrigin = "keyboard" | "pointer" | null;
 
 let lastInteraction: Exclude<FocusOrigin, null> = "keyboard";
 let listening = false;
-let pointerResetTimer: number | undefined;
 
 function listenForInputModality() {
   if (listening || typeof document === "undefined") return;
@@ -15,10 +14,6 @@ function listenForInputModality() {
   document.addEventListener(
     "keydown",
     () => {
-      if (pointerResetTimer !== undefined) {
-        window.clearTimeout(pointerResetTimer);
-        pointerResetTimer = undefined;
-      }
       lastInteraction = "keyboard";
     },
     true,
@@ -27,13 +22,6 @@ function listenForInputModality() {
     "pointerdown",
     () => {
       lastInteraction = "pointer";
-      if (pointerResetTimer !== undefined) {
-        window.clearTimeout(pointerResetTimer);
-      }
-      pointerResetTimer = window.setTimeout(() => {
-        lastInteraction = "keyboard";
-        pointerResetTimer = undefined;
-      });
     },
     true,
   );

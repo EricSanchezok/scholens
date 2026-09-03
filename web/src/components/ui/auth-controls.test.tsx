@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -120,6 +120,19 @@ describe("authentication controls", () => {
     await user.tab();
     expect(input).toHaveFocus();
     expect(input).toHaveAttribute("data-focus-origin", "keyboard");
+  });
+
+  it("keeps delayed touch focus quiet", async () => {
+    render(<Input aria-label="Email" />);
+    const input = screen.getByRole("textbox", { name: "Email" });
+
+    fireEvent.pointerDown(input, { pointerType: "touch" });
+    await new Promise((resolve) => window.setTimeout(resolve, 5));
+    fireEvent.focus(input);
+
+    await waitFor(() =>
+      expect(input).toHaveAttribute("data-focus-origin", "pointer"),
+    );
   });
 
   it("keeps composite search geometry on its single focus surface", () => {
