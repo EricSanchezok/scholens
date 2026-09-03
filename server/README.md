@@ -252,6 +252,10 @@ uv run --frozen --no-sync celery \
   --without-gossip --without-mingle
 ```
 
+In local development the Conversation Celery app automatically selects the
+`solo` pool. This avoids fork-unsafe native database clients on macOS; the
+production ECS entrypoint keeps the `prefork` pool.
+
 3. Start the optional Jobs service when testing uploads or other Jobs-owned
    queues:
 
