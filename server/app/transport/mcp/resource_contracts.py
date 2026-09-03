@@ -23,7 +23,7 @@ from app.modules.research.application.contracts import (
     ResearchOutputSummary,
 )
 from app.tooling.reader_links import READER_URL_DESCRIPTION, READER_URL_MAX_LENGTH
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 
 
 class ResourceContinuation(BaseModel):
@@ -58,7 +58,7 @@ class TruncatedResourcePayload(McpResourcePayload):
     guidance: str
 
 
-class LibraryPaperResourcePaperEntry(LibraryPaperListPaperEntry):
+class LibraryPaperResourcePaperEntryModel(LibraryPaperListPaperEntry):
     model_config = ConfigDict(from_attributes=True)
     reader_url: str | None = Field(
         default=None,
@@ -67,7 +67,7 @@ class LibraryPaperResourcePaperEntry(LibraryPaperListPaperEntry):
     )
 
 
-class LibraryPaperResourceIngestionEntry(LibraryPaperListIngestionEntry):
+class LibraryPaperResourceIngestionEntryModel(LibraryPaperListIngestionEntry):
     model_config = ConfigDict(from_attributes=True)
     reader_url: str | None = Field(
         default=None,
@@ -77,16 +77,59 @@ class LibraryPaperResourceIngestionEntry(LibraryPaperListIngestionEntry):
 
 
 LibraryPaperResourceEntry = Annotated[
-    LibraryPaperResourcePaperEntry | LibraryPaperResourceIngestionEntry,
+    LibraryPaperResourcePaperEntryModel | LibraryPaperResourceIngestionEntryModel,
     Field(discriminator="entry_type"),
 ]
 
 
+_READER_URL_SCHEMA = {
+    "anyOf": [
+        {"maxLength": READER_URL_MAX_LENGTH, "type": "string"},
+        {"type": "null"},
+    ],
+    "default": None,
+    "description": READER_URL_DESCRIPTION,
+    "title": "Reader Url",
+}
+
+_LIBRARY_PAPER_LIST_BASE_ENTRY = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA = Annotated[
+    SerializeAsAny[_LIBRARY_PAPER_LIST_BASE_ENTRY],
+    Field(json_schema_extra={"properties": {"reader_url": _READER_URL_SCHEMA}}),
+]
+
+
 class LibraryPaperResourceList(BaseModel):
-    items: list[LibraryPaperResourceEntry]
+    items: list[_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA]
     next_cursor: str | None = None
     previous_cursor: str | None = None
     total_count: int = Field(ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_reader_url_entries(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            return value
+        normalized = dict(value)
+        normalized["items"] = [
+            (
+                LibraryPaperResourcePaperEntryModel.model_validate(item)
+                if isinstance(item, dict) and item.get("entry_type") == "paper"
+                else (
+                    LibraryPaperResourceIngestionEntryModel.model_validate(item)
+                    if isinstance(item, dict) and item.get("entry_type") == "ingestion"
+                    else item
+                )
+            )
+            for item in raw_items
+        ]
+        return normalized
 
 
 class ProjectPaperResourceSummary(ProjectPaperSummaryResponse):
@@ -260,9 +303,9 @@ RESOURCE_TEMPLATE_CONTRACTS = (
 __all__ = [
     "AnnotationThreadResourcePayload",
     "LibraryPaperResourceEntry",
-    "LibraryPaperResourceIngestionEntry",
+    "LibraryPaperResourceIngestionEntryModel",
     "LibraryPaperResourceList",
-    "LibraryPaperResourcePaperEntry",
+    "LibraryPaperResourcePaperEntryModel",
     "LibraryResourcePayload",
     "MCP_RESOURCE_MAX_UTF8_BYTES",
     "RESOURCE_TEMPLATE_CONTRACTS",

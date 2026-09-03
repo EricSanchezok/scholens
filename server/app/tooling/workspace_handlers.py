@@ -603,14 +603,14 @@ class WorkspaceToolHandlers:
         for item in LibraryPaperListResponse.model_validate(value).items:
             if item.entry_type == "paper":
                 items.append(
-                    wc.LibraryPaperListPaperToolEntry(
+                    wc.LibraryPaperListPaperToolEntryModel(
                         **item.model_dump(),
                         reader_url=self._reader_url(item.document.document_id),
                     )
                 )
             else:
                 items.append(
-                    wc.LibraryPaperListIngestionToolEntry(
+                    wc.LibraryPaperListIngestionToolEntryModel(
                         **item.model_dump(),
                         reader_url=self._reader_url(
                             item.ingestion.document_id,

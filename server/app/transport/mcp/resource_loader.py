@@ -11,6 +11,10 @@ from urllib.parse import urlsplit
 
 import mcp.types as mcp_types
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperListIngestionEntry,
+    LibraryPaperListPaperEntry,
+)
 from app.modules.papers.application.contracts.search import LibraryPaperCollection
 from app.modules.projects.application.contracts import ProjectListResponse
 from app.modules.research.application.catalog import ResearchOutputCatalogScope
@@ -34,9 +38,9 @@ from app.tooling.project_summary_projection import (
 )
 from app.transport.mcp.resource_contracts import (
     AnnotationThreadResourcePayload,
-    LibraryPaperResourceIngestionEntry,
+    LibraryPaperResourceIngestionEntryModel,
     LibraryPaperResourceList,
-    LibraryPaperResourcePaperEntry,
+    LibraryPaperResourcePaperEntryModel,
     LibraryResourcePayload,
     MCP_RESOURCE_MAX_UTF8_BYTES,
     PaperContentPreview,
@@ -261,14 +265,16 @@ class ScholensResourceLoader:
             actor=actor,
             limit=LIBRARY_PAPER_LIST_MAX_PAGE_ITEMS,
         )
-        paper_items = [
+        paper_items: list[
+            LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry
+        ] = [
             (
-                LibraryPaperResourcePaperEntry(
+                LibraryPaperResourcePaperEntryModel(
                     **item.model_dump(),
                     reader_url=self._reader_url(item.document.document_id),
                 )
                 if item.entry_type == "paper"
-                else LibraryPaperResourceIngestionEntry(
+                else LibraryPaperResourceIngestionEntryModel(
                     **item.model_dump(),
                     reader_url=self._reader_url(
                         item.ingestion.document_id,

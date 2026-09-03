@@ -70,7 +70,15 @@ from app.tooling.reader_links import (
     READER_URL_DESCRIPTION,
     READER_URL_MAX_LENGTH,
 )
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, RootModel, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    RootModel,
+    SerializeAsAny,
+    model_validator,
+)
 
 PROJECT_ID_DESCRIPTION = (
     "The immutable Scholens Project UUID. In a repository-bound workflow, read it "
@@ -893,7 +901,7 @@ class ListLibraryPapersInput(ToolInput):
     limit: int = Field(default=20, ge=1, le=100, description="Page size.")
 
 
-class LibraryPaperListPaperToolEntry(LibraryPaperListPaperEntry):
+class LibraryPaperListPaperToolEntryModel(LibraryPaperListPaperEntry):
     reader_url: str | None = Field(
         default=None,
         max_length=READER_URL_MAX_LENGTH,
@@ -901,7 +909,7 @@ class LibraryPaperListPaperToolEntry(LibraryPaperListPaperEntry):
     )
 
 
-class LibraryPaperListIngestionToolEntry(LibraryPaperListIngestionEntry):
+class LibraryPaperListIngestionToolEntryModel(LibraryPaperListIngestionEntry):
     reader_url: str | None = Field(
         default=None,
         max_length=READER_URL_MAX_LENGTH,
@@ -910,13 +918,33 @@ class LibraryPaperListIngestionToolEntry(LibraryPaperListIngestionEntry):
 
 
 LibraryPaperListToolEntry = Annotated[
-    LibraryPaperListPaperToolEntry | LibraryPaperListIngestionToolEntry,
+    LibraryPaperListPaperToolEntryModel | LibraryPaperListIngestionToolEntryModel,
     Field(discriminator="entry_type"),
 ]
 
 
+_READER_URL_SCHEMA = {
+    "anyOf": [
+        {"maxLength": READER_URL_MAX_LENGTH, "type": "string"},
+        {"type": "null"},
+    ],
+    "default": None,
+    "description": READER_URL_DESCRIPTION,
+    "title": "Reader Url",
+}
+
+_LIBRARY_PAPER_LIST_BASE_ENTRY = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA = Annotated[
+    SerializeAsAny[_LIBRARY_PAPER_LIST_BASE_ENTRY],
+    Field(json_schema_extra={"properties": {"reader_url": _READER_URL_SCHEMA}}),
+]
+
+
 class LibraryPaperListToolOutput(BaseModel):
-    items: list[LibraryPaperListToolEntry]
+    items: list[_LIBRARY_PAPER_READER_URL_ITEM_SCHEMA]
     next_cursor: str | None = None
     previous_cursor: str | None = None
     total_count: int = Field(ge=0)
@@ -927,6 +955,29 @@ class LibraryPaperListToolOutput(BaseModel):
         max_length=500,
         description="How to retrieve lossless Library paper JSON and continue pages.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_reader_url_entries(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw_items = value.get("items")
+        if not isinstance(raw_items, list):
+            return value
+        normalized = dict(value)
+        normalized["items"] = [
+            (
+                LibraryPaperListPaperToolEntryModel.model_validate(item)
+                if isinstance(item, dict) and item.get("entry_type") == "paper"
+                else (
+                    LibraryPaperListIngestionToolEntryModel.model_validate(item)
+                    if isinstance(item, dict) and item.get("entry_type") == "ingestion"
+                    else item
+                )
+            )
+            for item in raw_items
+        ]
+        return normalized
 
 
 class LibraryPaperToolOutput(LibraryPaperResponse):

@@ -3287,7 +3287,7 @@
             "title": "LibraryPaperIngestionResponse",
             "type": "object"
           },
-          "LibraryPaperResourceIngestionEntry": {
+          "LibraryPaperListIngestionEntry": {
             "properties": {
               "entry_type": {
                 "const": "ingestion",
@@ -3297,89 +3297,15 @@
               },
               "ingestion": {
                 "$ref": "#/$defs/LibraryPaperIngestionResponse"
-              },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
               }
             },
             "required": [
               "ingestion"
             ],
-            "title": "LibraryPaperResourceIngestionEntry",
+            "title": "LibraryPaperListIngestionEntry",
             "type": "object"
           },
-          "LibraryPaperResourceList": {
-            "properties": {
-              "items": {
-                "items": {
-                  "discriminator": {
-                    "mapping": {
-                      "ingestion": "#/$defs/LibraryPaperResourceIngestionEntry",
-                      "paper": "#/$defs/LibraryPaperResourcePaperEntry"
-                    },
-                    "propertyName": "entry_type"
-                  },
-                  "oneOf": [
-                    {
-                      "$ref": "#/$defs/LibraryPaperResourcePaperEntry"
-                    },
-                    {
-                      "$ref": "#/$defs/LibraryPaperResourceIngestionEntry"
-                    }
-                  ]
-                },
-                "title": "Items",
-                "type": "array"
-              },
-              "next_cursor": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Next Cursor"
-              },
-              "previous_cursor": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Previous Cursor"
-              },
-              "total_count": {
-                "minimum": 0,
-                "title": "Total Count",
-                "type": "integer"
-              }
-            },
-            "required": [
-              "items",
-              "total_count"
-            ],
-            "title": "LibraryPaperResourceList",
-            "type": "object"
-          },
-          "LibraryPaperResourcePaperEntry": {
+          "LibraryPaperListPaperEntry": {
             "properties": {
               "created_at": {
                 "format": "date-time",
@@ -3423,20 +3349,6 @@
                 ],
                 "title": "Preview Url"
               },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
-              },
               "status": {
                 "$ref": "#/$defs/PaperStatus"
               },
@@ -3470,7 +3382,83 @@
               "created_at",
               "updated_at"
             ],
-            "title": "LibraryPaperResourcePaperEntry",
+            "title": "LibraryPaperListPaperEntry",
+            "type": "object"
+          },
+          "LibraryPaperResourceList": {
+            "properties": {
+              "items": {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "ingestion": "#/$defs/LibraryPaperListIngestionEntry",
+                      "paper": "#/$defs/LibraryPaperListPaperEntry"
+                    },
+                    "propertyName": "entry_type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/LibraryPaperListPaperEntry"
+                    },
+                    {
+                      "$ref": "#/$defs/LibraryPaperListIngestionEntry"
+                    }
+                  ],
+                  "properties": {
+                    "reader_url": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "title": "Reader Url"
+                    }
+                  }
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "previous_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Previous Cursor"
+              },
+              "total_count": {
+                "minimum": 0,
+                "title": "Total Count",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "items",
+              "total_count"
+            ],
+            "title": "LibraryPaperResourceList",
             "type": "object"
           },
           "LibraryPaperTagResponse": {
@@ -31520,7 +31508,7 @@
             "title": "LibraryPaperIngestionResponse",
             "type": "object"
           },
-          "LibraryPaperListIngestionToolEntry": {
+          "LibraryPaperListIngestionEntry": {
             "properties": {
               "entry_type": {
                 "const": "ingestion",
@@ -31530,29 +31518,15 @@
               },
               "ingestion": {
                 "$ref": "#/$defs/LibraryPaperIngestionResponse"
-              },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
               }
             },
             "required": [
               "ingestion"
             ],
-            "title": "LibraryPaperListIngestionToolEntry",
+            "title": "LibraryPaperListIngestionEntry",
             "type": "object"
           },
-          "LibraryPaperListPaperToolEntry": {
+          "LibraryPaperListPaperEntry": {
             "properties": {
               "created_at": {
                 "format": "date-time",
@@ -31596,20 +31570,6 @@
                 ],
                 "title": "Preview Url"
               },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
-              },
               "status": {
                 "$ref": "#/$defs/PaperStatus"
               },
@@ -31643,7 +31603,7 @@
               "created_at",
               "updated_at"
             ],
-            "title": "LibraryPaperListPaperToolEntry",
+            "title": "LibraryPaperListPaperEntry",
             "type": "object"
           },
           "LibraryPaperListToolOutput": {
@@ -31663,19 +31623,35 @@
                 "items": {
                   "discriminator": {
                     "mapping": {
-                      "ingestion": "#/$defs/LibraryPaperListIngestionToolEntry",
-                      "paper": "#/$defs/LibraryPaperListPaperToolEntry"
+                      "ingestion": "#/$defs/LibraryPaperListIngestionEntry",
+                      "paper": "#/$defs/LibraryPaperListPaperEntry"
                     },
                     "propertyName": "entry_type"
                   },
                   "oneOf": [
                     {
-                      "$ref": "#/$defs/LibraryPaperListPaperToolEntry"
+                      "$ref": "#/$defs/LibraryPaperListPaperEntry"
                     },
                     {
-                      "$ref": "#/$defs/LibraryPaperListIngestionToolEntry"
+                      "$ref": "#/$defs/LibraryPaperListIngestionEntry"
                     }
-                  ]
+                  ],
+                  "properties": {
+                    "reader_url": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "title": "Reader Url"
+                    }
+                  }
                 },
                 "title": "Items",
                 "type": "array"
@@ -32850,7 +32826,7 @@
             "title": "LibraryPaperIngestionResponse",
             "type": "object"
           },
-          "LibraryPaperListIngestionToolEntry": {
+          "LibraryPaperListIngestionEntry": {
             "properties": {
               "entry_type": {
                 "const": "ingestion",
@@ -32860,29 +32836,15 @@
               },
               "ingestion": {
                 "$ref": "#/$defs/LibraryPaperIngestionResponse"
-              },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
               }
             },
             "required": [
               "ingestion"
             ],
-            "title": "LibraryPaperListIngestionToolEntry",
+            "title": "LibraryPaperListIngestionEntry",
             "type": "object"
           },
-          "LibraryPaperListPaperToolEntry": {
+          "LibraryPaperListPaperEntry": {
             "properties": {
               "created_at": {
                 "format": "date-time",
@@ -32926,20 +32888,6 @@
                 ],
                 "title": "Preview Url"
               },
-              "reader_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 2048,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
-                "title": "Reader Url"
-              },
               "status": {
                 "$ref": "#/$defs/PaperStatus"
               },
@@ -32973,7 +32921,7 @@
               "created_at",
               "updated_at"
             ],
-            "title": "LibraryPaperListPaperToolEntry",
+            "title": "LibraryPaperListPaperEntry",
             "type": "object"
           },
           "LibraryPaperListToolOutput": {
@@ -32993,19 +32941,35 @@
                 "items": {
                   "discriminator": {
                     "mapping": {
-                      "ingestion": "#/$defs/LibraryPaperListIngestionToolEntry",
-                      "paper": "#/$defs/LibraryPaperListPaperToolEntry"
+                      "ingestion": "#/$defs/LibraryPaperListIngestionEntry",
+                      "paper": "#/$defs/LibraryPaperListPaperEntry"
                     },
                     "propertyName": "entry_type"
                   },
                   "oneOf": [
                     {
-                      "$ref": "#/$defs/LibraryPaperListPaperToolEntry"
+                      "$ref": "#/$defs/LibraryPaperListPaperEntry"
                     },
                     {
-                      "$ref": "#/$defs/LibraryPaperListIngestionToolEntry"
+                      "$ref": "#/$defs/LibraryPaperListIngestionEntry"
                     }
-                  ]
+                  ],
+                  "properties": {
+                    "reader_url": {
+                      "anyOf": [
+                        {
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "title": "Reader Url"
+                    }
+                  }
                 },
                 "title": "Items",
                 "type": "array"
