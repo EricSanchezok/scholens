@@ -125,18 +125,35 @@ class S3Service:
         checksum_sha256: str | None = None,
     ) -> str:
         try:
-            extra_args: dict[str, str] = {"ContentType": content_type}
+            checksum_base64: str | None = None
             if checksum_sha256 is not None:
-                extra_args["ChecksumSHA256"] = base64.b64encode(
+                checksum_base64 = base64.b64encode(
                     bytes.fromhex(checksum_sha256)
                 ).decode()
             with Path(file_path).open("rb") as source:
-                self.s3_client.upload_fileobj(
-                    source,
-                    self.bucket_name,
-                    object_key,
-                    ExtraArgs=extra_args,
-                )
+                # This path is used for bounded paper sources (currently <=30 MiB).
+                # ``upload_fileobj`` switches to multipart for files over its
+                # default threshold, but S3 rejects a FULL_OBJECT SHA-256 checksum
+                # on multipart CreateMultipartUpload.  A single streaming PUT keeps
+                # the end-to-end SHA-256 validation while never materializing the
+                # file in process memory.
+                if checksum_base64 is None:
+                    self.s3_client.put_object(
+                        Bucket=self.bucket_name,
+                        Key=object_key,
+                        Body=source,
+                        ContentLength=Path(file_path).stat().st_size,
+                        ContentType=content_type,
+                    )
+                else:
+                    self.s3_client.put_object(
+                        Bucket=self.bucket_name,
+                        Key=object_key,
+                        Body=source,
+                        ContentLength=Path(file_path).stat().st_size,
+                        ContentType=content_type,
+                        ChecksumSHA256=checksum_base64,
+                    )
             return object_key
         except (BotoCoreError, ClientError, OSError):
             logger.exception("s3.object.upload_failed")
