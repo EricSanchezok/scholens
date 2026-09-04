@@ -46,6 +46,9 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
             await dispatcher
             if invitation_delivery is not None:
                 await invitation_delivery
+            user_openalex = getattr(application.state, "user_openalex", None)
+            if user_openalex is not None:
+                await user_openalex.aclose()
             close_diagnostic_snapshot_recorder(
                 application.state.diagnostic_snapshot_recorder
             )

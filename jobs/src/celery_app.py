@@ -67,6 +67,7 @@ celery_app.conf.update(
     task_default_queue=JobQueue.MAINTENANCE,
     task_routes={
         "upload_and_process_file": {"queue": JobQueue.DOCUMENT},
+        "ingest_source_and_process": {"queue": JobQueue.DOCUMENT},
         PDF_TEXT_REPAIR_TASK_NAME: {"queue": JobQueue.DOCUMENT},
         "postprocess_pdf": {"queue": JobQueue.DOCUMENT},
         "generate_document_reflow": {"queue": JobQueue.DOCUMENT},

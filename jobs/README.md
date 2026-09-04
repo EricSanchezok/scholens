@@ -33,14 +33,24 @@ or an oversized batch before deleting any object.
 
 ## PDF ingestion
 
-The PDF worker follows one explicit, local-first pipeline:
+The PDF worker follows one explicit, local-first pipeline. For URL, arXiv, DOI,
+and browser-upload sources, the same document task first streams the source to a
+deterministic S3 staging key and sends a metadata-only `source_ready` callback;
+it then parses the local temporary file, so neither API nor parser needs a
+second full download.
 
-1. Download the original PDF from private S3 storage.
-2. Analyze the PDF locally with PyMuPDF: authoritative physical page count,
+1. Stream the original PDF from a revalidated public URL or private S3 object,
+   enforcing the 30 MiB bound while incrementally hashing to SHA-256. Retry only
+   timeouts, 408/425/429, and 5xx responses with bounded backoff and
+   `Retry-After`; permanent HTTP, SSRF, size, and PDF validation failures are
+   terminal.
+2. Upload the file to S3 staging and call Server's signed `source_ready`
+   endpoint. Repeated delivery reuses the same job/staging key and is idempotent.
+3. Analyze the PDF locally with PyMuPDF: authoritative physical page count,
    per-page text statistics, preview, and deterministic page offsets. Blank
    pages may have no text offset, so callbacks never infer page count from the
    offset map.
-3. Classify the document:
+4. Classify the document:
    - **Scanned PDF** (empty or near-empty text layer, or repeated boilerplate
      such as per-page watermarks) is submitted to MinerU, the only OCR-capable
      parser, and shares one 600-second deadline across polling and archive
@@ -59,15 +69,15 @@ The PDF worker follows one explicit, local-first pipeline:
      c. if both local engines fail, MinerU rescues the document (OCR can
      recover misclassified or malformed PDFs);
      d. if the MinerU rescue fails or times out, the deterministic per-page
-     text from step 2 is persisted as `text_only` with exact offsets.
-4. Store Markdown and, for ordinary ingestion, preview; only the MinerU path
+     text from step 3 is persisted as `text_only` with exact offsets.
+5. Store Markdown and, for ordinary ingestion, preview; only the MinerU path
    produces an audit archive (`mineru-result.zip`).
-5. Extract metadata with DeepSeek unless the caller supplied authoritative
+6. Extract metadata with DeepSeek unless the caller supplied authoritative
    metadata, as Zotero imports do.
-6. Build the bounded title/keywords/summary/abstract semantic projection with
+7. Build the bounded title/keywords/summary/abstract semantic projection with
    the pinned local multilingual embedding model. Embedding failure is
    non-fatal and leaves lexical search available.
-7. Send the result, optional versioned embedding, and token usage to Server
+8. Send the result, optional versioned embedding, and token usage to Server
    through an HMAC-signed webhook.
 
 The Jobs PDF callback transport temporarily owns one rolling-deploy

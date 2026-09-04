@@ -79,6 +79,7 @@ change what the accepted record decided.
 - [ADR 0045: Conversation stream v2 and confirmed playback](./0045-conversation-stream-v2-confirmed-playback.md)
 - [ADR 0046: Agent-native annotation anchors and render isolation](./0046-agent-native-annotation-anchors.md)
 - [ADR 0047: Reader annotation hit testing](./0047-reader-annotation-hit-testing.md)
+- [ADR 0048: Worker-first paper ingestion with staged materialization](./0048-worker-first-paper-ingestion.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

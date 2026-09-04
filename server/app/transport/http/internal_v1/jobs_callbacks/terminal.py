@@ -12,6 +12,7 @@ from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     JobFailureCallback,
+    SourceReadyCallback,
 )
 from app.shared.application import (
     ApplicationExecutor,
@@ -27,6 +28,20 @@ from app.transport.http.internal_v1.authentication import (
 from fastapi import APIRouter, Depends, Query, Request
 
 terminal_router = APIRouter()
+
+
+@terminal_router.post("/jobs/{job_id}/source-ready")
+def source_ready_job(
+    job_id: uuid.UUID,
+    request: Request,
+    verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    processor: JobCompletionProcessor = Depends(get_job_completion_processor),
+) -> object:
+    return processor.source_ready(
+        job_id=job_id,
+        callback=parse_callback_model(request, SourceReadyCallback),
+        verified=verified,
+    )
 
 
 @terminal_router.post("/jobs/{job_id}/complete")

@@ -32,17 +32,27 @@ logger = logging.getLogger(__name__)
 
 def finalize_reserved_document(
     *,
-    pdf_bytes: bytes,
+    pdf_bytes: bytes | None,
     upload_job: UploadReservation,
     db: Session,
     user: Actor,
     skip_metadata_extraction: bool = False,
+    source_sha256: str | None = None,
+    size_bytes: int | None = None,
+    dispatch_processing: bool = True,
 ) -> IngestionFinalization:
     """Attach one upload to a content-addressed Document and process it once."""
-    if not pdf_bytes:
-        raise ValueError("pdf_bytes_cannot_be_empty")
-
-    digest = hashlib.sha256(pdf_bytes).hexdigest()
+    if pdf_bytes is None:
+        if source_sha256 is None or size_bytes is None or size_bytes <= 0:
+            raise ValueError("materialized_source_metadata_invalid")
+        digest = source_sha256
+        source_size_bytes = size_bytes
+    else:
+        if not pdf_bytes:
+            raise ValueError("pdf_bytes_cannot_be_empty")
+        digest = hashlib.sha256(pdf_bytes).hexdigest()
+        source_size_bytes = len(pdf_bytes)
+    upload_job.content_sha256 = digest
     source_key = document_source_key(digest)
     filename = upload_job.original_filename or "document.pdf"
     canonical = document_repository.get_or_create(
@@ -50,7 +60,7 @@ def finalize_reserved_document(
         sha256=digest,
         original_filename=filename,
         mime_type="application/pdf",
-        size_bytes=len(pdf_bytes),
+        size_bytes=source_size_bytes,
         s3_object_key=source_key,
         created_by_id=user.id,
         processing_job_id=upload_job.id,
@@ -171,12 +181,26 @@ def finalize_reserved_document(
 
     base_url = get_webhook_base_url().rstrip("/")
     durable_job.document_id = document.id
+    materialized_payload = durable_job.payload.get("materialized")
+    staging_object_key = (
+        materialized_payload.get("staging_object_key")
+        if isinstance(materialized_payload, dict)
+        and isinstance(materialized_payload.get("staging_object_key"), str)
+        else None
+    )
     durable_job.payload = {
         **durable_job.payload,
-        "s3_object_key": document.s3_object_key,
+        "content_sha256": digest,
+        "input_size_bytes": source_size_bytes,
+        "s3_object_key": source_key,
         "skip_metadata_extraction": skip_metadata_extraction,
+        "materialized": {
+            "source_sha256": digest,
+            "size_bytes": source_size_bytes,
+            "staging_object_key": staging_object_key,
+        },
     }
-    if durable_job.dispatch is None:
+    if dispatch_processing and durable_job.dispatch is None:
         job_repository.add_dispatch(
             db,
             job=durable_job,

@@ -183,8 +183,11 @@ and signed upload URLs are never persisted in the invocation replay ledger.
 
 The remote upload primitive accepts only a plain filename, byte count, SHA-256,
 and optional Project UUID. It returns a short-lived checksummed object-storage
-PUT URL; the client uploads bytes directly and then calls `ingest_paper`. For a
-local path, use the official [`mcp-connector`](../mcp-connector/README.md),
+PUT URL; the client uploads bytes directly and then calls `ingest_paper`.
+Server acceptance creates a byte-free source reservation; the document worker
+streams the staged object, verifies its checksum, and promotes it through the
+signed `source_ready` callback before parsing. For a local path, use the
+official [`mcp-connector`](../mcp-connector/README.md),
 which replaces that primitive with `upload_local_paper` and never sends the
 path or the Access Key to object storage. Upload claims carry a unique lease
 token so an expired worker cannot consume or release a newer claim.
@@ -194,9 +197,11 @@ token so an expired worker cannot consume or release a newer claim.
 immediately when every observed job is terminal; otherwise they return the
 latest durable snapshots with machine-readable next-action guidance at the
 deadline. `0` requests an immediate snapshot. Batch ingestion accepts at most
-50 known sources, limits acceptance to four concurrent operations and one
-45-second wall-clock budget, then observes all accepted jobs under one shared
-deadline. The Conversation-only `wait_for_jobs` defaults to 120 seconds and can
+50 known sources, limits lightweight metadata acceptance to four concurrent
+operations and one 45-second wall-clock budget, then observes all accepted jobs
+under one shared deadline. It never downloads PDF bytes in the API process and
+deduplicates equivalent source fingerprints within a batch. The Conversation-only
+`wait_for_jobs` defaults to 120 seconds and can
 observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
 with capped backoff and never retains a database transaction between reads.
 

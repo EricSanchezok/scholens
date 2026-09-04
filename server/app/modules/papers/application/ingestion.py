@@ -40,6 +40,14 @@ class AcceptedIngestion:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceReadyResult:
+    document_id: UUID | None
+    canonical_object_key: str
+    process_required: bool
+    reused: bool
+
+
+@dataclass(frozen=True, slots=True)
 class IngestionFinalization:
     task_id: str
     job_id: UUID
@@ -132,6 +140,38 @@ class PaperIngestionGateway(Protocol):
         retry_of: UUID | None,
     ) -> AcceptedIngestion: ...
 
+    def accept_source(
+        self,
+        *,
+        actor: Actor,
+        correlation_id: UUID,
+        origin_operation_id: UUID,
+        project_id: UUID | None,
+        add_to_library: bool,
+        filename: str | None,
+        display_name: str,
+        source_kind: str,
+        fingerprint: str,
+        resolved_url: str | None,
+        upload_id: UUID | None,
+        upload_object_key: str | None,
+        expected_sha256: str | None,
+        idempotency_key: str | None,
+        job_id: UUID,
+    ) -> AcceptedIngestion: ...
+
+    def source_ready(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+        source_sha256: str,
+        size_bytes: int,
+        staging_object_key: str,
+        filename: str | None,
+        attempt: int,
+    ) -> SourceReadyResult: ...
+
     def fail(self, *, actor: Actor, job_id: UUID, error_code: str) -> bool: ...
 
     def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource: ...
@@ -185,6 +225,9 @@ class IngestPaper:
             display_name=display_name,
             source_kind="upload",
         )
+
+    async def enforce_rate(self, *, actor: Actor, ip_address: str) -> None:
+        await self._limits.enforce_rate(actor=actor, ip_address=ip_address)
 
     def prepare_persisted(
         self,
@@ -263,6 +306,78 @@ class IngestPaper:
                 ),
             )
         return accepted
+
+    def accept_source(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        project_id: UUID | None,
+        add_to_library: bool,
+        filename: str | None,
+        display_name: str,
+        source_kind: str,
+        fingerprint: str,
+        resolved_url: str | None,
+        upload_id: UUID | None,
+        idempotency_key: str | None,
+        job_id: UUID,
+        upload_object_key: str | None = None,
+        expected_sha256: str | None = None,
+    ) -> AcceptedIngestion:
+        accepted = self._gateway.accept_source(
+            actor=actor,
+            correlation_id=operation.trace.correlation_id,
+            origin_operation_id=operation.trace.operation_id,
+            project_id=project_id,
+            add_to_library=add_to_library,
+            filename=filename,
+            display_name=display_name,
+            source_kind=source_kind,
+            fingerprint=fingerprint,
+            resolved_url=resolved_url,
+            upload_id=upload_id,
+            upload_object_key=upload_object_key,
+            expected_sha256=expected_sha256,
+            idempotency_key=normalize_idempotency_key(idempotency_key),
+            job_id=job_id,
+        )
+        if not accepted.replayed:
+            self._journal.append_many(
+                actor=actor,
+                operation=operation,
+                changes=(
+                    OperationChange(
+                        action=JOB_CREATED,
+                        resources=(ResourceRef("job", str(accepted.ingestion.id)),),
+                    ),
+                ),
+            )
+        return accepted
+
+    def source_ready(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        job_id: UUID,
+        source_sha256: str,
+        size_bytes: int,
+        staging_object_key: str,
+        filename: str | None,
+        attempt: int,
+    ) -> SourceReadyResult:
+        del operation
+        result = self._gateway.source_ready(
+            actor=actor,
+            job_id=job_id,
+            source_sha256=source_sha256,
+            size_bytes=size_bytes,
+            staging_object_key=staging_object_key,
+            filename=filename,
+            attempt=attempt,
+        )
+        return result
 
     async def acquire(self, *, actor: Actor, job_id: UUID) -> None:
         await self._limits.acquire(actor=actor, job_id=job_id)

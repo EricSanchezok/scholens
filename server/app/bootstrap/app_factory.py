@@ -252,6 +252,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         executor=executor,
         operation_factory=operation_context_factory,
     )
+    application.state.user_openalex = user_openalex
     application.state.connector_tool_resolver = connector_tool_resolver
     application.state.integration_workflow = create_integration_workflow(
         executor=executor,

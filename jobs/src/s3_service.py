@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 import os
+import base64
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 import boto3
@@ -75,6 +77,69 @@ class S3Service:
             return response["Body"].read()
         except (BotoCoreError, ClientError):
             logger.exception("s3.object.download_failed")
+            raise
+
+    def download_file_to_path(
+        self,
+        object_key: str,
+        file_path: str,
+        max_bytes: int | None = None,
+    ) -> int:
+        """Stream an object into a local file and return its byte count."""
+        written = 0
+        try:
+            logger.info("s3.object.download_started", extra={"object_key": object_key})
+            response = self.s3_client.get_object(
+                Bucket=self.bucket_name, Key=object_key
+            )
+            body = response["Body"]
+            with Path(file_path).open("wb") as destination:
+                while True:
+                    chunk = body.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    destination.write(chunk)
+                    written += len(chunk)
+                    if max_bytes is not None and written > max_bytes:
+                        raise ValueError("s3_object_too_large")
+            return written
+        except (BotoCoreError, ClientError, OSError):
+            logger.exception("s3.object.download_failed")
+            raise
+
+    def object_exists(self, object_key: str) -> bool:
+        try:
+            self.s3_client.head_object(Bucket=self.bucket_name, Key=object_key)
+            return True
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
+
+    def upload_file(
+        self,
+        file_path: str,
+        object_key: str,
+        content_type: str,
+        checksum_sha256: str | None = None,
+    ) -> str:
+        try:
+            extra_args: dict[str, str] = {"ContentType": content_type}
+            if checksum_sha256 is not None:
+                extra_args["ChecksumSHA256"] = base64.b64encode(
+                    bytes.fromhex(checksum_sha256)
+                ).decode()
+            with Path(file_path).open("rb") as source:
+                self.s3_client.upload_fileobj(
+                    source,
+                    self.bucket_name,
+                    object_key,
+                    ExtraArgs=extra_args,
+                )
+            return object_key
+        except (BotoCoreError, ClientError, OSError):
+            logger.exception("s3.object.upload_failed")
             raise
 
     def upload_bytes_to_key(

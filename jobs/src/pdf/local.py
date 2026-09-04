@@ -119,27 +119,20 @@ def _render_preview(document: pymupdf.Document) -> bytes | None:
         return None
 
 
-def analyze_pdf(pdf_bytes: bytes) -> LocalPDFAnalysis:
-    try:
-        with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
-            if document.needs_pass:
-                raise ParserContentError("Password-protected PDFs are not supported")
-            if len(document) == 0:
-                raise ParserContentError("PDF has no pages")
+def _analysis_from_document(document: pymupdf.Document) -> LocalPDFAnalysis:
+    if document.needs_pass:
+        raise ParserContentError("Password-protected PDFs are not supported")
+    if len(document) == 0:
+        raise ParserContentError("PDF has no pages")
 
-            pages = [
-                (
-                    page_index + 1,
-                    document[page_index].get_text("text", sort=True),
-                )
-                for page_index in range(len(document))
-            ]
-            preview_bytes = _render_preview(document)
-    except ParserContentError:
-        raise
-    except (RuntimeError, ValueError) as exc:
-        raise ParserContentError("PDF could not be opened locally") from exc
-
+    pages = [
+        (
+            page_index + 1,
+            document[page_index].get_text("text", sort=True),
+        )
+        for page_index in range(len(document))
+    ]
+    preview_bytes = _render_preview(document)
     markdown, page_offset_map = _canonical_page_text(pages)
     page_character_counts = [_non_whitespace_length(text) for _, text in pages]
     return LocalPDFAnalysis(
@@ -153,6 +146,27 @@ def analyze_pdf(pdf_bytes: bytes) -> LocalPDFAnalysis:
         parser_version=f"pymupdf-{version('PyMuPDF')}",
         preview_bytes=preview_bytes,
     )
+
+
+def analyze_pdf(pdf_bytes: bytes) -> LocalPDFAnalysis:
+    try:
+        with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
+            return _analysis_from_document(document)
+    except ParserContentError:
+        raise
+    except (RuntimeError, ValueError) as exc:
+        raise ParserContentError("PDF could not be opened locally") from exc
+
+
+def analyze_pdf_path(pdf_path: str) -> LocalPDFAnalysis:
+    """Analyze a PDF directly from disk, keeping source bytes out of Python heap."""
+    try:
+        with pymupdf.open(pdf_path) as document:
+            return _analysis_from_document(document)
+    except ParserContentError:
+        raise
+    except (RuntimeError, ValueError, OSError) as exc:
+        raise ParserContentError("PDF could not be opened locally") from exc
 
 
 def is_scanned_candidate(analysis: LocalPDFAnalysis) -> bool:

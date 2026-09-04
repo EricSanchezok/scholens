@@ -3623,13 +3623,23 @@ class WorkspaceToolHandlers:
         async def accept_one(
             index: int, source: PaperSource
         ) -> tuple[int, PaperSource, LibraryPaperIngestionResponse | None, str | None]:
-            source_fingerprint = hashlib.sha256(
-                json.dumps(
-                    source.model_dump(mode="json"),
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ).encode()
-            ).hexdigest()
+            source_value = (
+                source.doi
+                if source.kind == "doi"
+                else source.arxiv_id
+                if source.kind == "arxiv"
+                else source.url
+                if source.kind == "url"
+                else str(source.upload_id)
+            )
+            normalized_value = source_value.strip().casefold()
+            if source.kind == "arxiv":
+                normalized_value = normalized_value.removeprefix("arxiv:").strip("/")
+            elif source.kind == "doi":
+                normalized_value = normalized_value.removeprefix("doi:").removeprefix(
+                    "https://doi.org/"
+                )
+            source_fingerprint = f"{source.kind}:{normalized_value}"
             child_key = (
                 "tool-batch:"
                 + hashlib.sha256(

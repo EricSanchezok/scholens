@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import Any, TYPE_CHECKING, Literal, cast
 
 import boto3
 from botocore.config import Config
@@ -35,6 +35,17 @@ DOCUMENT_PREFIX = "documents"
 RESEARCH_PREFIX = "research"
 DEFAULT_SIGNED_URL_TTL_SECONDS = 900
 STAGING_UPLOAD_PREFIX = "uploads"
+
+
+def source_staging_key(job_id: str) -> str:
+    """Deterministic staging key used by worker-first paper ingestion."""
+    if (
+        not job_id
+        or len(job_id) > 64
+        or any(character not in "0123456789abcdef-" for character in job_id.lower())
+    ):
+        raise ValueError("invalid_source_job_id")
+    return f"{STAGING_UPLOAD_PREFIX}/paper-ingestion/{job_id}/source.pdf"
 
 
 def _client_error_fields(exc: ClientError) -> dict[str, str | int]:
@@ -147,6 +158,28 @@ class S3Service:
             data=pdf_bytes,
             content_type="application/pdf",
         )
+
+    def copy_object(self, *, source_key: str, destination_key: str) -> str:
+        """Copy an object inside the bucket without routing its bytes through API."""
+        request: Any = {
+            "Bucket": self._require_bucket(),
+            "Key": destination_key,
+            "CopySource": {"Bucket": self._require_bucket(), "Key": source_key},
+            "ContentType": "application/pdf",
+            "MetadataDirective": "REPLACE",
+        }
+        if self.kms_key_id:
+            request["ServerSideEncryption"] = "aws:kms"
+            request["SSEKMSKeyId"] = self.kms_key_id
+        try:
+            self.s3_client.copy_object(**request)
+        except ClientError as exc:
+            logger.error(
+                "s3.object.copy_failed",
+                extra=_client_error_fields(exc),
+            )
+            raise RuntimeError("s3_copy_failed") from exc
+        return destination_key
 
     def upload_path(
         self,

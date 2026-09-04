@@ -97,7 +97,7 @@ class ProjectReservationAssignment(BaseModel):
     job_status: str
     job_project_id: UUID | None
     job_document_id: UUID | None
-    content_sha256: str
+    content_sha256: str | None
     current_quota_owner_id: int
     current_library_quota_owner_id: int | None
     current_reserved_reference_count: int = Field(ge=0)

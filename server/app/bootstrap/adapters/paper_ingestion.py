@@ -29,6 +29,9 @@ from app.helpers.ai_limits import (
     release_concurrency_by_id,
 )
 from app.helpers.parser import validate_pdf_content, validate_url_and_fetch_pdf
+from app.helpers.s3 import document_source_key, source_staging_key, s3_service
+from app.helpers.celery_config import get_webhook_base_url
+from app.modules.billing.infrastructure.account_locks import lock_account_resource_quota
 from app.modules.jobs.infrastructure.repository import (
     job_repository,
     requester_visible_job,
@@ -43,6 +46,7 @@ from app.modules.papers.application.ingestion import (
     IngestionCancellationPlan,
     IngestionCancellationState,
     RetrySource,
+    SourceReadyResult,
 )
 from app.modules.papers.application.upload_intent import (
     resolve_add_to_library,
@@ -50,7 +54,7 @@ from app.modules.papers.application.upload_intent import (
 )
 from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import Actor, OperationContext
-from app.shared.domain import AppError, FailureKind
+from app.shared.domain import AppError, FailureKind, JsonValue
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -351,6 +355,281 @@ class SqlPaperIngestionGateway:
             ),
         )
 
+    def accept_source(
+        self,
+        *,
+        actor: Actor,
+        correlation_id: UUID,
+        origin_operation_id: UUID,
+        project_id: UUID | None,
+        add_to_library: bool,
+        filename: str | None,
+        display_name: str,
+        source_kind: str,
+        fingerprint: str,
+        resolved_url: str | None,
+        upload_id: UUID | None,
+        idempotency_key: str | None,
+        job_id: UUID,
+        upload_object_key: str | None = None,
+        expected_sha256: str | None = None,
+    ) -> AcceptedIngestion:
+        """Create a byte-free reservation and hand source materialization to Jobs."""
+        fingerprint_matches = DurableJob.payload["source"]["fingerprint"].as_string()
+        existing = self._db.scalar(
+            select(UploadReservation)
+            .join(DurableJob, DurableJob.id == UploadReservation.id)
+            .where(
+                DurableJob.requested_by_id == actor.id,
+                DurableJob.project_id == project_id,
+                DurableJob.operation == JobOperation.PDF_PROCESS.value,
+                fingerprint_matches == fingerprint,
+                UploadReservation.dismissed_at.is_(None),
+                DurableJob.status.in_(
+                    (JobStatus.PENDING.value, JobStatus.RUNNING.value)
+                ),
+            )
+            .limit(1)
+        )
+        if existing is not None:
+            return AcceptedIngestion(
+                ingestion=self.response(existing),
+                replayed=True,
+                processing_required=True,
+            )
+        source: dict[str, JsonValue] = {
+            "kind": source_kind,
+            "fingerprint": fingerprint,
+            "resolved_url": resolved_url,
+            "upload_id": str(upload_id) if upload_id is not None else None,
+            "upload_object_key": upload_object_key,
+            "expected_sha256": expected_sha256,
+        }
+        reserved = reserve_upload(
+            self._db,
+            requester=actor,
+            correlation_id=correlation_id,
+            origin_operation_id=origin_operation_id,
+            project_id=project_id,
+            input_size_bytes=0,
+            original_filename=filename,
+            display_name=display_name,
+            source_kind=source_kind,
+            content_sha256=None,
+            add_to_library=add_to_library,
+            idempotency_key=idempotency_key,
+            job_id=job_id,
+            source=source,
+        )
+        reservation = reserved.reservation
+        durable_job = reservation.job
+        if reserved.created:
+            base_url = get_webhook_base_url().rstrip("/")
+            staging_key = source_staging_key(str(durable_job.id))
+            durable_job.payload = {
+                **durable_job.payload,
+                "source": source,
+                "materialized": None,
+                "staging_object_key": staging_key,
+            }
+            job_repository.add_dispatch(
+                self._db,
+                job=durable_job,
+                task_name="ingest_source_and_process",
+                queue="document",
+                kwargs={
+                    "source": source,
+                    "staging_object_key": staging_key,
+                    "source_ready_url": (
+                        f"{base_url}/internal/v1/jobs/{durable_job.id}/source-ready"
+                    ),
+                    "webhook_url": (
+                        f"{base_url}/internal/v1/jobs/{durable_job.id}/complete"
+                    ),
+                    "claim_url": f"{base_url}/internal/v1/jobs/{durable_job.id}/claim",
+                    "progress_url": (
+                        f"{base_url}/internal/v1/jobs/{durable_job.id}/progress"
+                    ),
+                    "credential_url": (
+                        f"{base_url}/internal/v1/jobs/{durable_job.id}"
+                        "/integration-credentials/mineru"
+                    ),
+                    "filename": filename,
+                },
+            )
+            self._db.flush()
+        elif durable_job.dispatch is None:
+            raise RuntimeError("source_ingestion_is_not_dispatchable")
+        return AcceptedIngestion(
+            ingestion=self.response(reservation),
+            replayed=not reserved.created,
+            processing_required=durable_job.status
+            not in {JobStatus.COMPLETED.value, JobStatus.CANCELLED.value},
+        )
+
+    def source_ready(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+        source_sha256: str,
+        size_bytes: int,
+        staging_object_key: str,
+        filename: str | None,
+        attempt: int,
+    ) -> SourceReadyResult:
+        """Atomically promote a verified staging object to a canonical Document."""
+        del attempt
+        reservation = self._db.scalar(
+            select(UploadReservation)
+            .join(DurableJob, DurableJob.id == UploadReservation.id)
+            .where(
+                UploadReservation.id == job_id,
+                DurableJob.requested_by_id == actor.id,
+                DurableJob.operation == JobOperation.PDF_PROCESS.value,
+            )
+            .with_for_update()
+        )
+        if reservation is None:
+            self._not_found()
+        job = reservation.job
+        for owner_id in sorted(
+            {
+                reservation.quota_owner_id,
+                *(
+                    {reservation.library_quota_owner_id}
+                    if reservation.library_quota_owner_id is not None
+                    else set()
+                ),
+            }
+        ):
+            lock_account_resource_quota(self._db, user_id=owner_id)
+        stored_digest = reservation.content_sha256
+        if stored_digest is not None:
+            if stored_digest != source_sha256:
+                raise AppError(
+                    code="source_checksum_mismatch",
+                    message="The source digest does not match the reservation",
+                    kind=FailureKind.CONFLICT,
+                )
+            stored_staging = job.payload.get("staging_object_key")
+            if stored_staging != staging_object_key:
+                raise AppError(
+                    code="source_staging_key_mismatch",
+                    message="The staged source does not belong to this job",
+                    kind=FailureKind.CONFLICT,
+                )
+            if job.document_id is not None:
+                document = job.document
+                processing_required = bool(
+                    job.status
+                    not in {
+                        JobStatus.COMPLETED.value,
+                        JobStatus.FAILED.value,
+                        JobStatus.CANCELLED.value,
+                    }
+                    and document is not None
+                    and document.processing_job_id == job.id
+                    and document.processing_status == "processing"
+                )
+                return SourceReadyResult(
+                    document_id=job.document_id,
+                    canonical_object_key=document_source_key(stored_digest),
+                    process_required=processing_required,
+                    reused=False,
+                )
+        if job.status in {
+            JobStatus.COMPLETED.value,
+            JobStatus.FAILED.value,
+            JobStatus.CANCELLED.value,
+        }:
+            return SourceReadyResult(
+                document_id=job.document_id,
+                canonical_object_key=document_source_key(source_sha256),
+                process_required=False,
+                reused=True,
+            )
+        expected_staging = job.payload.get("staging_object_key")
+        if expected_staging != staging_object_key:
+            raise AppError(
+                code="source_staging_key_mismatch",
+                message="The staged source does not belong to this job",
+                kind=FailureKind.CONFLICT,
+            )
+        source_payload = job.payload.get("source")
+        expected_sha256 = (
+            source_payload.get("expected_sha256")
+            if isinstance(source_payload, dict)
+            and isinstance(source_payload.get("expected_sha256"), str)
+            else None
+        )
+        if expected_sha256 is not None and expected_sha256 != source_sha256:
+            raise AppError(
+                code="source_checksum_mismatch",
+                message="The source digest does not match the prepared upload",
+                kind=FailureKind.CONFLICT,
+            )
+        try:
+            metadata = s3_service.staging_object_metadata(staging_object_key)
+        except FileNotFoundError as exc:
+            raise AppError(
+                code="source_staging_missing",
+                message="The staged source is no longer available",
+                kind=FailureKind.UNAVAILABLE,
+            ) from exc
+        if metadata.size_bytes != size_bytes or size_bytes > 30 * 1024 * 1024:
+            raise AppError(
+                code="upload_too_large"
+                if size_bytes > 30 * 1024 * 1024
+                else "source_size_mismatch",
+                message="The staged source size is invalid",
+                kind=FailureKind.PAYLOAD_TOO_LARGE,
+            )
+        if metadata.checksum_sha256 is not None:
+            import base64
+
+            if (
+                metadata.checksum_sha256
+                != base64.b64encode(bytes.fromhex(source_sha256)).decode()
+            ):
+                raise AppError(
+                    code="source_checksum_mismatch",
+                    message="The staged source checksum is invalid",
+                    kind=FailureKind.UNPROCESSABLE,
+                )
+        canonical_key = document_source_key(source_sha256)
+        s3_service.copy_object(
+            source_key=staging_object_key,
+            destination_key=canonical_key,
+        )
+        job.payload = {
+            **job.payload,
+            "content_sha256": source_sha256,
+            "input_size_bytes": size_bytes,
+            "materialized": {
+                "source_sha256": source_sha256,
+                "size_bytes": size_bytes,
+                "staging_object_key": staging_object_key,
+            },
+        }
+        reservation.content_sha256 = source_sha256
+        finalization = finalize_reserved_document(
+            pdf_bytes=None,
+            source_sha256=source_sha256,
+            size_bytes=size_bytes,
+            upload_job=reservation,
+            user=actor,
+            db=self._db,
+            dispatch_processing=False,
+        )
+        self._db.flush()
+        return SourceReadyResult(
+            document_id=finalization.document_id,
+            canonical_object_key=canonical_key,
+            process_required=not finalization.job_completed,
+            reused=finalization.task_id.startswith("reused:"),
+        )
+
     def fail(self, *, actor: Actor, job_id: UUID, error_code: str) -> bool:
         reservation = upload_reservation_repository.get(
             self._db,
@@ -369,9 +648,16 @@ class SqlPaperIngestionGateway:
     def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource:
         original = self._require_failed(actor=actor, job_id=job_id, lock=False)
         reservation = self._require_retry_reservation(original)
+        digest = reservation.content_sha256
+        if digest is None:
+            raise AppError(
+                code="paper_ingestion_retry_not_allowed",
+                message="Source materialization must complete before retrying",
+                kind=FailureKind.CONFLICT,
+            )
         return RetrySource(
             job_id=original.id,
-            content_sha256=reservation.content_sha256,
+            content_sha256=digest,
             filename=reservation.original_filename,
             display_name=reservation.display_name,
             source_kind=reservation.source_kind,
@@ -567,6 +853,15 @@ class SqlPaperIngestionGateway:
             raise AppError(
                 code="paper_ingestion_retry_not_allowed",
                 message="Removed paper ingestions cannot be retried",
+                kind=FailureKind.CONFLICT,
+            )
+        if (
+            hasattr(reservation, "content_sha256")
+            and reservation.content_sha256 is None
+        ):
+            raise AppError(
+                code="paper_ingestion_retry_not_allowed",
+                message="Source materialization must complete before retrying",
                 kind=FailureKind.CONFLICT,
             )
         return reservation

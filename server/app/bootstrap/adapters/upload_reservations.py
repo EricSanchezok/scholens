@@ -24,7 +24,7 @@ from app.database.models import (
     Project,
     ProjectPaper,
 )
-from app.shared.domain import AppError, FailureKind
+from app.shared.domain import AppError, FailureKind, JsonValue
 from app.modules.billing.domain import (
     KB_SIZE_KEY,
     PAPER_UPLOAD_KEY,
@@ -129,14 +129,17 @@ def _account_has_active_digest_reservation(
     db: Session,
     *,
     account_id: int,
-    content_sha256: str,
+    content_sha256: str | None,
 ) -> bool:
     """True when the account already pays for an in-flight upload of this digest."""
+    if content_sha256 is None:
+        return False
     return bool(
         db.scalar(
             select(func.count(UploadReservation.id))
             .join(DurableJob, DurableJob.id == UploadReservation.id)
             .where(
+                UploadReservation.content_sha256.is_not(None),
                 UploadReservation.content_sha256 == content_sha256,
                 DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
                 or_(
@@ -174,17 +177,20 @@ def _has_active_duplicate_reservation(
     *,
     requester_id: int,
     project_id: UUID | None,
-    content_sha256: str,
+    content_sha256: str | None,
 ) -> bool:
     """Detect an in-flight upload to the same logical collection.
 
     The caller holds the quota owner's account lock, so this check and the
     reservation insert are serialized across personal and Project uploads.
     """
+    if content_sha256 is None:
+        return False
     statement = (
         select(func.count(UploadReservation.id))
         .join(DurableJob, DurableJob.id == UploadReservation.id)
         .where(
+            UploadReservation.content_sha256.is_not(None),
             UploadReservation.content_sha256 == content_sha256,
             DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
         )
@@ -228,6 +234,8 @@ def _locked_transfer_reservations(
 
 def _input_size_kb(job: DurableJob) -> int:
     input_size = job.payload.get("input_size_bytes")
+    if job.payload.get("source") is not None and input_size in {None, 0}:
+        return 0
     if (
         isinstance(input_size, bool)
         or not isinstance(input_size, int)
@@ -296,6 +304,11 @@ def _reprice_active_reservations(
             project_id=project_id,
         )
         role = "primary" if primary_owner_id == owner_id else "library"
+        if reservation.content_sha256 is None:
+            # Source-first rows have no digest yet and must not collapse into
+            # one another during quota-transfer repricing.
+            pricing.append((reservation, job, role, 1, _input_size_kb(job)))
+            continue
         if reservation.content_sha256 in covered_digests:
             pricing.append((reservation, job, role, 0, 0))
             continue
@@ -589,14 +602,15 @@ def reserve_upload(
     original_filename: str | None,
     display_name: str,
     source_kind: str,
-    content_sha256: str,
+    content_sha256: str | None,
     add_to_library: bool = True,
     idempotency_key: str | None = None,
     durable_idempotency_key: str | None = None,
     job_id: UUID | None = None,
+    source: dict[str, JsonValue] | None = None,
 ) -> UploadReservationResult:
     """Authorize once and persist the destination and quota owner before hand-off."""
-    if input_size_bytes <= 0:
+    if input_size_bytes < 0 or (input_size_bytes == 0 and content_sha256 is not None):
         raise AppError(
             code="empty_upload",
             message="The uploaded file is empty",
@@ -655,6 +669,13 @@ def reserve_upload(
                 and existing_job.project_id == project_id
                 and existing_job.payload.get("content_sha256") == content_sha256
             )
+            if source is not None:
+                existing_source = existing_job.payload.get("source")
+                same_request = (
+                    same_request
+                    and isinstance(existing_source, dict)
+                    and existing_source.get("fingerprint") == source.get("fingerprint")
+                )
             existing_reservation = db.get(UploadReservation, existing_job.id)
             if existing_reservation is not None:
                 same_request = (
@@ -893,6 +914,7 @@ def reserve_upload(
                 "content_sha256": content_sha256,
                 "original_filename": original_filename,
                 "input_size_bytes": input_size_bytes,
+                **({"source": source, "materialized": None} if source else {}),
             },
             job_id=job_id,
         ),

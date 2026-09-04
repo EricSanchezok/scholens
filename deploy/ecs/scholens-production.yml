@@ -3598,6 +3598,26 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions:
       - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  LoadBalancer502Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-alb-502
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_ELB_502_Count
+      Dimensions:
+      - Name: LoadBalancer
+        Value:
+          Fn::GetAtt:
+          - LoadBalancer
+          - LoadBalancerFullName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
   ApiTarget5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

@@ -87,6 +87,15 @@ Public resources use canonical identifiers:
   advertises `annotate_paper` as its replacement.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
+- Paper source ingestion is worker-first: Server commits a byte-free
+  reservation and durable source descriptor, while the document worker streams
+  URL/upload bytes into deterministic S3 staging, computes SHA-256 incrementally,
+  and calls the signed metadata-only `source_ready` callback. Server verifies
+  the staging HEAD under account quota locks, performs an S3 server-side copy to
+  `documents/{sha256}/source.pdf`, and only then exposes the document to the
+  file-backed parser. A nullable reservation digest is populated exactly once;
+  digest queries explicitly ignore unmaterialized rows and retry is unavailable
+  until materialization succeeds.
 - `POST /api/v1/search/conversations` is the private lexical history-search
   contract. Its signed cursor is bound to actor, normalized query, and page
   size. Results contain the existing conversation summary plus the highest

@@ -40,8 +40,13 @@ class OpenAlexApiClient:
         transport: httpx.AsyncBaseTransport | None = None,
         retry_delay_seconds: float = _RETRY_DELAY_SECONDS,
     ) -> None:
-        self._transport = transport
         self._retry_delay_seconds = retry_delay_seconds
+        self._client = httpx.AsyncClient(
+            base_url=OPENALEX_API_BASE_URL,
+            follow_redirects=True,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+            transport=_CredentialTransport(transport=transport),
+        )
 
     async def probe(self, *, api_key: str) -> None:
         await self._get("/rate-limit", api_key=api_key)
@@ -211,58 +216,76 @@ class OpenAlexApiClient:
         not_found_ok: bool = False,
     ) -> object | None:
         request_params = dict(params or {})
-        async with httpx.AsyncClient(
-            base_url=OPENALEX_API_BASE_URL,
-            follow_redirects=True,
-            timeout=_REQUEST_TIMEOUT_SECONDS,
-            transport=_CredentialTransport(
-                api_key=api_key,
-                transport=self._transport,
-            ),
-        ) as client:
-            for attempt in range(_MAX_ATTEMPTS):
-                try:
-                    response = await client.get(path, params=request_params)
-                except _UnsafeOpenAlexRedirect:
-                    self._unavailable("unsafe_redirect")
-                except (httpx.TimeoutException, httpx.TransportError):
-                    if attempt < _MAX_ATTEMPTS - 1:
-                        await self._backoff(attempt)
-                        continue
-                    self._unavailable("transport")
-
-                if response.status_code == 404 and not_found_ok:
-                    return None
-                if response.status_code == 200:
-                    try:
-                        return cast(object, response.json())
-                    except ValueError:
-                        self._unavailable("invalid_json")
-
-                message = _safe_provider_message(response)
-                if _is_invalid_credential(response.status_code, message):
-                    raise AppError(
-                        code="openalex_credential_invalid",
-                        message="The connected OpenAlex API key is invalid",
-                        kind=FailureKind.UNPROCESSABLE,
-                        retryable=True,
-                        details={"required_integration": "openalex"},
-                    )
-                if response.status_code == 429:
-                    raise AppError(
-                        code="openalex_rate_limited",
-                        message="OpenAlex is rate limiting this account",
-                        kind=FailureKind.RATE_LIMITED,
-                        retryable=True,
-                    )
-                if response.status_code >= 500 and attempt < _MAX_ATTEMPTS - 1:
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                response = await self._client.get(
+                    path,
+                    params=request_params,
+                    extensions={"openalex_api_key": api_key},
+                )
+            except _UnsafeOpenAlexRedirect:
+                self._unavailable("unsafe_redirect")
+            except (httpx.TimeoutException, httpx.TransportError):
+                if attempt < _MAX_ATTEMPTS - 1:
                     await self._backoff(attempt)
                     continue
-                self._unavailable(f"http_{response.status_code}")
+                self._unavailable("transport")
+
+            if response.status_code == 404 and not_found_ok:
+                return None
+            if response.status_code == 200:
+                try:
+                    return cast(object, response.json())
+                except ValueError:
+                    self._unavailable("invalid_json")
+
+            message = _safe_provider_message(response)
+            logger.warning(
+                "openalex.request.failed",
+                extra={
+                    "http_status": response.status_code,
+                    "provider_request_id": response.headers.get("x-request-id")
+                    or response.headers.get("request-id"),
+                    "retry_after": response.headers.get("retry-after"),
+                    "error_class": (
+                        "credential"
+                        if _is_invalid_credential(response.status_code, message)
+                        else "rate_limit"
+                        if response.status_code == 429
+                        else "server"
+                        if response.status_code >= 500
+                        else "client"
+                    ),
+                },
+            )
+            if _is_invalid_credential(response.status_code, message):
+                raise AppError(
+                    code="openalex_credential_invalid",
+                    message="The connected OpenAlex API key is invalid",
+                    kind=FailureKind.UNPROCESSABLE,
+                    retryable=True,
+                    details={"required_integration": "openalex"},
+                )
+            if response.status_code == 429:
+                retry_after = _retry_after_seconds(response)
+                raise AppError(
+                    code="openalex_rate_limited",
+                    message="OpenAlex is rate limiting this account",
+                    kind=FailureKind.RATE_LIMITED,
+                    retryable=True,
+                    details={"retry_after_seconds": retry_after},
+                )
+            if response.status_code >= 500 and attempt < _MAX_ATTEMPTS - 1:
+                await self._backoff(attempt, retry_after=_retry_after_seconds(response))
+                continue
+            self._unavailable(f"http_{response.status_code}")
         self._unavailable("no_response")
 
-    async def _backoff(self, attempt: int) -> None:
-        await asyncio.sleep(self._retry_delay_seconds * (2**attempt))
+    async def _backoff(self, attempt: int, *, retry_after: float = 0.0) -> None:
+        await asyncio.sleep(max(retry_after, self._retry_delay_seconds * (2**attempt)))
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     @staticmethod
     def _work(payload: object | None) -> OpenAlexWork | None:
@@ -303,18 +326,26 @@ def _safe_provider_message(response: httpx.Response) -> str:
     ).casefold()
 
 
+def _retry_after_seconds(response: httpx.Response) -> float:
+    value = response.headers.get("retry-after")
+    if value is None:
+        return 0.0
+    try:
+        return max(0.0, min(float(value), 30.0))
+    except ValueError:
+        return 0.0
+
+
 class _CredentialTransport(httpx.AsyncBaseTransport):
     """Add the query credential below HTTPX's URL logging boundary."""
 
-    __slots__ = ("_api_key", "_transport")
+    __slots__ = ("_transport",)
 
     def __init__(
         self,
         *,
-        api_key: str,
         transport: httpx.AsyncBaseTransport | None,
     ) -> None:
-        self._api_key = api_key
         self._transport = transport or httpx.AsyncHTTPTransport()
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
@@ -327,9 +358,15 @@ class _CredentialTransport(httpx.AsyncBaseTransport):
                 "OpenAlex redirected to a disallowed origin",
                 request=request,
             )
+        api_key = request.extensions.get("openalex_api_key")
+        if not isinstance(api_key, str) or not api_key:
+            raise _UnsafeOpenAlexRedirect(
+                "OpenAlex request credential is missing",
+                request=request,
+            )
         provider_request = httpx.Request(
             method=request.method,
-            url=request.url.copy_add_param("api_key", self._api_key),
+            url=request.url.copy_add_param("api_key", api_key),
             headers=request.headers,
             stream=request.stream,
             extensions=request.extensions,
