@@ -129,8 +129,11 @@ Conversation feedback/stream milestones, durable acceptance, and worker claim ag
 split by route group, device class, and `CN`/`non-CN`; Cloudflare colo remains a diagnostic
 log field rather than a metric dimension.
 
-Browser upload sessions validate and download the exact S3 object version observed by
-the API. The runtime permissions boundary and API task role therefore grant
+Browser upload sessions validate the exact S3 object version observed by the API,
+then hand the object key to the existing single-concurrency document worker.
+The worker streams it into deterministic staging and Server performs the
+same-bucket canonical copy after the signed `source_ready` callback. The runtime
+permissions boundary and API task role therefore grant
 `s3:GetObjectVersion` only for the content bucket's `uploads/*` keys. Worker roles do not
 receive that action because canonical `documents/*` reads use the current object.
 The API receives the foundation-exported content KMS key ARN as `S3_KMS_KEY_ID` and

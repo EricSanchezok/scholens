@@ -2279,6 +2279,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_22_1015_paper_list_layout_sizes.py",
         "2026_08_24_1700_reading_activity_ledger.py",
         "2026_08_25_1100_failed_ingestion_dismissal.py",
+        "2026_08_26_1200_source_reservation_nullable_digest.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

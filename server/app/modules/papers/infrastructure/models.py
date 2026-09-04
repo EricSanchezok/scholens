@@ -75,7 +75,12 @@ class UploadReservation(Base):
         default=1,
         server_default="1",
     )
-    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Source reservations are created before a worker has downloaded the PDF.
+    # They acquire a reference quota slot, then receive the real digest in the
+    # signed source_ready callback.
+    content_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     add_to_library: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,

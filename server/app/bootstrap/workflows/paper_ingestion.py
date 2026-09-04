@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import logging
 from pathlib import PurePosixPath
 from typing import Protocol
@@ -19,7 +18,7 @@ from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.papers.application.ingestion import PdfUrlSource, PreparedPaperInput
-from app.modules.papers.domain import MAX_PDF_BYTES, content_sha256
+from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import (
     Actor,
     ApplicationExecutor,
@@ -73,18 +72,23 @@ class PaperIngestionWorkflow:
         ingestion = self._executor.query(
             lambda capabilities: capabilities.paper_ingestion
         )
-        prepared = await ingestion.prepare_url(
-            actor=actor,
-            url=url,
-            source=self._url_source,
-            ip_address=ip_address,
-            display_name=self._url_display_name(url),
-            source_kind="url",
-        )
-        return await self._start(
+        await ingestion.enforce_rate(actor=actor, ip_address=ip_address)
+        normalized_url = url.strip()
+        parsed_url = urlparse(normalized_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise AppError(
+                code="paper_source_pdf_unavailable",
+                message="No safely accessible PDF is available for this source",
+                kind=FailureKind.INVALID_ARGUMENT,
+            )
+        return await self._start_source(
             actor=actor,
             operation=operation,
-            prepared=prepared,
+            kind="url",
+            fingerprint=self._source_fingerprint("url", normalized_url),
+            resolved_url=normalized_url,
+            filename=None,
+            display_name=self._url_display_name(normalized_url),
             project_id=project_id,
             add_to_library=add_to_library,
             idempotency_key=idempotency_key,
@@ -111,18 +115,16 @@ class PaperIngestionWorkflow:
         ingestion = self._executor.query(
             lambda capabilities: capabilities.paper_ingestion
         )
-        prepared = await ingestion.prepare_url(
-            actor=actor,
-            url=url,
-            source=self._url_source,
-            ip_address=ip_address,
-            display_name=self._source_display_name(kind=kind, value=value),
-            source_kind=kind,
-        )
-        return await self._start(
+        await ingestion.enforce_rate(actor=actor, ip_address=ip_address)
+        fingerprint = self._source_fingerprint(kind, value)
+        return await self._start_source(
             actor=actor,
             operation=operation,
-            prepared=prepared,
+            kind=kind,
+            fingerprint=fingerprint,
+            resolved_url=url,
+            filename=None,
+            display_name=self._source_display_name(kind=kind, value=value),
             project_id=project_id,
             add_to_library=add_to_library,
             idempotency_key=idempotency_key,
@@ -169,7 +171,8 @@ class PaperIngestionWorkflow:
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
-        """Validate staged bytes and ingest them through the canonical byte path."""
+        """Validate staged metadata and let the document worker read the object."""
+        del ip_address
         record = self._executor.command(
             lambda capabilities: capabilities.paper_uploads.claim(
                 actor=actor,
@@ -224,27 +227,20 @@ class PaperIngestionWorkflow:
                     message="The uploaded PDF checksum does not match the prepared file",
                     kind=FailureKind.UNPROCESSABLE,
                 )
-            content = await asyncio.to_thread(
-                s3_service.download_staging_bytes,
-                record.object_key,
-                metadata=staging_metadata,
-                max_bytes=MAX_PDF_BYTES,
-            )
-            if hashlib.sha256(content).hexdigest() != record.sha256:
-                raise AppError(
-                    code="paper_upload_checksum_mismatch",
-                    message="The downloaded PDF checksum does not match the prepared file",
-                    kind=FailureKind.UNPROCESSABLE,
-                )
-            result = await self.from_bytes(
+            result = await self._start_source(
                 actor=actor,
                 operation=operation,
-                content=content,
+                kind="upload",
+                fingerprint=f"upload:{upload_id}",
+                resolved_url=None,
                 filename=record.filename,
+                display_name=record.filename,
+                upload_id=upload_id,
+                upload_object_key=record.object_key,
                 project_id=record.project_id,
                 add_to_library=record.add_to_library,
                 idempotency_key=idempotency_key or f"upload-session:{upload_id}",
-                ip_address=ip_address,
+                expected_sha256=record.sha256,
             )
             self._executor.command(
                 lambda capabilities: capabilities.paper_uploads.consume(
@@ -282,7 +278,6 @@ class PaperIngestionWorkflow:
                 message="The staged PDF could not be read",
                 kind=FailureKind.UNAVAILABLE,
             ) from exc
-        await asyncio.to_thread(s3_service.delete_file, record.object_key)
         return result
 
     async def retry(
@@ -427,6 +422,51 @@ class PaperIngestionWorkflow:
                 kind=FailureKind.UNAVAILABLE,
             ) from exc
 
+    async def _start_source(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        kind: str,
+        fingerprint: str,
+        resolved_url: str | None,
+        filename: str | None,
+        display_name: str,
+        project_id: UUID | None,
+        add_to_library: bool,
+        idempotency_key: str | None,
+        upload_id: UUID | None = None,
+        upload_object_key: str | None = None,
+        expected_sha256: str | None = None,
+    ) -> LibraryPaperIngestionResponse:
+        proposed_job_id = uuid4()
+        accepted = self._executor.command(
+            lambda capabilities: capabilities.paper_ingestion.accept_source(
+                actor=actor,
+                operation=operation,
+                project_id=project_id,
+                add_to_library=add_to_library,
+                filename=filename,
+                display_name=display_name,
+                source_kind=kind,
+                fingerprint=fingerprint,
+                resolved_url=resolved_url,
+                upload_id=upload_id,
+                upload_object_key=upload_object_key,
+                expected_sha256=expected_sha256,
+                idempotency_key=idempotency_key,
+                job_id=proposed_job_id,
+            )
+        )
+        if not accepted.processing_required:
+            return accepted.ingestion
+        track_event(
+            "paper_upload_submitted_to_microservice",
+            properties={"task_id": str(accepted.ingestion.id), "source_kind": kind},
+            user_id=str(actor.id),
+        )
+        return accepted.ingestion
+
     @staticmethod
     def _source_display_name(*, kind: str, value: str) -> str:
         normalized = value.strip()
@@ -440,3 +480,14 @@ class PaperIngestionWorkflow:
     def _url_display_name(url: str) -> str:
         filename = PurePosixPath(unquote(urlparse(url).path)).name
         return filename or "PDF URL"
+
+    @staticmethod
+    def _source_fingerprint(kind: str, value: str) -> str:
+        normalized = value.strip().casefold()
+        if kind == "arxiv":
+            normalized = normalized.removeprefix("arxiv:").strip("/")
+        elif kind == "doi":
+            normalized = normalize_doi(normalized) or normalized.removeprefix(
+                "https://doi.org/"
+            )
+        return f"{kind}:{normalized}"

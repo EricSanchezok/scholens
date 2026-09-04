@@ -166,9 +166,13 @@ async def test_openalex_reenable_reads_key_then_probes_before_persistence() -> N
 
 
 @pytest.mark.asyncio
-async def test_openalex_request_uses_short_credential_and_outcome_transactions() -> (
-    None
-):
+async def test_openalex_request_uses_short_credential_and_outcome_transactions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.openalex.cache_url_from_environment",
+        lambda: None,
+    )
     executor = _Executor()
     client = MagicMock()
 

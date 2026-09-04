@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+import logging
+import time
 from collections.abc import Awaitable, Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
@@ -24,9 +28,13 @@ from app.shared.application import (
     OperationInitiator,
 )
 from app.shared.domain import AppError
+from app.bootstrap.cache_endpoint import cache_url_from_environment
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 T = TypeVar("T")
 OpenAlexCall = Callable[[OpenAlexApiClient, str], Awaitable[T]]
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.bootstrap.capabilities import ApplicationCapabilities
@@ -45,6 +53,24 @@ class UserOpenAlex:
         self._executor = executor
         self._operation_factory = operation_factory
         self._client = client or OpenAlexApiClient()
+        self._doi_cache: dict[str, tuple[float, OpenAlexWork | None]] = {}
+        cache_url = cache_url_from_environment()
+        self._redis_cache = (
+            Redis.from_url(
+                cache_url,
+                decode_responses=True,
+                socket_connect_timeout=1.0,
+                socket_timeout=1.0,
+                retry_on_timeout=False,
+            )
+            if cache_url
+            else None
+        )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+        if self._redis_cache is not None:
+            await self._redis_cache.aclose()
 
     async def probe(self, *, api_key: str) -> None:
         await self._client.probe(api_key=api_key)
@@ -110,7 +136,28 @@ class UserOpenAlex:
         operation: OperationContext,
         doi: str,
     ) -> OpenAlexWork | None:
-        return await self.request(
+        cache_key = doi.casefold()
+        cached = self._doi_cache.get(cache_key)
+        if cached is not None and cached[0] > time.monotonic():
+            return cached[1]
+        redis_key = (
+            "scholens:openalex:doi:" + hashlib.sha256(cache_key.encode()).hexdigest()
+        )
+        if self._redis_cache is not None:
+            try:
+                cached_payload = await self._redis_cache.get(redis_key)
+                if cached_payload:
+                    cached_result = OpenAlexWork.model_validate(
+                        json.loads(cached_payload)
+                    )
+                    self._doi_cache[cache_key] = (
+                        time.monotonic() + 12 * 3600,
+                        cached_result,
+                    )
+                    return cached_result
+            except (RedisError, TypeError, ValueError):
+                logger.warning("openalex.cache.read_failed", exc_info=True)
+        result = await self.request(
             actor=actor,
             operation=operation,
             call=lambda client, api_key: client.find_by_doi(
@@ -118,6 +165,26 @@ class UserOpenAlex:
                 doi=doi,
             ),
         )
+        # Metadata is public and credential-free. Keep this bounded process
+        # cache to collapse repeated DOI lookups in one batch without adding a
+        # paid cache dependency or persisting credentials.
+        self._doi_cache[cache_key] = (
+            time.monotonic() + (12 * 3600 if result is not None else 600),
+            result,
+        )
+        if self._redis_cache is not None and result is not None:
+            try:
+                await self._redis_cache.set(
+                    redis_key,
+                    json.dumps(result.model_dump(mode="json"), separators=(",", ":")),
+                    ex=12 * 3600,
+                )
+            except RedisError:
+                logger.warning("openalex.cache.write_failed", exc_info=True)
+        if len(self._doi_cache) > 2048:
+            oldest = min(self._doi_cache, key=lambda key: self._doi_cache[key][0])
+            self._doi_cache.pop(oldest, None)
+        return result
 
     async def citation_graph(
         self,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
@@ -16,6 +16,7 @@ from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     JobFailureCallback,
+    SourceReadyCallback,
 )
 from app.modules.jobs.application.callbacks import (
     JobCompletionResult,
@@ -42,7 +43,7 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
-from app.shared.domain import AppError
+from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import JobOperation
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -146,6 +147,45 @@ class JobCompletionProcessor:
             if failed.claimed:
                 await self._release_terminal_failure_leases(facts=facts)
             return failed
+
+    def source_ready(
+        self,
+        *,
+        job_id: UUID,
+        callback: SourceReadyCallback,
+        verified: VerifiedJobCallback,
+    ) -> object:
+        """Apply metadata-only source materialization before PDF parsing."""
+        if callback.task_id != job_id:
+            raise AppError(
+                code="job_callback_mismatch",
+                message="Job callback ID does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        facts = self._causality(job_id=job_id)
+        resumed = self._resume(facts=facts, verified=verified)
+        if facts.operation is not JobOperation.PDF_PROCESS:
+            raise AppError(
+                code="job_operation_mismatch",
+                message="Job operation does not match source callback",
+                kind=FailureKind.CONFLICT,
+            )
+        if resumed.actor is None:
+            raise RuntimeError("source_ready_job_owner_missing")
+        actor = resumed.actor
+        result = self._executor.command(
+            lambda capabilities: capabilities.paper_ingestion.source_ready(
+                actor=actor,
+                operation=resumed.operation,
+                job_id=job_id,
+                source_sha256=callback.source_sha256,
+                size_bytes=callback.size_bytes,
+                staging_object_key=callback.staging_object_key,
+                filename=callback.filename,
+                attempt=callback.attempt,
+            )
+        )
+        return asdict(result)
 
     async def _release_terminal_failure_leases(
         self,

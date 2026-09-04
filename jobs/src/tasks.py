@@ -3,14 +3,21 @@ Celery tasks for Scholens jobs
 """
 
 import asyncio
+import hashlib
+import ipaddress
 import logging
 import os
+import random
+import socket
+import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
 import psutil
+import httpx
 import requests
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -68,6 +75,9 @@ JOB_HEARTBEAT_SECONDS = 30
 JOB_PROGRESS_TIMEOUT_SECONDS = 5
 JOB_CLAIM_MAX_RETRIES = 24
 JOB_CLAIM_MAX_RETRY_DELAY_SECONDS = 300
+SOURCE_MAX_BYTES = 30 * 1024 * 1024
+SOURCE_MAX_REDIRECTS = 5
+SOURCE_MAX_ATTEMPTS = 3
 PDF_PROGRESS_MARKERS = (
     # Match terminal and specific stages before broad provider status text.
     # "PDF processing complete" intentionally contains "processing".
@@ -454,6 +464,242 @@ def _zotero_progress(progress_url: str, code: str) -> bool:
             response.close()
 
 
+class SourceDownloadError(RuntimeError):
+    def __init__(
+        self,
+        code: str,
+        *,
+        status: int | None = None,
+        retryable: bool = False,
+        retry_after: float = 0.0,
+    ) -> None:
+        super().__init__(code)
+        self.error_code = code
+        self.status = status
+        self.retryable = retryable
+        self.retry_after = retry_after
+
+
+def _source_host(url: str) -> str | None:
+    try:
+        return httpx.URL(url).host
+    except httpx.InvalidURL:
+        return None
+
+
+def _validate_source_url(url: str) -> None:
+    try:
+        parsed = httpx.URL(url)
+    except httpx.InvalidURL as exc:
+        raise SourceDownloadError("paper_source_unsafe_address") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.host:
+        raise SourceDownloadError("paper_source_unsafe_address")
+    if parsed.username or parsed.password:
+        raise SourceDownloadError("paper_source_unsafe_address")
+    try:
+        addresses = socket.getaddrinfo(
+            parsed.host,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise SourceDownloadError("paper_source_dns_failed", retryable=True) from exc
+    try:
+        unsafe_address = not addresses or any(
+            not ipaddress.ip_address(item[4][0]).is_global for item in addresses
+        )
+    except (IndexError, KeyError, ValueError) as exc:
+        raise SourceDownloadError("paper_source_unsafe_address") from exc
+    if unsafe_address:
+        raise SourceDownloadError("paper_source_unsafe_address")
+
+
+def _retry_after(response: httpx.Response) -> float:
+    value = response.headers.get("retry-after")
+    if value is None:
+        return 0.0
+    try:
+        return max(0.0, min(float(value), 60.0))
+    except ValueError:
+        return 0.0
+
+
+def _stream_url_to_file(
+    url: str,
+    destination: str,
+    *,
+    job_id: str,
+    attempt: int,
+) -> tuple[str, int]:
+    current = url
+    with httpx.Client(
+        trust_env=False,
+        follow_redirects=False,
+        timeout=httpx.Timeout(30.0),
+    ) as client:
+        for redirect_count in range(SOURCE_MAX_REDIRECTS + 1):
+            _validate_source_url(current)
+            try:
+                response_context = client.stream(
+                    "GET",
+                    current,
+                    headers={
+                        "Accept": "application/pdf",
+                        "Accept-Encoding": "identity",
+                    },
+                )
+                with response_context as response:
+                    status = response.status_code
+                    if status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if not location or redirect_count >= SOURCE_MAX_REDIRECTS:
+                            raise SourceDownloadError(
+                                "paper_source_redirect_invalid", status=status
+                            )
+                        current = str(httpx.URL(current).join(location))
+                        continue
+                    if status in {408, 425, 429} or status >= 500:
+                        raise SourceDownloadError(
+                            "paper_source_retryable",
+                            status=status,
+                            retryable=True,
+                            retry_after=_retry_after(response),
+                        )
+                    if status >= 400:
+                        raise SourceDownloadError(
+                            "paper_source_http_error", status=status
+                        )
+                    network_stream = response.extensions.get("network_stream")
+                    if network_stream is None:
+                        raise SourceDownloadError(
+                            "paper_source_unsafe_address", status=status
+                        )
+                    peer = network_stream.get_extra_info("server_addr")
+                    try:
+                        unsafe_peer = (
+                            not isinstance(peer, tuple)
+                            or not peer
+                            or not ipaddress.ip_address(str(peer[0])).is_global
+                        )
+                    except (IndexError, ValueError) as exc:
+                        raise SourceDownloadError(
+                            "paper_source_unsafe_address", status=status
+                        ) from exc
+                    if unsafe_peer:
+                        raise SourceDownloadError(
+                            "paper_source_unsafe_address", status=status
+                        )
+                    content_type = (
+                        response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .casefold()
+                    )
+                    if content_type and content_type not in {
+                        "application/pdf",
+                        "application/octet-stream",
+                    }:
+                        raise SourceDownloadError("invalid_pdf", status=status)
+                    declared = response.headers.get("content-length")
+                    if declared:
+                        try:
+                            declared_size = int(declared)
+                        except ValueError as exc:
+                            raise SourceDownloadError(
+                                "paper_source_content_length_invalid", status=status
+                            ) from exc
+                        if declared_size > SOURCE_MAX_BYTES:
+                            raise SourceDownloadError("upload_too_large", status=status)
+                    hasher = hashlib.sha256()
+                    written = 0
+                    with open(destination, "wb") as output:
+                        for chunk in response.iter_raw(1024 * 1024):
+                            written += len(chunk)
+                            if written > SOURCE_MAX_BYTES:
+                                raise SourceDownloadError(
+                                    "upload_too_large", status=status
+                                )
+                            output.write(chunk)
+                            hasher.update(chunk)
+                    if written < 1024:
+                        raise SourceDownloadError("invalid_pdf", status=status)
+                    with open(destination, "rb") as header:
+                        if header.read(5) != b"%PDF-":
+                            raise SourceDownloadError("invalid_pdf", status=status)
+                    logger.info(
+                        "paper.source.downloaded",
+                        extra={
+                            "job_id": job_id,
+                            "attempt": attempt,
+                            "http_status": status,
+                            "content_length": written,
+                            "host": httpx.URL(current).host,
+                        },
+                    )
+                    return hasher.hexdigest(), written
+            except httpx.TimeoutException as exc:
+                raise SourceDownloadError(
+                    "paper_source_timeout", retryable=True
+                ) from exc
+            except httpx.RequestError as exc:
+                raise SourceDownloadError(
+                    "paper_source_network_error", retryable=True
+                ) from exc
+    raise SourceDownloadError("paper_source_redirect_invalid")
+
+
+def _deliver_source_ready(
+    url: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        response = post_signed_json(url, payload, timeout=60)
+    except requests.RequestException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        raise SourceDownloadError(
+            "source_ready_unavailable",
+            status=status if isinstance(status, int) else None,
+            retryable=status is None or status == 429 or status >= 500,
+        ) from exc
+    try:
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            status = response.status_code
+            try:
+                retry_after = float(response.headers.get("Retry-After", "0") or 0)
+            except ValueError:
+                retry_after = 0.0
+            raise SourceDownloadError(
+                "source_ready_unavailable",
+                status=status,
+                retryable=status == 429 or status >= 500,
+                retry_after=max(0.0, min(retry_after, 60.0)),
+            ) from exc
+        body = response.json()
+        if not isinstance(body, dict):
+            raise ValueError("source_ready_response_invalid")
+        return body
+    finally:
+        response.close()
+
+
+def _post_source_progress(progress_url: str, *, task_id: str) -> None:
+    response: requests.Response | None = None
+    try:
+        response = post_signed_json(
+            progress_url,
+            {"progress_code": "downloading"},
+            timeout=JOB_PROGRESS_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.warning("paper.source.progress_failed", extra={"job_id": task_id})
+    finally:
+        if response is not None:
+            response.close()
+
+
 @dataclass
 class _MinerUCredentialSession:
     credential_url: str
@@ -489,10 +735,11 @@ def _process_pdf_task(
     s3_object_key: str,
     webhook_url: str,
     progress_url: str,
-    claim_url: str,
+    claim_url: str | None,
     credential_url: str,
     skip_metadata_extraction: bool = False,
     repair_revision: str | None = None,
+    local_pdf_path: str | None = None,
 ) -> dict[str, Any]:
     """Run the shared claimed PDF workflow behind ingestion and repair tasks."""
     task_id = str(task.request.id)
@@ -501,6 +748,7 @@ def _process_pdf_task(
     usage_events: list[dict[str, Any]] = []
     progress: ProgressReporter | None = None
     mineru = _MinerUCredentialSession(credential_url)
+    pdf_temp_path: str | None = None
 
     try:
         with ProgressReporter(
@@ -510,11 +758,25 @@ def _process_pdf_task(
             logger.info("job.pdf_processing.started", extra={"job_id": task_id})
             progress.update("Downloading PDF from S3")
 
-            async def download_with_timer():
-                async with time_it("Downloading PDF from S3", job_id=task_id):
-                    return s3_service.download_file_to_bytes(s3_object_key)
+            if local_pdf_path is None:
+                pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                pdf_temp.close()
+                pdf_temp_path = pdf_temp.name
 
-            pdf_bytes = asyncio.run(download_with_timer())
+                async def download_with_timer():
+                    async with time_it("Downloading PDF from S3", job_id=task_id):
+                        return s3_service.download_file_to_path(
+                            s3_object_key, pdf_temp.name
+                        )
+
+                downloaded_size = asyncio.run(download_with_timer())
+            else:
+                pdf_temp_path = local_pdf_path
+                downloaded_size = os.path.getsize(local_pdf_path)
+            logger.info(
+                "job.pdf_processing.source_downloaded",
+                extra={"job_id": task_id, "content_length": downloaded_size},
+            )
             progress.check_cancelled()
 
             progress.update("Processing PDF file")
@@ -523,7 +785,7 @@ def _process_pdf_task(
                 usage_events = usage.events
                 result = asyncio.run(
                     process_pdf_file(
-                        pdf_bytes,
+                        None,
                         s3_object_key,
                         task_id,
                         status_callback=progress.update,
@@ -531,6 +793,7 @@ def _process_pdf_task(
                         repair_revision=repair_revision,
                         mineru_credential_loader=mineru.load,
                         mineru_outcome_callback=mineru.record,
+                        pdf_path=pdf_temp_path,
                     )
                 )
 
@@ -555,10 +818,12 @@ def _process_pdf_task(
                 webhook_payload["webhook_error"] = "webhook_delivery_failed"
 
             logger.info("job.pdf_processing.completed", extra={"job_id": task_id})
+            _cleanup_pdf_temp(pdf_temp_path)
             return webhook_payload
 
     except JobCancelled:
         logger.info("job.pdf_processing.cancelled", extra={"job_id": task_id})
+        _cleanup_pdf_temp(pdf_temp_path)
         return {"task_id": task_id, "status": "cancelled"}
 
     except SoftTimeLimitExceeded:
@@ -576,6 +841,7 @@ def _process_pdf_task(
             "integration_events": mineru.events(),
         }
         _deliver_webhook(webhook_url, timeout_payload, task_id=task_id)
+        _cleanup_pdf_temp(pdf_temp_path)
         raise
 
     except Exception as exc:
@@ -620,7 +886,17 @@ def _process_pdf_task(
             failure_payload["usage_events"] = []
             failure_payload["integration_events"] = []
         _deliver_webhook(webhook_url, failure_payload, task_id=task_id)
+        _cleanup_pdf_temp(pdf_temp_path)
         raise
+
+
+def _cleanup_pdf_temp(path: str | None) -> None:
+    if path is None:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        logger.warning("job.pdf_temp.cleanup_failed")
 
 
 @celery_app.task(
@@ -650,6 +926,188 @@ def upload_and_process_file(
         skip_metadata_extraction=skip_metadata_extraction,
         repair_revision=repair_revision,
     )
+
+
+@celery_app.task(
+    bind=True,
+    name="ingest_source_and_process",
+    soft_time_limit=PDF_TASK_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=PDF_TASK_TIME_LIMIT_SECONDS,
+)
+def ingest_source_and_process(
+    self,
+    source: dict[str, Any],
+    staging_object_key: str,
+    source_ready_url: str,
+    webhook_url: str,
+    progress_url: str,
+    claim_url: str,
+    credential_url: str,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    """Materialize a URL/upload source and process its local file in one task."""
+    task_id = str(self.request.id)
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
+        return {"task_id": task_id, "status": "duplicate"}
+    _post_source_progress(progress_url, task_id=task_id)
+    source_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    source_path.close()
+    processing_started = False
+    try:
+        staging_exists = s3_service.object_exists(staging_object_key)
+        if staging_exists:
+            try:
+                s3_service.download_file_to_path(
+                    staging_object_key, source_path.name, max_bytes=SOURCE_MAX_BYTES
+                )
+            except ValueError as exc:
+                raise SourceDownloadError("upload_too_large") from exc
+            with open(source_path.name, "rb") as existing:
+                prefix = existing.read(5)
+            if prefix != b"%PDF-":
+                raise SourceDownloadError("invalid_pdf")
+            hasher = hashlib.sha256()
+            size = 0
+            with open(source_path.name, "rb") as existing:
+                for chunk in iter(lambda: existing.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+                    size += len(chunk)
+            digest = hasher.hexdigest()
+            logger.info(
+                "paper.source.staging_reused",
+                extra={"job_id": task_id, "content_length": size},
+            )
+        else:
+            upload_object_key = source.get("upload_object_key")
+            if isinstance(upload_object_key, str) and upload_object_key:
+                try:
+                    size = s3_service.download_file_to_path(
+                        upload_object_key,
+                        source_path.name,
+                        max_bytes=SOURCE_MAX_BYTES,
+                    )
+                except ValueError as exc:
+                    raise SourceDownloadError("upload_too_large") from exc
+                if size > SOURCE_MAX_BYTES:
+                    raise SourceDownloadError("upload_too_large")
+                hasher = hashlib.sha256()
+                with open(source_path.name, "rb") as uploaded:
+                    for chunk in iter(lambda: uploaded.read(1024 * 1024), b""):
+                        hasher.update(chunk)
+                digest = hasher.hexdigest()
+                with open(source_path.name, "rb") as uploaded:
+                    if uploaded.read(5) != b"%PDF-":
+                        raise SourceDownloadError("invalid_pdf")
+            else:
+                resolved_url = source.get("resolved_url")
+                if not isinstance(resolved_url, str) or not resolved_url:
+                    raise SourceDownloadError("paper_source_pdf_unavailable")
+                last_error: SourceDownloadError | None = None
+                for attempt in range(1, SOURCE_MAX_ATTEMPTS + 1):
+                    try:
+                        digest, size = _stream_url_to_file(
+                            resolved_url,
+                            source_path.name,
+                            job_id=task_id,
+                            attempt=attempt,
+                        )
+                        last_error = None
+                        break
+                    except SourceDownloadError as error:
+                        last_error = error
+                        logger.warning(
+                            "paper.source.download_failed",
+                            extra={
+                                "job_id": task_id,
+                                "attempt": attempt,
+                                "http_status": error.status,
+                                "retry_after": error.retry_after,
+                                "host": _source_host(resolved_url),
+                            },
+                        )
+                        if not error.retryable or attempt >= SOURCE_MAX_ATTEMPTS:
+                            error.retryable = False
+                            raise
+                        time.sleep(
+                            error.retry_after
+                            or min(2 ** (attempt - 1), 30) + random.random()
+                        )
+                if last_error is not None:
+                    raise last_error
+        expected_sha256 = source.get("expected_sha256")
+        if isinstance(expected_sha256, str) and digest != expected_sha256:
+            raise SourceDownloadError("source_checksum_mismatch")
+        if size > SOURCE_MAX_BYTES:
+            raise SourceDownloadError("upload_too_large")
+        if not staging_exists:
+            s3_service.upload_file(
+                source_path.name,
+                staging_object_key,
+                "application/pdf",
+                checksum_sha256=digest,
+            )
+
+        ready = _deliver_source_ready(
+            source_ready_url,
+            {
+                "task_id": task_id,
+                "source_sha256": digest,
+                "size_bytes": size,
+                "staging_object_key": staging_object_key,
+                "filename": filename,
+                "attempt": int(getattr(self.request, "retries", 0) or 0) + 1,
+            },
+        )
+        canonical_key = ready.get("canonical_object_key")
+        if not isinstance(canonical_key, str) or not canonical_key:
+            raise RuntimeError("source_ready_response_invalid")
+        if not bool(ready.get("process_required", True)):
+            s3_service.delete_file(staging_object_key)
+            return {"task_id": task_id, "status": "completed", "reused": True}
+        processing_started = True
+        result = _process_pdf_task(
+            self,
+            canonical_key,
+            webhook_url,
+            progress_url,
+            claim_url=None,
+            credential_url=credential_url,
+            local_pdf_path=source_path.name,
+        )
+        s3_service.delete_file(staging_object_key)
+        return result
+    except SourceDownloadError as error:
+        if error.retryable:
+            raise self.retry(
+                exc=error,
+                countdown=error.retry_after or 15,
+                max_retries=SOURCE_MAX_ATTEMPTS,
+            ) from error
+        s3_service.delete_file(staging_object_key)
+        fail_url = claim_url.rsplit("/", 1)[0] + "/fail"
+        _deliver_webhook(
+            fail_url,
+            {"task_id": task_id, "error_code": error.error_code},
+            task_id=task_id,
+        )
+        raise
+    except Exception:
+        if not processing_started:
+            fail_url = claim_url.rsplit("/", 1)[0] + "/fail"
+            _deliver_webhook(
+                fail_url,
+                {
+                    "task_id": task_id,
+                    "error_code": "paper_source_materialization_failed",
+                },
+                task_id=task_id,
+            )
+        raise
+    finally:
+        try:
+            os.unlink(source_path.name)
+        except OSError:
+            logger.warning("job.source_temp.cleanup_failed", extra={"job_id": task_id})
 
 
 @celery_app.task(

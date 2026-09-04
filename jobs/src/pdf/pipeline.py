@@ -13,7 +13,7 @@ from typing import Awaitable, Callable, Literal
 
 from src.llm_client import llm_client
 from src.pdf.local import (
-    analyze_pdf,
+    analyze_pdf_path,
     build_text_last_resort,
     extract_markdown_markitdown,
     extract_markdown_pymupdf4llm,
@@ -50,6 +50,15 @@ MinerUCredentialLoader = Callable[[], Awaitable[MinerUCredential]]
 MinerUOutcome = Callable[
     [str, Literal["verified", "invalid", "failed"], str | None], None
 ]
+MAX_SOURCE_BYTES = 30 * 1024 * 1024
+
+
+def _read_bounded_pdf(pdf_path: str) -> bytes:
+    with open(pdf_path, "rb") as source:
+        content = source.read(MAX_SOURCE_BYTES + 1)
+    if len(content) > MAX_SOURCE_BYTES:
+        raise ParserContentError("PDF exceeds the maximum size")
+    return content
 
 
 async def _upload_preview(
@@ -253,7 +262,7 @@ async def _parse_local_engines(
 
 
 async def process_pdf_file(
-    pdf_bytes: bytes,
+    pdf_bytes: bytes | None,
     s3_object_key: str,
     job_id: str,
     status_callback: Callable[[str], None],
@@ -261,18 +270,27 @@ async def process_pdf_file(
     repair_revision: str | None = None,
     mineru_credential_loader: MinerUCredentialLoader | None = None,
     mineru_outcome_callback: MinerUOutcome | None = None,
+    pdf_path: str | None = None,
 ) -> PDFProcessingResult:
     start_time = datetime.now(timezone.utc)
     document_sha256 = _document_sha256_from_source_key(s3_object_key)
-    pdf_path: str | None = None
+    owned_pdf_path = False
 
     try:
-        analysis = await asyncio.to_thread(analyze_pdf, pdf_bytes)
+        if pdf_path is None:
+            if not pdf_bytes:
+                raise ParserContentError("PDF source is empty")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(pdf_bytes)
+                pdf_path = temp_file.name
+            owned_pdf_path = True
+        analysis = await asyncio.to_thread(analyze_pdf_path, pdf_path)
 
         if is_scanned_candidate(analysis):
             # A scanned PDF has no usable text layer; only MinerU OCR can help.
+            scanned_bytes = _read_bounded_pdf(pdf_path)
             document = await _parse_with_mineru(
-                pdf_bytes,
+                scanned_bytes,
                 job_id=job_id,
                 document_sha256=document_sha256,
                 purpose="pdf-ingestion",
@@ -281,10 +299,6 @@ async def process_pdf_file(
                 status_callback=status_callback,
             )
         else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-                temp_file.write(pdf_bytes)
-                pdf_path = temp_file.name
-
             try:
                 document = await _parse_local_engines(
                     pdf_path,
@@ -297,7 +311,7 @@ async def process_pdf_file(
                 # else degrades to the deterministic per-page text last resort.
                 try:
                     document = await _parse_with_mineru(
-                        pdf_bytes,
+                        _read_bounded_pdf(pdf_path),
                         job_id=job_id,
                         document_sha256=document_sha256,
                         purpose="pdf-ingestion",
@@ -387,7 +401,7 @@ async def process_pdf_file(
             duration=(datetime.now(timezone.utc) - start_time).total_seconds(),
         )
     finally:
-        if pdf_path is not None:
+        if pdf_path is not None and owned_pdf_path:
             try:
                 os.unlink(pdf_path)
             except OSError:

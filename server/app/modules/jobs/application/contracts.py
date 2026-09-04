@@ -118,6 +118,18 @@ class JobFailureCallback(JobCallbackIdentity):
     error_code: str = Field(min_length=1, max_length=128)
 
 
+class SourceReadyCallback(JobCallbackIdentity):
+    """Metadata-only callback after a document worker stages a source object."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    size_bytes: int = Field(gt=0, le=30 * 1024 * 1024)
+    staging_object_key: str = Field(min_length=1, max_length=512)
+    filename: str | None = Field(default=None, max_length=512)
+    attempt: int = Field(ge=1, le=3)
+
+
 class StorageDeleteCallback(JobCallbackIdentity):
     deleted_count: int
 
