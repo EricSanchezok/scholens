@@ -21,8 +21,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # A downgrade is only safe after all source-first reservations have been
-    # materialized or removed.
+    # The expand revision is intentionally forward-only. Contract tightening
+    # belongs in a later migrate/switch/contract revision, never in the same
+    # revision's downgrade path.
     bind = op.get_bind()
     remaining = bind.execute(
         sa.text(
@@ -32,10 +33,4 @@ def downgrade() -> None:
     ).first()
     if remaining is not None:
         raise RuntimeError("cannot_make_source_reservation_digest_non_nullable")
-    op.alter_column(
-        "upload_reservations",
-        "content_sha256",
-        existing_type=sa.String(length=64),
-        nullable=False,
-        schema="scholens",
-    )
+    raise RuntimeError("source_reservation_nullable_revision_is_forward_only")
