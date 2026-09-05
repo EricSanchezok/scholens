@@ -42244,7 +42244,7 @@
         "read_only": false
       },
       "confirmation_policy": "none",
-      "description": "Use when a client can upload known PDF bytes directly to the returned URL. Do not use when you only have a DOI, arXiv ID, or already reachable PDF URL. Returns a one-file upload session, required headers, expiry, and upload_id. Next: PUT the exact bytes, then call ingest_paper with source.kind=upload. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
+      "description": "Use when a client has a known local PDF of 30 MiB or less and can upload its bytes directly to the returned URL. Do not use when you only have a DOI, arXiv ID, or already reachable PDF URL. Returns a one-file upload session, required headers, expiry, and upload_id. Next: PUT the exact bytes, then call Scholens:ingest_paper with source.kind=upload. If the PDF is larger than 30 MiB, preserve the original and its readability, compress or optimize a copy, and prepare that copy instead; do not retry unchanged bytes. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
       "execution": "command",
       "input_schema": {
         "additionalProperties": false,
@@ -42284,7 +42284,7 @@
             "type": "string"
           },
           "size_bytes": {
-            "description": "Exact local file size in bytes; the maximum is 30 MB.",
+            "description": "Exact local file size in bytes; the maximum is 30 MiB (31457280 bytes). Compress or optimize a copy before preparing an upload when the original is larger.",
             "exclusiveMinimum": 0,
             "maximum": 31457280,
             "title": "Size Bytes",

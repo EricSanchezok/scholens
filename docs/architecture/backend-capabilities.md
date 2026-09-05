@@ -924,7 +924,7 @@ rows, and bucket lifecycle removes abandoned staging objects.
 The official local stdio connector obtains filesystem roots from the MCP host
 or explicit `--allowed-root` values. It resolves real paths, rejects ambiguous
 relative names and symlink escapes, requires a regular `.pdf` with a PDF
-signature and a maximum size of 30 MB, and sends the remote service only the
+signature and a maximum size of 30 MiB, and sends the remote service only the
 plain filename, size, checksum, and bytes. It uses separate HTTP clients for
 authenticated MCP and unauthenticated object upload, preventing credential
 forwarding. Both URLs require HTTPS except for explicit loopback development;
@@ -932,7 +932,10 @@ redirects and embedded URL credentials are rejected. If transfer completes but
 the ingestion response is uncertain, the
 bridge returns the original upload UUID and exact `ingest_paper` arguments so
 the Agent replays only that final step without changing the idempotency
-identity. No inbound port or public client IP is required.
+identity. An oversized file returns exact size details and directs the Agent to
+preserve the original, compress or optimize a readable copy to the limit, and
+call `Scholens:upload_local_paper` with that copy instead of retrying unchanged.
+No inbound port or public client IP is required.
 
 After staging, a `202`
 means the personal membership, source reference, durable job, and dispatch

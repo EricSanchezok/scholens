@@ -1044,10 +1044,18 @@ def build_workspace_tool_catalog(
             name="prepare_paper_upload",
             title="Prepare PDF upload",
             description=_description(
-                use="a client can upload known PDF bytes directly to the returned URL",
+                use=(
+                    "a client has a known local PDF of 30 MiB or less and can upload "
+                    "its bytes directly to the returned URL"
+                ),
                 avoid="you only have a DOI, arXiv ID, or already reachable PDF URL",
                 result="a one-file upload session, required headers, expiry, and upload_id",
-                next_step="PUT the exact bytes, then call ingest_paper with source.kind=upload.",
+                next_step=(
+                    "PUT the exact bytes, then call Scholens:ingest_paper with "
+                    "source.kind=upload. If the PDF is larger than 30 MiB, preserve "
+                    "the original and its readability, compress or optimize a copy, "
+                    "and prepare that copy instead; do not retry unchanged bytes."
+                ),
             ),
             input_model=PreparePaperUploadRequest,
             output_model=PreparePaperUploadResponse,

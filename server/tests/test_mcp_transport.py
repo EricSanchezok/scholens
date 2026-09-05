@@ -47,7 +47,7 @@ from httpx import ASGITransport, AsyncClient
 from mcp.server.transport_security import TransportSecuritySettings
 import json
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.types import Message, Receive, Scope, Send
@@ -899,6 +899,65 @@ async def test_mcp_rejects_a_nonfinite_tool_argument_as_strict_json() -> None:
     error = json.loads(result["content"][0]["text"])["error"]
     assert error["code"] == "tool_arguments_invalid"
     assert error["kind"] == "invalid_argument"
+
+
+@pytest.mark.asyncio
+async def test_prepare_upload_size_error_explains_how_to_recover() -> None:
+    class UploadInput(BaseModel):
+        size_bytes: int = Field(gt=0, le=30 * 1024 * 1024)
+
+    catalog = ToolCatalog(
+        [
+            ToolDefinition(
+                name="prepare_paper_upload",
+                description="Prepare one PDF upload.",
+                input_model=UploadInput,
+                execution=ToolExecutionKind.QUERY,
+                required_permission=WorkspacePermission.READ,
+                handler=lambda capabilities, context, arguments: ToolOutcome(
+                    payload={"accepted": True}
+                ),
+            )
+        ],
+        [
+            ToolProfile(
+                name="mcp",
+                tool_names=frozenset({"prepare_paper_upload"}),
+            )
+        ],
+    )
+    application = _application(
+        catalog,
+        ToolDispatcher(catalog=catalog, executor=MinimalExecutor()),
+    )
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            headers = await _initialize(client)
+            response = await client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "oversized-upload",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "prepare_paper_upload",
+                        "arguments": {"size_bytes": 30 * 1024 * 1024 + 1},
+                    },
+                },
+            )
+
+    result = response.json()["result"]
+    assert result["isError"] is True
+    error = json.loads(result["content"][0]["text"])["error"]
+    assert error["code"] == "tool_arguments_invalid"
+    assert error["kind"] == "invalid_argument"
+    assert "30 MiB" in error["remediation"]
+    assert "Scholens:prepare_paper_upload" in error["remediation"]
+    assert "Do not retry unchanged bytes" in error["remediation"]
 
 
 @pytest.mark.asyncio

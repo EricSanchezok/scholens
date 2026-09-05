@@ -8,8 +8,10 @@ from mcp import types
 from mcp.shared.exceptions import McpError
 
 from scholens_mcp_connector.cli import (
+    MAX_PDF_BYTES,
     MAX_TOOL_WAIT_SECONDS,
     LocalUploadError,
+    _local_upload_error_result,
     _local_upload_tool,
     _remote_ingestion_error_with_retry,
     _remote_tool_timeout,
@@ -62,6 +64,39 @@ def test_rejects_non_pdf_signature(tmp_path: Path) -> None:
         resolve_local_pdf(str(paper), [tmp_path])
 
 
+def test_rejects_oversized_pdf_with_actionable_recovery(tmp_path: Path) -> None:
+    paper = tmp_path / "oversized.pdf"
+    with paper.open("wb") as stream:
+        stream.truncate(MAX_PDF_BYTES + 1)
+
+    with pytest.raises(LocalUploadError) as raised:
+        resolve_local_pdf(str(paper), [tmp_path])
+
+    error = raised.value
+    assert error.code == "local_pdf_too_large"
+    assert error.details == {
+        "actual_bytes": MAX_PDF_BYTES + 1,
+        "max_bytes": MAX_PDF_BYTES,
+    }
+    result = _local_upload_error_result(error)
+    payload = json.loads(result.content[0].text)["error"]
+    assert str(paper) not in json.dumps(payload)
+    assert payload == {
+        "code": "local_pdf_too_large",
+        "details": {
+            "actual_bytes": MAX_PDF_BYTES + 1,
+            "max_bytes": MAX_PDF_BYTES,
+        },
+        "message": "The selected PDF exceeds the 30 MiB upload limit",
+        "remediation": (
+            "Compress or optimize a copy of the PDF to 30 MiB or less, preserve the "
+            "original file and text readability, then call "
+            "Scholens:upload_local_paper with the compressed copy. Do not retry the "
+            "unchanged file."
+        ),
+    }
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -109,7 +144,10 @@ def test_local_upload_tool_preserves_ingestion_output_and_truthful_hints() -> No
     assert local.outputSchema == ingest.outputSchema
     assert local.annotations is not None
     assert local.annotations.idempotentHint is False
+    assert local.description is not None
+    assert "30 MiB" in local.description
     assert local.inputSchema["properties"]["path"]["description"]
+    assert "30 MiB" in local.inputSchema["properties"]["path"]["description"]
     assert (
         local.inputSchema["properties"]["wait_seconds"]["maximum"]
         == MAX_TOOL_WAIT_SECONDS

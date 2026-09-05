@@ -10,6 +10,7 @@ from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.jobs.application.contracts import JobResponse
+from app.modules.papers.domain import MAX_PDF_SIZE_MB
 from app.shared.application import Actor, ApplicationExecutor
 from app.tooling.workspace_contracts import (
     JobBatchWaitMetadata,
@@ -43,15 +44,27 @@ def _job_wait_metadata(
             ),
         )
     if job.status == "failed":
+        guidance = (
+            (
+                f"The source PDF exceeds the {MAX_PDF_SIZE_MB} MiB limit. Do not "
+                "retry the unchanged source. Choose a smaller accessible PDF source. "
+                "If you have a local file, preserve the original and its readability, "
+                f"compress or optimize a copy to {MAX_PDF_SIZE_MB} MiB or less, then "
+                "upload that copy with Scholens:upload_local_paper through the official "
+                "local connector."
+            )
+            if job.error_code == "upload_too_large"
+            else (
+                "Inspect the stable error code and retry only when the operation's "
+                "failure contract says it is retryable."
+            )
+        )
         return JobWaitMetadata(
             outcome="failed",
             requested_seconds=requested_seconds,
             elapsed_ms=elapsed_ms,
             next_action="inspect_failure",
-            guidance=(
-                "Inspect the stable error code and retry only when the operation's "
-                "failure contract says it is retryable."
-            ),
+            guidance=guidance,
         )
     if job.status == "cancelled":
         return JobWaitMetadata(

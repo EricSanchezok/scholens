@@ -168,6 +168,7 @@ def _error_result(
     code: str,
     message: str,
     details: dict[str, object] | None = None,
+    tool_name: str | None = None,
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
 ) -> mcp_types.CallToolResult:
     safe_details = _safe_error_details(details)
@@ -199,9 +200,11 @@ def _error_result(
     error["remediation"] = _error_remediation(
         kind=kind,
         code=code,
+        details=safe_details,
         replacement_tool=(
             replacement_tool if isinstance(replacement_tool, str) else None
         ),
+        tool_name=tool_name,
     )
     add_counter(
         "scholens.mcp.errors",
@@ -284,13 +287,44 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     return schema
 
 
+def _is_oversized_prepare_upload_error(
+    *,
+    details: dict[str, object] | None,
+    tool_name: str | None,
+) -> bool:
+    if tool_name != "prepare_paper_upload" or details is None:
+        return False
+    errors = details.get("errors")
+    if not isinstance(errors, list):
+        return False
+    return any(
+        isinstance(error, dict)
+        and error.get("type") == "less_than_equal"
+        and error.get("loc") == ["size_bytes"]
+        for error in errors
+    )
+
+
 def _error_remediation(
     *,
     kind: FailureKind,
     code: str,
+    details: dict[str, object] | None = None,
     replacement_tool: str | None = None,
+    tool_name: str | None = None,
 ) -> str:
     if code == "tool_arguments_invalid":
+        if _is_oversized_prepare_upload_error(
+            details=details,
+            tool_name=tool_name,
+        ):
+            return (
+                "The declared PDF exceeds the 30 MiB upload limit. Preserve the "
+                "original and its readability, compress or optimize a copy to 30 MiB "
+                "or less, then call Scholens:prepare_paper_upload with the copy's "
+                "filename, exact size, and SHA-256. Do not retry unchanged bytes or "
+                "metadata."
+            )
         return (
             "Correct the named arguments using this tool's input schema, then call "
             "the same tool again. Do not guess identifiers or opaque cursors."
@@ -987,6 +1021,7 @@ def build_mcp_transport(
                 code=exc.code,
                 message=exc.message,
                 details=exc.details,
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         except Exception as exc:
