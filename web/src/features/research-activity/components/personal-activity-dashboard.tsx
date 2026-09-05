@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { LoadingState } from "@/components/feedback";
 import { Button, focusSurfaceVariants } from "@/components/ui";
+import { ContextualLink } from "@/features/workspace-navigation";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { PersonalResearchInsights, ResearchActivityRange } from "../types";
@@ -314,7 +315,7 @@ export function PersonalActivityDashboard({
                     return (
                       <li key={project.projectId}>
                         <div className="flex items-baseline justify-between gap-3 text-sm">
-                          <Link
+                          <ContextualLink
                             className={cn(
                               "hover:text-secondary truncate rounded-[var(--radius-sm)] font-medium",
                               focusSurfaceVariants({ intent: "inline" }),
@@ -322,9 +323,11 @@ export function PersonalActivityDashboard({
                             href={
                               `/projects/${project.projectId}?range=${projectRange}` as Route
                             }
+                            focusKey={project.projectId}
+                            originKind="activity"
                           >
                             {project.title}
-                          </Link>
+                          </ContextualLink>
                           <span className="text-secondary shrink-0 tabular-nums">
                             {formatActivityDuration(project.activeMs, locale)}
                           </span>
@@ -368,7 +371,7 @@ export function PersonalActivityDashboard({
                 <ol className="divide-line-subtle mt-2 divide-y">
                   {insights.papers.slice(0, 8).map((paper) => (
                     <li key={paper.documentId}>
-                      <Link
+                      <ContextualLink
                         className={cn(
                           "hover:bg-hover flex min-h-14 items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 py-2",
                           focusSurfaceVariants({ intent: "neutral" }),
@@ -376,6 +379,8 @@ export function PersonalActivityDashboard({
                         href={
                           `/reader/${paper.documentId}?panel=insights` as Route
                         }
+                        focusKey={paper.documentId}
+                        originKind="activity"
                       >
                         <span className="min-w-0">
                           <span className="line-clamp-2 text-sm font-medium">
@@ -397,7 +402,7 @@ export function PersonalActivityDashboard({
                         <span className="text-secondary shrink-0 text-xs tabular-nums">
                           {formatActivityDuration(paper.activeMs, locale)}
                         </span>
-                      </Link>
+                      </ContextualLink>
                     </li>
                   ))}
                 </ol>

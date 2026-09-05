@@ -1,10 +1,13 @@
 "use client";
 
 import type { Route } from "next";
-import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
 import { focusSurfaceVariants } from "@/components/ui";
+import {
+  ContextRouteLink,
+  ContextualLink,
+} from "@/features/workspace-navigation";
 import { cn } from "@/lib/utilities/cn";
 import { formatActivityDuration } from "../format";
 import type { ProjectResearchInsights } from "../types";
@@ -58,7 +61,7 @@ export function ProjectPaperProgress({
             {insights.papers.map((paper) => (
               <tr key={paper.documentId}>
                 <td className="max-w-md px-2 py-3">
-                  <Link
+                  <ContextualLink
                     className={cn(
                       "line-clamp-2 font-medium hover:underline",
                       focusSurfaceVariants({ intent: "inline" }),
@@ -66,9 +69,11 @@ export function ProjectPaperProgress({
                     href={
                       `/reader/${paper.documentId}?project=${projectId}&panel=insights` as Route
                     }
+                    focusKey={paper.documentId}
+                    originKind="project"
                   >
                     {paper.title ?? t("paper.untitled")}
-                  </Link>
+                  </ContextualLink>
                 </td>
                 <td className="px-2 py-3 tabular-nums">
                   {formatActivityDuration(paper.activeMs, locale)}
@@ -104,7 +109,7 @@ export function ProjectPaperProgress({
       <ol className="divide-line-subtle divide-y sm:hidden">
         {insights.papers.map((paper) => (
           <li key={paper.documentId}>
-            <Link
+            <ContextualLink
               className={cn(
                 "hover:bg-hover block rounded-[var(--radius-md)] px-2 py-3",
                 focusSurfaceVariants({ intent: "neutral" }),
@@ -112,6 +117,8 @@ export function ProjectPaperProgress({
               href={
                 `/reader/${paper.documentId}?project=${projectId}&panel=insights` as Route
               }
+              focusKey={paper.documentId}
+              originKind="project"
             >
               <span className="line-clamp-2 text-sm font-medium">
                 {paper.title ?? t("paper.untitled")}
@@ -141,7 +148,7 @@ export function ProjectPaperProgress({
                     : t("project.noLastActivity")}
                 </span>
               </span>
-            </Link>
+            </ContextualLink>
           </li>
         ))}
       </ol>
@@ -153,7 +160,7 @@ export function ProjectPaperProgress({
               total: insights.papersTotalCount,
             })}
           </span>
-          <Link
+          <ContextRouteLink
             className={cn(
               "font-medium hover:underline",
               focusSurfaceVariants({ intent: "inline" }),
@@ -161,7 +168,7 @@ export function ProjectPaperProgress({
             href={`/projects/${projectId}?view=papers` as Route}
           >
             {t("project.viewPapers")}
-          </Link>
+          </ContextRouteLink>
         </p>
       ) : null}
     </>

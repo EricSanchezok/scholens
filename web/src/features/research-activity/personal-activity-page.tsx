@@ -12,6 +12,11 @@ import { Icon } from "@/design-system/icons/icon";
 import { BackIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import {
+  currentAppLocation,
+  useNavigationScrollRestorer,
+  useWorkspaceNavigation,
+} from "@/features/workspace-navigation";
 import { PersonalActivityContainer } from "./containers";
 import {
   parsePersonalActivityRange,
@@ -25,8 +30,12 @@ function PersonalActivityWorkspace({ actor }: { actor: Actor }) {
   const t = useTranslations("ResearchActivity");
   const accountT = useTranslations("AccountHub.actions");
   const { signOut } = useAuthSession();
+  const navigation = useWorkspaceNavigation();
+  const updateContextRoute = navigation.updateContextRoute;
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  useNavigationScrollRestorer("personal-activity", { rootRef: contentRef });
   const range = React.useMemo(
     () =>
       parsePersonalActivityRange(new URLSearchParams(searchParams.toString())),
@@ -45,12 +54,10 @@ function PersonalActivityWorkspace({ actor }: { actor: Actor }) {
   }
 
   function handleRangeChange(nextRange: PersonalActivityRange) {
-    const query = serializePersonalActivityRange(nextRange).toString();
-    router.replace(
+    const params = serializePersonalActivityRange(nextRange);
+    const query = params.toString();
+    updateContextRoute(
       (query ? `/me/activity?${query}` : "/me/activity") as Route,
-      {
-        scroll: false,
-      },
     );
   }
 
@@ -75,7 +82,10 @@ function PersonalActivityWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 pb-16 sm:px-8 sm:py-10 lg:px-12">
+      <div
+        className="mx-auto w-full max-w-6xl px-4 py-6 pb-16 sm:px-8 sm:py-10 lg:px-12"
+        ref={contentRef}
+      >
         <header className="mb-8 hidden sm:block">
           <h1 className="text-3xl leading-10 font-semibold tracking-[-0.02em]">
             {t("title")}
@@ -103,7 +113,9 @@ export function PersonalActivityPage() {
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
+      router.replace(
+        `/login?returnTo=${encodeURIComponent(currentAppLocation(pathname))}`,
+      );
     }
   }, [pathname, router, session.status]);
 

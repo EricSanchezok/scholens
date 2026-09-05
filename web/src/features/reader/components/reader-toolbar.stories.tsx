@@ -18,7 +18,7 @@ const labels = {
   page: "Page",
   previousPage: "Previous page",
   previousSearchResult: "Previous match",
-  returnLibrary: "Return to library",
+  returnToOrigin: "Return to library",
   projectContext: (context: string) => `Reader context: ${context}`,
   personalContext: "Personal",
   pdfView: "PDF",

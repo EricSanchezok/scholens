@@ -10,6 +10,7 @@ import { InstallExperienceProvider } from "@/features/install-experience";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { useTranslations } from "next-intl";
 import { WebPerformanceReporter } from "@/lib/observability/web-vitals-reporter";
+import { WorkspaceNavigationProvider } from "@/features/workspace-navigation";
 
 export function Providers({
   children,
@@ -24,9 +25,11 @@ export function Providers({
           <WebPerformanceReporter />
           <InstallExperienceProvider>
             <AuthProvider>
-              <ToastProvider dismissLabel={t("dismiss")}>
-                {children}
-              </ToastProvider>
+              <WorkspaceNavigationProvider>
+                <ToastProvider dismissLabel={t("dismiss")}>
+                  {children}
+                </ToastProvider>
+              </WorkspaceNavigationProvider>
             </AuthProvider>
           </InstallExperienceProvider>
         </QueryProvider>

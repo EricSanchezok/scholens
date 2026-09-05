@@ -1,11 +1,11 @@
 "use client";
 
 import type { Route } from "next";
-import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 
 import { LoadingState } from "@/components/feedback";
 import { Button, focusSurfaceVariants } from "@/components/ui";
+import { ContextualLink } from "@/features/workspace-navigation";
 import { cn } from "@/lib/utilities/cn";
 import type {
   ProjectActivityEvent,
@@ -268,7 +268,7 @@ export function ProjectInsightsOverview({
                       {t(`project.activityKinds.${event.kind}`)}
                     </span>
                     {event.documentId ? (
-                      <Link
+                      <ContextualLink
                         className={cn(
                           "mt-0.5 block rounded-[var(--radius-sm)] text-sm leading-5 font-medium hover:underline",
                           focusSurfaceVariants({ intent: "inline" }),
@@ -276,9 +276,11 @@ export function ProjectInsightsOverview({
                         href={
                           `/reader/${event.documentId}?project=${projectId}&panel=insights` as Route
                         }
+                        focusKey={event.documentId}
+                        originKind="project"
                       >
                         {event.documentTitle ?? t("paper.untitled")}
-                      </Link>
+                      </ContextualLink>
                     ) : null}
                     <span className="text-muted mt-0.5 block text-xs">
                       {event.actorName ? `${event.actorName} · ` : ""}

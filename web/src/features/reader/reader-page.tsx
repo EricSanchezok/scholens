@@ -52,6 +52,13 @@ import {
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
+  currentAppLocation,
+  useNavigationRestorer,
+  useWorkspaceNavigation,
+  type NavigationOriginKind,
+  type NavigationSnapshot,
+} from "@/features/workspace-navigation";
+import {
   createReaderComment,
   createReaderAnnotationThread,
   deleteReaderComment,
@@ -148,12 +155,15 @@ function ReaderDocumentWorkspace({
   const locationParamsRef = React.useRef(
     new URLSearchParams(searchParams.toString()),
   );
+  const pendingPanelHistoryRef = React.useRef(false);
   const t = useTranslations("Reader");
   const conversationT = useTranslations("Home.conversation");
   const { resolved: resolvedMotion } = useMotionPreference();
   const toast = useToast();
   const { signOut } = useAuthSession();
   const { recordCoreAction } = useInstallExperience();
+  const navigation = useWorkspaceNavigation();
+  const updateContextRoute = navigation.updateContextRoute;
   const [collapsed, setCollapsed] = React.useState(true);
   const [signingOut, setSigningOut] = React.useState(false);
   const [adapterState, setAdapterState] = React.useState<{
@@ -234,6 +244,41 @@ function ReaderDocumentWorkspace({
     selection: activeTextSelection,
   });
   const readerView = readReaderView(searchParams.get("view"));
+  const fallbackReturnHref = projectId
+    ? `/projects/${projectId}?view=papers`
+    : "/library";
+  const returnKind: NavigationOriginKind =
+    navigation.context?.originKind ?? (projectId ? "project" : "library");
+  const returnLabel = t(`return.${returnKind}`);
+  const handleReturn = () => navigation.returnFromContext(fallbackReturnHref);
+  useNavigationRestorer("reader-document", {
+    capture: () => ({
+      scrollTop:
+        (readerView === "pdf"
+          ? pdfScrollContainerRef.current
+          : reflowScrollContainerRef.current
+        )?.scrollTop ?? 0,
+      view: readerView,
+    }),
+    restore: (snapshot: NavigationSnapshot) => {
+      const scrollTop =
+        typeof snapshot.scrollTop === "number" ? snapshot.scrollTop : 0;
+      let attempts = 0;
+      const restore = () => {
+        const container =
+          snapshot.view === "reflow"
+            ? reflowScrollContainerRef.current
+            : pdfScrollContainerRef.current;
+        if (container) {
+          container.scrollTop = scrollTop;
+          return;
+        }
+        attempts += 1;
+        if (attempts < 12) window.requestAnimationFrame(restore);
+      };
+      window.requestAnimationFrame(restore);
+    },
+  });
   const fullTranslationEnabled = searchParams.get("translate") === "full";
   const translationCacheVersion = translation.effectivePreferences
     ? JSON.stringify({
@@ -311,7 +356,8 @@ function ReaderDocumentWorkspace({
       translate?: boolean;
       view?: "pdf" | "reflow";
     }) => {
-      const next = new URLSearchParams(locationParamsRef.current?.toString());
+      const next = new URLSearchParams(locationParamsRef.current.toString());
+      const previousPanel = readReaderPanel(next.get("panel"));
       if (patch.page !== undefined) next.set("page", String(patch.page));
       if (patch.panel === null) next.delete("panel");
       else if (patch.panel) next.set("panel", patch.panel);
@@ -323,15 +369,35 @@ function ReaderDocumentWorkspace({
       else if (patch.translate) next.set("translate", "full");
       if (patch.view === "pdf") next.delete("view");
       else if (patch.view) next.set("view", patch.view);
+      const nextPanel = readReaderPanel(next.get("panel"));
       const query = next.toString();
       locationParamsRef.current = next;
-      router.replace(
-        `/reader/${documentId}${query ? `?${query}` : ""}` as Route,
-        { scroll: false },
-      );
+      const href = `/reader/${documentId}${query ? `?${query}` : ""}` as Route;
+      if (!previousPanel && nextPanel) {
+        pendingPanelHistoryRef.current = true;
+        updateContextRoute(href, { history: "push" });
+      } else if (
+        previousPanel &&
+        !nextPanel &&
+        window.history.state?.__scholensHistoryLayer === "reader-panel"
+      ) {
+        router.back();
+      } else {
+        updateContextRoute(href);
+      }
     },
-    [documentId, router],
+    [documentId, router, updateContextRoute],
   );
+
+  React.useEffect(() => {
+    locationParamsRef.current = new URLSearchParams(searchParams.toString());
+    if (!panel || !pendingPanelHistoryRef.current) return;
+    pendingPanelHistoryRef.current = false;
+    window.history.replaceState(
+      { ...window.history.state, __scholensHistoryLayer: "reader-panel" },
+      "",
+    );
+  }, [panel, searchParams]);
   const defaultContext: ResearchContext = {
     kind: "selection",
     document_ids: [documentId],
@@ -339,9 +405,11 @@ function ReaderDocumentWorkspace({
   };
   const requestedContext = contextOverrides[conversationId ?? "new"];
   const conversationSession = useConversationSession({
+    actorId: actor.id,
     context: requestedContext,
     defaultContext,
     conversationId,
+    draftScope: `reader:${documentId}`,
     getTurnContexts: () => {
       if (pendingTurnContext) {
         return [
@@ -368,6 +436,13 @@ function ReaderDocumentWorkspace({
         title: conversationT("error"),
         description: conversationT("retryHint"),
       }),
+    onDraftRestored: (draft) => {
+      setReasoningLevel(draft.reasoningLevel);
+      setContextOverrides((current) => ({
+        ...current,
+        [conversationId ?? "new"]: draft.context,
+      }));
+    },
     onTurnStarted: () => {
       setPendingTurnContext(undefined);
       setSelectedAnnotationId(undefined);
@@ -747,14 +822,14 @@ function ReaderDocumentWorkspace({
       personalContext: t("projects.personal"),
       pdfView: t("toolbar.pdfView"),
       reflowView: t("toolbar.reflowView"),
-      returnLibrary: t("returnLibrary"),
+      returnToOrigin: returnLabel,
       search: t("toolbar.search"),
       showOutline: t("toolbar.showOutline"),
       zoomIn: t("toolbar.zoomIn"),
       zoomLevel: t("toolbar.zoomLevel"),
       zoomOut: t("toolbar.zoomOut"),
     }),
-    [t],
+    [returnLabel, t],
   );
 
   const document = documentQuery.data;
@@ -917,9 +992,15 @@ function ReaderDocumentWorkspace({
       if (source.document_id === documentId) {
         updateLocation({ page: sourcePage, panel: "ask" });
       } else {
-        router.push(
-          `/reader/${source.document_id}${sourcePage ? `?page=${sourcePage}` : ""}` as Route,
-        );
+        const next = new URLSearchParams(locationParamsRef.current.toString());
+        next.delete("conversation");
+        next.delete("nav");
+        if (sourcePage) next.set("page", String(sourcePage));
+        else next.delete("page");
+        navigation.openContextualRoute({
+          destination: `/reader/${source.document_id}${next.size ? `?${next}` : ""}`,
+          originKind: "reader",
+        });
       }
     },
     onTurnContextClear: () => {
@@ -962,21 +1043,21 @@ function ReaderDocumentWorkspace({
     ),
   };
 
+  React.useEffect(() => {
+    window.document.title = `${title} · Scholens`;
+  }, [title]);
+
   return (
     <WorkspaceShell
       activeConversationId={conversationSession.activeConversationId}
-      activeDestination="library"
+      activeDestination={projectId ? "projects" : "library"}
       actor={actor}
       collapsed={collapsed}
       mobileHeaderCenter={
         <span className="block truncate text-sm font-medium">{title}</span>
       }
       mobileHeaderLeading={
-        <IconButton
-          label={t("returnLibrary")}
-          onClick={() => router.push("/library")}
-          variant="ghost"
-        >
+        <IconButton label={returnLabel} onClick={handleReturn} variant="ghost">
           <Icon glyph={BackIcon} size={24} />
         </IconButton>
       }
@@ -996,7 +1077,18 @@ function ReaderDocumentWorkspace({
         }
         viewMode={readerView}
       />
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+        {document?.processing_status !== "completed" ? (
+          <div className="absolute top-3 left-3 z-20 hidden lg:block">
+            <IconButton
+              label={returnLabel}
+              onClick={handleReturn}
+              variant="ghost"
+            >
+              <Icon glyph={BackIcon} size={20} />
+            </IconButton>
+          </div>
+        ) : null}
         {documentQuery.isPending && (
           <div className="m-auto w-full max-w-sm p-6">
             <LoadingState label={t("loadingDocument")} />
@@ -1085,7 +1177,7 @@ function ReaderDocumentWorkspace({
                       page: Math.min(Math.max(page, 1), pageCount),
                     });
                   }}
-                  onReturn={() => router.push("/library")}
+                  onReturn={handleReturn}
                   onViewChange={(nextView) => {
                     closeSearch();
                     setActiveTextSelection(undefined);
@@ -1434,7 +1526,7 @@ export function ReaderPage({ documentId }: { documentId: string }) {
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      const returnTo = `/reader/${documentId}`;
+      const returnTo = currentAppLocation(`/reader/${documentId}`);
       router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [documentId, router, session.status]);

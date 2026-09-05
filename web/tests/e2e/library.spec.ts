@@ -254,6 +254,41 @@ test.beforeEach(async ({ page }) => {
   await mockLibrary(page);
 });
 
+for (const viewport of [
+  { name: "desktop" },
+  { height: 844, name: "mobile", width: 390 },
+]) {
+  test(`returns from Reader to the exact Library state on ${viewport.name}`, async ({
+    page,
+  }) => {
+    if (viewport.width && viewport.height) {
+      await page.setViewportSize({
+        height: viewport.height,
+        width: viewport.width,
+      });
+    }
+    const paper = libraryPapers[0]!;
+    const title = paper.document.title ?? paper.document.original_filename;
+    await page.goto("/library?sort=title_asc");
+
+    const source = page.getByRole("link", { name: new RegExp(title) }).first();
+    await expect(source).toBeVisible();
+    await source.click();
+    await expect(page).toHaveURL(
+      new RegExp(`/reader/${paper.document.document_id}\\?.*nav=`),
+    );
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/library\?sort=title_asc$/);
+    await expect(source).toBeFocused();
+
+    await source.click();
+    await page.getByRole("button", { name: "Return to library" }).click();
+    await expect(page).toHaveURL(/\/library\?sort=title_asc$/);
+    await expect(source).toBeFocused();
+  });
+}
+
 test("keeps the mobile filter controls readable without horizontal overflow", async ({
   page,
 }) => {

@@ -391,6 +391,28 @@ test.beforeEach(async ({ page }) => {
   await mockProjects(page);
 });
 
+test("returns from Project detail to the exact Projects list state", async ({
+  page,
+}) => {
+  const project = projectFixtures[0]!;
+  await page.goto("/projects?q=truth&sort=title_asc");
+
+  const source = page
+    .locator("[data-project-row]")
+    .filter({ hasText: project.title })
+    .getByRole("link", { name: project.title });
+  await expect(source).toBeVisible();
+  await source.click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?.*nav=`));
+  await page.getByRole("tab", { exact: true, name: "Papers" }).click();
+  await expect(page).toHaveURL(/view=papers.*nav=/);
+
+  await page.getByRole("button", { name: "Back to projects" }).click();
+
+  await expect(page).toHaveURL(/\/projects\?q=truth&sort=title_asc$/);
+  await expect(source).toBeFocused();
+});
+
 test("supports the Projects critical journey", async ({ page }) => {
   await page.goto("/projects");
 

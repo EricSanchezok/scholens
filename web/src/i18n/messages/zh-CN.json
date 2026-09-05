@@ -808,7 +808,13 @@
   },
   "Reader": {
     "untitled": "未命名论文",
-    "returnLibrary": "返回资料库",
+    "return": {
+      "activity": "返回阅读活动",
+      "library": "返回资料库",
+      "project": "返回项目",
+      "reader": "返回上一篇论文",
+      "search": "返回搜索结果"
+    },
     "library": "资料库",
     "loadingDocument": "正在打开论文",
     "tryAgain": "重试",
@@ -1369,6 +1375,7 @@
     },
     "detail": {
       "back": "返回项目列表",
+      "returnActivity": "返回阅读活动",
       "manage": "管理项目",
       "openChat": "对话",
       "closeChat": "收起项目对话",

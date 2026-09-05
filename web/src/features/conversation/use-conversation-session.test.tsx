@@ -117,8 +117,10 @@ function renderSession(
         updateExistingContext,
       }: SessionProps) =>
         useConversationSession({
+          actorId: 1,
           context,
           conversationId,
+          draftScope: "test",
           onConversationCreated,
           onSubmissionError,
           reasoningLevel: "standard",
@@ -139,6 +141,7 @@ function renderSession(
 
 describe("useConversationSession optimistic submission", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     conversationApi.cancelConversationGeneration.mockReset();
     conversationApi.streamConversationBranch.mockReset();
     conversationApi.streamConversationRetry.mockReset();
@@ -147,6 +150,83 @@ describe("useConversationSession optimistic submission", () => {
     conversationApi.subscribeConversationEvents.mockReset();
     conversationApi.updateConversationContext.mockReset();
     Object.values(performanceTracker).forEach((mock) => mock.mockReset());
+  });
+
+  it("restores a session draft for the same actor and surface", () => {
+    window.sessionStorage.setItem(
+      "scholens:conversation-draft:v1:1:test:new",
+      JSON.stringify({
+        context: { kind: "library" },
+        message: "Continue this question",
+        reasoningLevel: "standard",
+        version: 1,
+      }),
+    );
+
+    const { result } = renderSession();
+
+    expect(result.current.composerForm.getValues("message")).toBe(
+      "Continue this question",
+    );
+  });
+
+  it("ignores malformed session drafts", () => {
+    window.sessionStorage.setItem(
+      "scholens:conversation-draft:v1:1:test:new",
+      JSON.stringify({
+        context: { kind: "selection", project_ids: "not-an-array" },
+        message: "Unsafe draft",
+        reasoningLevel: "turbo",
+        version: 1,
+      }),
+    );
+
+    const { result } = renderSession();
+
+    expect(result.current.composerForm.getValues("message")).toBe("");
+    expect(
+      window.sessionStorage.getItem(
+        "scholens:conversation-draft:v1:1:test:new",
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps drafts isolated when switching conversations", () => {
+    window.sessionStorage.setItem(
+      "scholens:conversation-draft:v1:1:test:new",
+      JSON.stringify({
+        context: { kind: "library" },
+        message: "New conversation draft",
+        reasoningLevel: "standard",
+        version: 1,
+      }),
+    );
+    window.sessionStorage.setItem(
+      `scholens:conversation-draft:v1:1:test:${conversationId}`,
+      JSON.stringify({
+        context: { kind: "library" },
+        message: "Existing conversation draft",
+        reasoningLevel: "standard",
+        version: 1,
+      }),
+    );
+    const { rerender, result } = renderSession();
+
+    expect(result.current.composerForm.getValues("message")).toBe(
+      "New conversation draft",
+    );
+    rerender({ conversationId });
+
+    expect(result.current.composerForm.getValues("message")).toBe(
+      "Existing conversation draft",
+    );
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(
+          "scholens:conversation-draft:v1:1:test:new",
+        ) ?? "null",
+      ),
+    ).toMatchObject({ message: "New conversation draft" });
   });
 
   it("publishes immediately and uses one atomic start request", async () => {
@@ -162,6 +242,15 @@ describe("useConversationSession optimistic submission", () => {
         finishStream = resolve;
       });
     });
+    window.sessionStorage.setItem(
+      "scholens:conversation-draft:v1:1:test:new",
+      JSON.stringify({
+        context: { kind: "library" },
+        message: "Exact draft",
+        reasoningLevel: "standard",
+        version: 1,
+      }),
+    );
     const { onConversationCreated, queryClient, result } = renderSession();
     act(() => result.current.composerForm.setValue("message", "Exact draft"));
 
@@ -214,6 +303,11 @@ describe("useConversationSession optimistic submission", () => {
     expect(onConversationCreated).toHaveBeenCalledWith(
       startInput?.conversationId,
     );
+    expect(
+      window.sessionStorage.getItem(
+        "scholens:conversation-draft:v1:1:test:new",
+      ),
+    ).toBeNull();
   });
 
   it("restores the exact draft after a pre-accept failure", async () => {

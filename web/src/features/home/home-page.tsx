@@ -70,8 +70,10 @@ export function HomeWorkspace({
   const projects = projectsQuery.data?.items ?? [];
   const requestedContext = contextOverrides[initialConversationId ?? "new"];
   const conversation = useConversationSession({
+    actorId: actor.id,
     conversationId: initialConversationId,
     context: requestedContext,
+    draftScope: "home",
     onConversationCreated: (conversationId) => {
       setContextOverrides((current) => ({
         ...current,
@@ -85,6 +87,13 @@ export function HomeWorkspace({
         title: t("conversation.error"),
         description: t("conversation.retryHint"),
       }),
+    onDraftRestored: (draft) => {
+      setReasoningLevel(draft.reasoningLevel);
+      setContextOverrides((current) => ({
+        ...current,
+        [initialConversationId ?? "new"]: draft.context,
+      }));
+    },
     onTurnStarted: recordCoreAction,
     reasoningLevel,
     scopeType: "global",

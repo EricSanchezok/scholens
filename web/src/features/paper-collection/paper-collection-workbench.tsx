@@ -37,6 +37,12 @@ import {
   PreviewVisibleIcon,
 } from "@/design-system/icons/semantic-icons";
 import { Icon } from "@/design-system/icons/icon";
+import {
+  ContextualLink,
+  useNavigationRestorer,
+  type NavigationOriginKind,
+  type NavigationSnapshot,
+} from "@/features/workspace-navigation";
 import { cn } from "@/lib/utilities/cn";
 import {
   defaultPaperListPreferences,
@@ -75,6 +81,37 @@ export type PaperCollectionItem = {
   snippet?: string;
   href: Route;
 };
+
+function PaperCollectionItemLink({
+  children,
+  className,
+  current,
+  item,
+  navigationOrigin,
+}: {
+  children: React.ReactNode;
+  className: string;
+  current: boolean;
+  item: PaperCollectionItem;
+  navigationOrigin?: NavigationOriginKind;
+}) {
+  const shared = {
+    className,
+    "data-state": current ? "active" : undefined,
+    href: item.href,
+  };
+  return navigationOrigin ? (
+    <ContextualLink
+      {...shared}
+      focusKey={item.id}
+      originKind={navigationOrigin}
+    >
+      {children}
+    </ContextualLink>
+  ) : (
+    <Link {...shared}>{children}</Link>
+  );
+}
 
 type PaperCollectionRenderedColumn = PaperCollectionColumn | "reading_time";
 type PaperCollectionRenderedSizedColumn =
@@ -785,6 +822,7 @@ export type PaperCollectionWorkbenchProps = {
   leading?: (item: PaperCollectionItem) => React.ReactNode;
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
+  navigationOrigin?: NavigationOriginKind;
   personalLabels?: boolean;
   scrollResetKey?: string;
   tableFooter?: React.ReactNode;
@@ -797,6 +835,7 @@ export function PaperCollectionWorkbench({
   contentState,
   items,
   leading,
+  navigationOrigin,
   onStatusChange,
   onTagClick,
   personalLabels = false,
@@ -987,8 +1026,67 @@ export function PaperCollectionWorkbench({
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
+  const restoredScrollRef = React.useRef(false);
+  useNavigationRestorer("paper-collection", {
+    capture: () => {
+      const scrollTop = scrollRef.current?.scrollTop ?? 0;
+      const anchor = rowVirtualizer
+        .getVirtualItems()
+        .find((row) => row.end >= scrollTop);
+      return {
+        anchorId: anchor ? items[anchor.index]?.id : undefined,
+        anchorOffset: anchor ? scrollTop - anchor.start : 0,
+        previewId,
+        scrollTop,
+      };
+    },
+    restore: (snapshot: NavigationSnapshot, { focusKey }) => {
+      const rawScrollTop =
+        typeof snapshot.scrollTop === "number" ? snapshot.scrollTop : 0;
+      const anchorIndex =
+        typeof snapshot.anchorId === "string"
+          ? items.findIndex((item) => item.id === snapshot.anchorId)
+          : -1;
+      const anchorOffset =
+        typeof snapshot.anchorOffset === "number" ? snapshot.anchorOffset : 0;
+      if (typeof snapshot.previewId === "string") {
+        setPreviewId(snapshot.previewId);
+      }
+      restoredScrollRef.current = true;
+      window.requestAnimationFrame(() => {
+        if (anchorIndex >= 0) {
+          rowVirtualizer.scrollToIndex(anchorIndex, { align: "start" });
+          window.requestAnimationFrame(() => {
+            const anchor = rowVirtualizer
+              .getVirtualItems()
+              .find((row) => row.index === anchorIndex);
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = anchor
+                ? anchor.start + anchorOffset
+                : rawScrollTop;
+            }
+          });
+        } else if (scrollRef.current) {
+          scrollRef.current.scrollTop = rawScrollTop;
+        }
+        if (focusKey) {
+          window.requestAnimationFrame(() => {
+            rootRef.current
+              ?.querySelector<HTMLElement>(
+                `[data-navigation-focus="${CSS.escape(focusKey)}"]`,
+              )
+              ?.focus({ preventScroll: true });
+          });
+        }
+      });
+    },
+  });
   React.useLayoutEffect(() => {
     if (contentState === undefined && scrollRef.current) {
+      if (restoredScrollRef.current) {
+        restoredScrollRef.current = false;
+        return;
+      }
       scrollRef.current.scrollTop = 0;
     }
   }, [contentState, scrollResetKey]);
@@ -1326,15 +1424,14 @@ export function PaperCollectionWorkbench({
                           <PaperThumbnail item={item} />
                         </div>
                         <div className="min-w-0" role="cell">
-                          <Link
+                          <PaperCollectionItemLink
                             className={cn(
                               "min-w-0 rounded-[var(--radius-sm)]",
                               focusSurfaceVariants({ intent: "selection" }),
                             )}
-                            data-state={
-                              preview?.id === item.id ? "active" : undefined
-                            }
-                            href={item.href}
+                            current={preview?.id === item.id}
+                            item={item}
+                            navigationOrigin={navigationOrigin}
                           >
                             <span className="line-clamp-2 text-sm leading-5 font-semibold">
                               {item.title}
@@ -1357,7 +1454,7 @@ export function PaperCollectionWorkbench({
                                 ) : null}
                               </span>
                             ) : null}
-                          </Link>
+                          </PaperCollectionItemLink>
                           <span className="mt-2 flex items-center gap-2">
                             <StatusControl
                               item={item}
@@ -1386,15 +1483,14 @@ export function PaperCollectionWorkbench({
                           <div role="cell">{leading(item)}</div>
                         ) : null}
                         <div className="min-w-0 overflow-hidden" role="cell">
-                          <Link
+                          <PaperCollectionItemLink
                             className={cn(
                               "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 overflow-hidden rounded-[var(--radius-sm)]",
                               focusSurfaceVariants({ intent: "selection" }),
                             )}
-                            data-state={
-                              preview?.id === item.id ? "active" : undefined
-                            }
-                            href={item.href}
+                            current={preview?.id === item.id}
+                            item={item}
+                            navigationOrigin={navigationOrigin}
                           >
                             <PaperThumbnail item={item} />
                             <span
@@ -1422,7 +1518,7 @@ export function PaperCollectionWorkbench({
                                 </span>
                               ) : null}
                             </span>
-                          </Link>
+                          </PaperCollectionItemLink>
                         </div>
                         {effectiveColumns.map((column) => (
                           <div

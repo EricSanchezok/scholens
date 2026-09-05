@@ -983,6 +983,7 @@ export function PapersView({
     <div className="h-full min-h-0 min-w-0 overflow-hidden">
       <PaperCollectionWorkbench
         {...workbenchProps}
+        navigationOrigin="library"
         scrollResetKey={resultSetKey}
         toolbar={collectionToolbar}
       />

@@ -132,12 +132,29 @@ The URL is the shareable reading state:
   canonical PDF default;
 - `translate`: `full` to lazily translate visible reflow blocks, or omitted.
 
+`nav` is an internal, opaque same-tab continuity token, not shareable reading
+state. A normal Library, Project, Activity, unified-search, or Reader-source
+link creates an actor-scoped, bounded session context. Reader's
+desktop and mobile return controls use that context and say where they return.
+Nested paper sources form a last-in-first-out Reader stack. A direct personal
+Reader visit falls back to Library; a direct Project Reader visit falls back to
+that Project's Papers view. Browser Back and visible return controls restore the
+same origin. A matching Library or Project collection restores its stable paper
+anchor, relative scroll offset, preview row, and keyboard focus without a route
+animation.
+
 Zoom, fit mode, desktop AI reflow Outline disclosure, mobile AI reflow Outline
-disclosure, search disclosure, search query, search match index, draft text,
+disclosure, search disclosure, search query, search match index,
 active browser selection, pending turn context, annotation editor state, and
 panel animation state are local. Invalid page, panel, and conversation
 parameters are normalized after the document metadata is known and must not
 produce a second history entry.
+
+Unsent Ask text, reasoning level, and explicit research context are versioned
+session drafts scoped by actor, document, and Conversation. A deliberate switch
+between personal and Project context for the same paper keeps that draft. Drafts
+survive soft route changes and refresh, never include PDF selection text or turn
+excerpts, and clear only after the Server accepts the turn.
 
 When `project` is present, Reader always refreshes the Document's accessible
 Project memberships on mount. Cached membership data, an in-flight refresh, or

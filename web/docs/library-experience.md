@@ -20,16 +20,17 @@ Home's conversation or composer implementation.
 
 ## State ownership
 
-| State                                                         | Owner                    |
-| ------------------------------------------------------------- | ------------------------ |
-| active tab, committed query, status/tag/kind filters, sort    | URL search parameters    |
-| papers, outputs, summary, tags, projects, ingestion jobs      | TanStack Query           |
-| ordered paper columns, column widths, and preview layout      | account preference API   |
-| Zotero collections, library pages, operations, status         | TanStack Query           |
-| source import fields                                          | React Hook Form + Zod    |
-| paper search draft, selected rows, open dialogs, upload queue | feature-local state      |
-| Zotero selection                                              | feature-local state      |
-| shell collapse and mobile navigation disclosure               | Workspace Shell boundary |
+| State                                                         | Owner                        |
+| ------------------------------------------------------------- | ---------------------------- |
+| active tab, committed query, status/tag/kind filters, sort    | URL search parameters        |
+| papers, outputs, summary, tags, projects, ingestion jobs      | TanStack Query               |
+| ordered paper columns, column widths, and preview layout      | account preference API       |
+| Zotero collections, library pages, operations, status         | TanStack Query               |
+| source import fields                                          | React Hook Form + Zod        |
+| paper search draft, selected rows, open dialogs, upload queue | feature-local state          |
+| Zotero selection                                              | feature-local state          |
+| shell collapse and mobile navigation disclosure               | Workspace Shell boundary     |
+| Reader origin, collection anchor, last focused paper          | Workspace navigation session |
 
 Paper search keeps an editable local draft and submits its trimmed value only
 when the user presses Enter; typing never changes the URL or result collection.
@@ -40,6 +41,14 @@ TanStack queries and progressively append pages as the collection approaches
 the viewport; a visible Load more action remains the keyboard, reduced-motion,
 and observer fallback. Opaque continuation cursors are never decoded by the
 Web. Outputs retain explicit Previous/Next navigation.
+
+Opening a paper with a normal same-tab activation records the exact Library URL
+and the virtual collection's stable row anchor, relative offset, current
+preview, and source focus. Reader return and browser Back restore that state.
+Modified clicks and source-link copy actions remain canonical and do not carry
+private restoration state. Primary Library navigation remembers the most recent
+root Library URL for the current browser session; it never remembers Reader
+URLs.
 
 Desktop Library chrome is a compact 44 px workbench header: the page title,
 Papers/Outputs tabs with counts, and Add papers action share one row. Search,
