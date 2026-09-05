@@ -964,7 +964,7 @@ async def test_prepare_upload_size_error_explains_how_to_recover() -> None:
                 },
             )
 
-    result = response.json()["result"]
+    result = _mcp_json(response)["result"]
     assert result["isError"] is True
     error = json.loads(result["content"][0]["text"])["error"]
     assert error["code"] == "tool_arguments_invalid"
