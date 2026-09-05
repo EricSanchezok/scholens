@@ -9,13 +9,16 @@ READER_URL_MAX_LENGTH = 2_048
 
 READER_URL_DESCRIPTION = (
     "Authenticated browser URL for reading this stored paper in Scholens. Use it "
-    "as the durable user-facing Markdown link, for example [title](reader_url). "
+    "as the durable user-facing Markdown link by substituting the actual returned "
+    "URL, for example [Paper title](https://scholens.example/reader/<document-id>). "
+    "Never emit the literal placeholder reader_url. "
     "It is null when no document is available yet."
 )
 
 READER_LINK_GUIDANCE = (
-    "Use reader_url as the durable user-facing Scholens link. When writing "
-    "Markdown, notes, reports, or citations, use [title](reader_url). Keep "
+    "Use the actual returned reader_url as the durable user-facing Scholens link. "
+    "When writing Markdown, notes, reports, or citations, substitute it into the "
+    "link target; never emit the literal text reader_url. Keep "
     "DOI, arXiv, or source URLs as provenance only; never persist temporary "
     "file_url, preview_url, or upload URLs."
 )

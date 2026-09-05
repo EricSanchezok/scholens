@@ -39,11 +39,14 @@ from app.tooling import (
     ToolExecutionKind,
     ToolOutcome,
     ToolOutcomeFinalizer,
+    ToolOutcomePresentation,
     ToolProfile,
     serialize_tool_success,
 )
 from app.tooling.contracts import DEFAULT_TOOL_OUTPUT_BYTES
 from app.tooling.invocations import ToolInvocationGateway
+from app.tooling.error_projection import project_tool_error
+from app.tooling.outcome_presentation import outcome_presentation
 from app.tooling.results import persisted_tool_outcome, restore_tool_outcome
 from app.tooling.workspace import (
     CONVERSATION_TOOL_PROFILE,
@@ -993,3 +996,82 @@ def test_workspace_profiles_share_one_canonical_definition_set() -> None:
             conversation_tool.input_model.model_json_schema()
             == mcp_tool.input_model.model_json_schema()
         )
+
+
+def test_workspace_catalog_has_distinct_intents_domains_and_bounded_schema() -> None:
+    catalog = build_workspace_tool_catalog(
+        ingestion=MagicMock(spec=PaperIngestionWorkflow),
+        citations=MagicMock(spec=CitationWorkflow),
+    )
+    definitions = catalog.definitions_for(_access(CONVERSATION_TOOL_PROFILE))
+
+    assert len({tool.intent for tool in definitions}) == len(definitions)
+    assert all(tool.domain != "workspace" for tool in definitions)
+    assert all(
+        marker in tool.description
+        for tool in definitions
+        for marker in ("Use when ", "Do not use when ", "Returns ", "Next: ")
+    )
+    declarations = json.dumps(
+        catalog.provider_declarations(_access(CONVERSATION_TOOL_PROFILE)),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert len(declarations) <= 123_324
+
+
+def test_search_tool_descriptions_make_exact_and_concept_routes_exclusive() -> None:
+    catalog = build_workspace_tool_catalog(
+        ingestion=MagicMock(spec=PaperIngestionWorkflow),
+        citations=MagicMock(spec=CitationWorkflow),
+    )
+    tools = {
+        tool.name: tool
+        for tool in catalog.definitions_for(_access(CONVERSATION_TOOL_PROFILE))
+    }
+
+    assert "cross-language" in tools["search_scholens_knowledge"].description
+    assert "regular-expression" in tools["search_scholens_knowledge"].description
+    assert "contiguous phrase" in tools["search_paper_content"].description
+    assert "keyword list" in tools["search_paper_content"].description
+    assert (
+        tools["search_scholens_knowledge"].intent
+        == "conceptual_stored_knowledge_retrieval"
+    )
+    assert tools["search_paper_content"].intent == "exact_known_paper_text_matching"
+
+
+def test_success_presentation_distinguishes_empty_and_unchanged() -> None:
+    assert outcome_presentation(ToolOutcome(payload={"items": []})).outcome == "empty"
+    assert (
+        outcome_presentation(ToolOutcome(payload={"changed": False})).outcome
+        == "unchanged"
+    )
+    found = outcome_presentation(ToolOutcome(payload={"matches": ["one", "two"]}))
+    assert found.outcome == "results"
+    assert found.result_count == 2
+
+
+def test_explicit_success_presentation_survives_durable_replay() -> None:
+    original = ToolOutcome(
+        payload={"job_id": "example"},
+        presentation=ToolOutcomePresentation(outcome="unchanged", result_count=0),
+    )
+
+    restored = restore_tool_outcome(persisted_tool_outcome(original))
+
+    assert restored.presentation == original.presentation
+
+
+def test_shared_tool_error_projection_is_actionable_and_bounded() -> None:
+    projected = project_tool_error(
+        AppError(
+            code="paper_content_cursor_invalid",
+            message="The cursor is invalid",
+            kind=FailureKind.INVALID_ARGUMENT,
+        )
+    )
+
+    assert projected["retryable"] is False
+    assert "immediately preceding response" in str(projected["remediation"])
+    assert "details" not in projected

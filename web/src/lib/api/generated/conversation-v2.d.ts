@@ -704,6 +704,10 @@ export interface components {
              * @enum {string}
              */
             kind: "activity";
+            /** Outcome */
+            outcome?: ("results" | "empty" | "changed" | "unchanged") | null;
+            /** Result Count */
+            result_count?: number | null;
             /** Sequence */
             sequence: number;
             /** Source Count */

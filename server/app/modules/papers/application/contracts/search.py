@@ -178,11 +178,17 @@ class PaperSearchCandidate(BaseModel):
     created_at: datetime
     last_accessed_at: datetime
     snippets: list[PaperSearchSnippet] = Field(default_factory=list, max_length=3)
+    retrieval_modes: list[Literal["exact", "full_text", "fuzzy", "semantic"]] = Field(
+        default_factory=list, max_length=4
+    )
 
 
 class PaperSearchCandidatePage(BaseModel):
     items: list[PaperSearchCandidate]
     total: int = Field(ge=0)
+    search_mode: Literal["hybrid", "lexical"] = "lexical"
+    document_semantic_index_coverage: float = Field(default=0, ge=0, le=1)
+    passage_semantic_index_coverage: float = Field(default=0, ge=0, le=1)
 
 
 class PaperSearchStats(BaseModel):

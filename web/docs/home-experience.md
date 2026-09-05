@@ -154,7 +154,11 @@ visible.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
 tool name. Every real invocation remains a separate Worklog row so long tool
-runs never look idle. Model reasoning, provider heartbeats, raw tool names,
+runs never look idle. A completed row distinguishes results (including a
+bounded count), an expected empty result, a state change, and a successful
+no-op; none of these is presented as a technical failure. The collapsed summary
+separately reports sources that were available to the agent and citations that
+were materialized in the final answer. Model reasoning, provider heartbeats, raw tool names,
 arguments, and return payloads are not product UI. Only final items may
 publish references. `response.ready` releases the Composer and completed-answer
 actions without waiting for a GET refetch, conversation title, or suggestion
@@ -332,6 +336,7 @@ The Figma conversation-state frames and Storybook stories map one-to-one:
 | Strategy change           | `Conversation View / Strategy Change`                |
 | Completed collapsed       | `Conversation View / Completed Collapsed`            |
 | Completed expanded        | `Conversation View / Multiple Tools Expanded`        |
+| Empty search outcome      | `Conversation View / Empty Search Outcome`           |
 | Partial failure           | `Conversation View / Partial Failure`                |
 | Cancelled                 | `Conversation View / Cancelled`                      |
 | Direct answer             | `Conversation View / Direct Answer`                  |
@@ -468,11 +473,12 @@ against showing the same submitted prompt twice while a stream is active.
 Each generated response owns one `ConversationWorklog` before its final answer.
 During a run it opens by default; a final item collapses it unless the user has
 manually chosen a state. Persisted history starts collapsed. Expanded rows
-interleave concise progress with outcome-homogeneous tool batches, show at most
-two safe subject examples per batch, and never create nested tool disclosures.
-Each batch names its visible state, and the summary labels the reference count
-as cited sources rather than retrieval results. When inline space permits,
-desktop batch state and safe subject examples share one horizontal baseline;
+interleave concise progress with one row per real invocation and never create
+nested tool disclosures. Each invocation distinguishes results, an expected
+empty result, a state change, a successful no-op, and a technical failure. The
+summary reports evidence made available to the agent separately from sources
+cited in the answer. When inline space permits,
+desktop invocation state and its safe subject share one horizontal baseline;
 narrow layouts wrap the subject without widening the conversation lane. The
 summary is the only polite live-region announcement, so screen readers do not
 receive every tool update. The same semantic component is used on desktop and

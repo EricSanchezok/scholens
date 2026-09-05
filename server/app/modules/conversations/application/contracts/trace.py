@@ -19,6 +19,8 @@ class ConversationActivity(BaseModel):
     connector_name: str | None = Field(default=None, max_length=80)
     source_count: int | None = Field(default=None, ge=0)
     artifact_count: int | None = Field(default=None, ge=0)
+    outcome: Literal["results", "empty", "changed", "unchanged"] | None = None
+    result_count: int | None = Field(default=None, ge=0)
 
 
 class ConversationCitationSummary(BaseModel):

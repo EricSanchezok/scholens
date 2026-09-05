@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "description": "Redacted tool-routing, retrieval, recovery, and citation acceptance cases. No production prompts or document text.",
+  "thresholds": {
+    "task_success": 0.95,
+    "schema_valid_after_one_retry": 0.99,
+    "retrieval_recall_at_5": 0.9,
+    "source_admission": 1.0,
+    "unauthorized_calls": 0
+  },
+  "cases": [
+    {"id":"route-concept","category":"route","prompt":"Find papers discussing natural-language world control even if wording differs.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":["search_paper_content"]},
+    {"id":"route-exact","category":"route","prompt":"Find the exact token WASD inside this known paper.","expected_tools":["search_paper_content"],"forbidden_tools":["search_scholens_knowledge"]},
+    {"id":"route-read","category":"route","prompt":"Read lines around a known search match.","expected_tools":["get_paper_content"],"forbidden_tools":["get_paper"]},
+    {"id":"route-batch-ingest","category":"route","prompt":"Import three known DOI sources.","expected_tools":["ingest_papers"],"forbidden_tools":["ingest_paper"]},
+    {"id":"route-single-ingest","category":"route","prompt":"Import this one arXiv paper.","expected_tools":["ingest_paper"],"forbidden_tools":["ingest_papers"]},
+    {"id":"route-quote-annotation","category":"route","prompt":"Highlight this exact quote in the paper.","expected_tools":["annotate_paper"],"forbidden_tools":["create_annotation_thread"]},
+    {"id":"route-position-annotation","category":"route","prompt":"Create an annotation at this validated Reader position.","expected_tools":["create_annotation_thread"],"forbidden_tools":["annotate_paper"]},
+    {"id":"route-job-one","category":"route","prompt":"Wait for this one known job UUID.","expected_tools":["get_job"],"forbidden_tools":["list_jobs"]},
+    {"id":"route-job-many","category":"route","prompt":"Wait for these accepted ingestion jobs together.","expected_tools":["wait_for_jobs"],"forbidden_tools":["list_jobs"]},
+    {"id":"route-citation-resolve","category":"route","prompt":"Stored citation metadata is missing required fields; recover them.","expected_tools":["resolve_paper_citation"],"forbidden_tools":["get_paper_citation"]},
+
+    {"id":"retrieval-exact-token","category":"retrieval","prompt":"Locate the exact token WASD.","expected_tools":["search_paper_content"],"forbidden_tools":[]},
+    {"id":"retrieval-regex-alternative","category":"retrieval","prompt":"Locate either natural language or text command exactly.","expected_tools":["search_paper_content"],"forbidden_tools":[]},
+    {"id":"retrieval-long-phrase","category":"retrieval","prompt":"Check whether one exact long phrase occurs contiguously.","expected_tools":["search_paper_content"],"forbidden_tools":[]},
+    {"id":"retrieval-keywords","category":"retrieval","prompt":"Find a concept described by several non-contiguous keywords.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":["search_paper_content"]},
+    {"id":"retrieval-typo","category":"retrieval","prompt":"Find a paper despite a misspelled title term.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"retrieval-zh-en","category":"retrieval","prompt":"用中文查找英文论文正文中的世界控制概念。","expected_tools":["search_scholens_knowledge"],"forbidden_tools":["search_paper_content"]},
+    {"id":"retrieval-en-zh","category":"retrieval","prompt":"Search English concepts in Chinese stored text.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"retrieval-paper-scope","category":"retrieval","prompt":"Conceptually search only this known paper.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"retrieval-project-scope","category":"retrieval","prompt":"Search only the repository-bound Project.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"retrieval-no-match","category":"retrieval","prompt":"Search for a concept that is not present and report no match.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+
+    {"id":"recovery-invalid-arguments","category":"recovery","prompt":"Correct one schema-invalid call and retry once.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"recovery-invalid-cursor","category":"recovery","prompt":"Restart after an expired opaque cursor.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"recovery-output-budget","category":"recovery","prompt":"Switch from an oversized legacy response to its bounded page tool.","expected_tools":["get_paper_page"],"forbidden_tools":["get_paper"]},
+    {"id":"recovery-duplicate","category":"recovery","prompt":"Recognize an idempotent duplicate without creating it again.","expected_tools":["ingest_paper"],"forbidden_tools":[]},
+    {"id":"recovery-permission","category":"recovery","prompt":"Stop retrying a resource hidden by permissions.","expected_tools":["list_projects"],"forbidden_tools":[]},
+    {"id":"recovery-connector","category":"recovery","prompt":"Continue with stored knowledge when an optional connector is unavailable.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+
+    {"id":"citation-project","category":"citation","prompt":"Answer from a Project paper with a verified source.","expected_tools":["search_scholens_knowledge","get_paper_content"],"forbidden_tools":[]},
+    {"id":"citation-paper","category":"citation","prompt":"Answer from one Reader paper with exact line evidence.","expected_tools":["get_paper_content"],"forbidden_tools":[]},
+    {"id":"citation-multi-source","category":"citation","prompt":"Synthesize two stored papers and cite both.","expected_tools":["search_scholens_knowledge","get_paper_content"],"forbidden_tools":[]},
+    {"id":"citation-empty","category":"citation","prompt":"Report that no source matched without fabricating a citation.","expected_tools":["search_scholens_knowledge"],"forbidden_tools":[]},
+    {"id":"citation-exact-search","category":"citation","prompt":"Cite the exact matching line returned by paper-content search.","expected_tools":["search_paper_content","get_paper_content"],"forbidden_tools":[]},
+    {"id":"citation-reader-link","category":"citation","prompt":"Link the cited paper using the actual returned Reader URL.","expected_tools":["get_paper_content"],"forbidden_tools":[]}
+  ]
+}

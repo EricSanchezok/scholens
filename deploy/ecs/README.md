@@ -34,7 +34,8 @@ It owns:
 - the alert SNS topic and persistent application/cache security groups.
 
 The content bucket expires abandoned browser upload staging objects under
-`uploads/` and temporary Zotero import handoff objects under `zotero-imports/`
+`uploads/`, temporary Zotero import handoff objects under `zotero-imports/`,
+and temporary passage-vector handoff objects under `jobs/pdf-postprocess/`
 after two days; canonical `documents/` artifacts have no expiration rule.
 
 Retained resources use `DeletionPolicy: RetainExceptOnCreate` and
@@ -635,6 +636,17 @@ has been reviewed.
 
 Never use Alembic downgrade as production application rollback. A migration failure is
 repaired by a forward revision or an explicitly approved database recovery operation.
+
+The passage-semantic release is an additive rollout. Run the protected migration
+first to add nullable passage-vector columns and indexes, then deploy the
+candidate API and workers in the normal compatibility phase, followed by Web.
+Adjacent versions remain compatible because older Jobs omit the artifact, new
+Jobs retry an older Server once without the exact additive artifact field, and
+the public activity fields are optional. After runtime verification, run
+`maintenance backfill-passage-embeddings` dry first and then in reviewed apply
+batches until `candidates` reaches zero. Rollback selects the previous immutable
+application images and leaves the nullable derived columns in place; it never
+downgrades the database.
 
 ## Capacity and failure handling
 

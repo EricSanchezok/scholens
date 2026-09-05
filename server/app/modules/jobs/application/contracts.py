@@ -16,6 +16,10 @@ from scholens_job_contracts import (
     UNICODE_REPLACEMENT_WARNING_CODE,
     require_pdf_callback_content_size,
 )
+from scholens_ai import (
+    MAX_PASSAGE_EMBEDDINGS,
+    MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES,
+)
 
 from app.shared.domain import JsonValue
 from app.modules.papers.application.contracts.extraction import ResponseCitation
@@ -84,6 +88,21 @@ class JobCallbackIdentity(BaseModel):
     task_id: UUID
 
 
+class PassageEmbeddingArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    storage_key: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=r"^jobs/pdf-postprocess/[0-9a-f-]+/passage-embeddings-v1\.bin$",
+    )
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_revision: str = Field(min_length=1, max_length=128)
+    dimension: Literal[384]
+    passage_count: int = Field(ge=0, le=MAX_PASSAGE_EMBEDDINGS)
+    byte_size: int = Field(gt=0, le=MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES)
+
+
 class PdfPostprocessCallback(JobCallbackIdentity):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +120,7 @@ class PdfPostprocessCallback(JobCallbackIdentity):
         default=None,
         pattern=r"^[0-9a-f]{64}$",
     )
+    passage_embedding_artifact: PassageEmbeddingArtifact | None = None
 
     @model_validator(mode="after")
     def validate_embedding_projection(self) -> PdfPostprocessCallback:

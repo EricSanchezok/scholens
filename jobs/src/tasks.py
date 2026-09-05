@@ -21,7 +21,17 @@ import httpx
 import requests
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from scholens_ai import EMBEDDING_MODEL_REVISION, embed_text
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    MAX_PASSAGE_EMBEDDINGS,
+    PASSAGE_EMBEDDING_BATCH_SIZE,
+    PASSAGE_STRIDE_LINES,
+    PassageEmbeddingRecord,
+    build_document_passages,
+    embed_text,
+    encode_passage_embedding_artifact,
+    try_local_embedder,
+)
 from scholens_job_contracts import (
     PDF_TEXT_REPAIR_TASK_NAME,
     ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS,
@@ -69,6 +79,48 @@ from src.zotero import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _passage_embedding_artifact(
+    *, task_id: str, parser_markdown_s3_key: str
+) -> tuple[bytes, str, int] | None:
+    raw_content = s3_service.download_file_to_bytes(parser_markdown_s3_key).decode(
+        "utf-8"
+    )
+    line_count = raw_content.count("\n") + 1
+    if (line_count + PASSAGE_STRIDE_LINES - 1) // PASSAGE_STRIDE_LINES > (
+        MAX_PASSAGE_EMBEDDINGS
+    ):
+        return None
+    passages_by_digest = {
+        passage.source_digest: passage
+        for passage in build_document_passages(raw_content)
+        if passage.content.strip()
+    }
+    passages = tuple(passages_by_digest.values())
+    if not passages or len(passages) > MAX_PASSAGE_EMBEDDINGS:
+        return None
+    embedder = try_local_embedder()
+    if embedder is None:
+        return None
+    records: list[PassageEmbeddingRecord] = []
+    for offset in range(0, len(passages), PASSAGE_EMBEDDING_BATCH_SIZE):
+        batch = passages[offset : offset + PASSAGE_EMBEDDING_BATCH_SIZE]
+        embeddings = embedder.embed_passages([passage.content for passage in batch])
+        records.extend(
+            PassageEmbeddingRecord(
+                source_digest=passage.source_digest,
+                embedding=tuple(embedding),
+            )
+            for passage, embedding in zip(batch, embeddings, strict=True)
+        )
+    artifact = encode_passage_embedding_artifact(
+        model_revision=EMBEDDING_MODEL_REVISION,
+        records=records,
+    )
+    key = f"jobs/pdf-postprocess/{task_id}/passage-embeddings-v1.bin"
+    return artifact, key, len(records)
+
 
 PDF_TASK_SOFT_TIME_LIMIT_SECONDS = 1200
 PDF_TASK_TIME_LIMIT_SECONDS = 1260
@@ -287,6 +339,66 @@ def _without_pdf_page_count(payload: dict[str, Any]) -> dict[str, Any]:
             key: value for key, value in result.items() if key != "page_count"
         }
     return compatible
+
+
+def _deliver_pdf_postprocess_webhook(
+    webhook_url: str,
+    payload: dict[str, Any],
+    *,
+    task_id: str,
+    timeout: float = 60,
+) -> bool:
+    """Retry an old Server once without the additive passage artifact."""
+
+    response: requests.Response | None = None
+    try:
+        response = post_signed_json(webhook_url, payload, timeout=timeout)
+        if _rejects_additive_passage_artifact(response):
+            response.close()
+            response = None
+            logger.warning(
+                "job.pdf_postprocess.passage_artifact_compatibility_retry",
+                extra={"compatibility_contract": "passage_embedding_artifact"},
+            )
+            response = post_signed_json(
+                webhook_url,
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key != "passage_embedding_artifact"
+                },
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        logger.info("job.webhook.delivered", extra={"job_id": task_id})
+        return True
+    except requests.RequestException:
+        logger.exception("job.webhook.delivery_failed", extra={"job_id": task_id})
+        return False
+    finally:
+        if response is not None:
+            response.close()
+
+
+def _rejects_additive_passage_artifact(response: requests.Response) -> bool:
+    if response.status_code != 422:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict) or body.get("code") != "request_validation_failed":
+        return False
+    details = body.get("details")
+    errors = details.get("errors") if isinstance(details, dict) else None
+    if not isinstance(errors, list) or not errors:
+        return False
+    return all(
+        isinstance(error, dict)
+        and tuple(error.get("location", ())) == ("body", "passage_embedding_artifact")
+        and error.get("type") in {"extra_forbidden", "value_error.extra"}
+        for error in errors
+    )
 
 
 def _deliver_zotero_webhook(
@@ -1421,6 +1533,7 @@ def postprocess_pdf_task(
     claim_url: str | None = None,
     semantic_text: str | None = None,
     semantic_source_digest: str | None = None,
+    parser_markdown_s3_key: str | None = None,
 ) -> dict[str, Any]:
     """Trigger idempotent Server-side persistence work under a durable lease."""
     task_id = self.request.id
@@ -1443,7 +1556,38 @@ def postprocess_pdf_task(
                 "job.pdf_postprocess.embedding_failed",
                 extra={"job_id": task_id},
             )
-    if not _deliver_webhook(callback_url, payload, task_id=task_id):
+    if parser_markdown_s3_key:
+        try:
+            built = _passage_embedding_artifact(
+                task_id=task_id,
+                parser_markdown_s3_key=parser_markdown_s3_key,
+            )
+            if built is not None:
+                artifact, storage_key, passage_count = built
+                digest = hashlib.sha256(artifact).hexdigest()
+                s3_service.upload_bytes_to_key(
+                    artifact,
+                    storage_key,
+                    "application/vnd.scholens.passage-embeddings-v1",
+                )
+                payload["passage_embedding_artifact"] = {
+                    "storage_key": storage_key,
+                    "sha256": digest,
+                    "model_revision": EMBEDDING_MODEL_REVISION,
+                    "dimension": 384,
+                    "passage_count": passage_count,
+                    "byte_size": len(artifact),
+                }
+        except Exception:
+            logger.exception(
+                "job.pdf_postprocess.passage_embedding_failed",
+                extra={"job_id": task_id},
+            )
+    if not _deliver_pdf_postprocess_webhook(
+        callback_url,
+        payload,
+        task_id=task_id,
+    ):
         raise RuntimeError("pdf_postprocess_callback_failed")
     return {**payload, "status": "completed"}
 

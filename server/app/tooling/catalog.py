@@ -60,6 +60,7 @@ class ToolCatalog(Generic[CapabilitiesT]):
         require_agent_metadata: bool = False,
     ) -> None:
         self._definitions: dict[str, ToolDefinition[CapabilitiesT]] = {}
+        intents: set[str] = set()
         for definition in definitions:
             if definition.name in self._definitions:
                 raise ValueError(f"duplicate tool definition: {definition.name}")
@@ -74,6 +75,10 @@ class ToolCatalog(Generic[CapabilitiesT]):
                     )
                 if definition.behavior is None:
                     raise ValueError(f"tool {definition.name} requires behavior hints")
+                if definition.intent in intents:
+                    raise ValueError(
+                        f"tool {definition.name} duplicates intent {definition.intent}"
+                    )
             schema = definition.input_model.model_json_schema()
             if schema.get("type") != "object":
                 raise ValueError(
@@ -87,6 +92,7 @@ class ToolCatalog(Generic[CapabilitiesT]):
                         f"{', '.join(missing_descriptions)}"
                     )
             self._definitions[definition.name] = definition
+            intents.add(definition.intent or definition.name)
         self._profiles: dict[str, ToolProfile] = {}
         for profile in profiles:
             if profile.name in self._profiles:

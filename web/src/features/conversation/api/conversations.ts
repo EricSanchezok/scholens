@@ -207,6 +207,17 @@ function normalizeV2Event(
               typeof presentation.artifact_count === "number"
                 ? presentation.artifact_count
                 : null,
+            outcome:
+              presentation.outcome === "results" ||
+              presentation.outcome === "empty" ||
+              presentation.outcome === "changed" ||
+              presentation.outcome === "unchanged"
+                ? presentation.outcome
+                : null,
+            result_count:
+              typeof presentation.result_count === "number"
+                ? presentation.result_count
+                : null,
           },
         } as ConversationStreamEvent;
       }

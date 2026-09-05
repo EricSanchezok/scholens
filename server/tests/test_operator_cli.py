@@ -351,6 +351,10 @@ def test_identity_commands_do_not_collect_an_unpersisted_reason() -> None:
             ("maintenance", "backfill-passages"),
             ("--actor-email", "admin@example.com"),
         ),
+        (
+            ("maintenance", "backfill-passage-embeddings"),
+            ("--actor-email", "admin@example.com"),
+        ),
     ],
 )
 def test_non_prose_commands_reject_an_unpersisted_reason(

@@ -12,6 +12,7 @@ from app.shared.application.json_values import (
 from app.shared.domain import AppError, FailureKind, JsonValue
 from app.tooling.contracts import (
     ToolOutcome,
+    ToolOutcomePresentation,
     ToolResourceLink,
     ToolSourceCandidate,
 )
@@ -35,6 +36,7 @@ class _PersistedToolOutcome(BaseModel):
     artifacts: list[dict[str, JsonValue]] = Field(default_factory=list)
     action: dict[str, JsonValue] | None = None
     resource_links: list[_PersistedToolResourceLink] = Field(default_factory=list)
+    presentation: ToolOutcomePresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,11 @@ def _normalized_persisted_outcome(
                 "artifacts": outcome.artifacts,
                 "action": outcome.action,
                 "resource_links": [asdict(link) for link in outcome.resource_links],
+                "presentation": (
+                    asdict(outcome.presentation)
+                    if outcome.presentation is not None
+                    else None
+                ),
             }
         )
         if not isinstance(normalized, dict):  # pragma: no cover - model invariant
@@ -81,6 +88,7 @@ def _outcome_from_persisted(persisted: _PersistedToolOutcome) -> ToolOutcome:
         sources=persisted.sources,
         artifacts=persisted.artifacts,
         action=persisted.action,
+        presentation=persisted.presentation,
         resource_links=tuple(
             ToolResourceLink(
                 uri=link.uri,

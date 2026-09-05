@@ -64,4 +64,23 @@ describe("conversation worklog rows", () => {
       { kind: "batch", state: "succeeded" },
     ]);
   });
+
+  it("preserves empty-result semantics on the invocation row", () => {
+    const entry: ConversationTraceEntry = {
+      kind: "activity",
+      id: "search-empty",
+      sequence: 1,
+      category: "search",
+      state: "succeeded",
+      outcome: "empty",
+      result_count: 0,
+    };
+
+    expect(groupWorklogEntries([entry])).toMatchObject([
+      {
+        kind: "batch",
+        activities: [{ outcome: "empty", result_count: 0 }],
+      },
+    ]);
+  });
 });

@@ -75,6 +75,22 @@ describe("conversation SSE parsing", () => {
     });
   });
 
+  it("keeps successful empty-result semantics from a v2 activity", () => {
+    expect(
+      parseConversationEventBlock(
+        'event: message.part.updated\ndata: {"protocol_version":2,"event":"message.part.updated","response_id":"60000000-0000-4000-8000-000000000001","seq":4,"emitted_at":"2026-09-02T00:00:00Z","data":{"part_kind":"activity","part_id":"search-empty","state":"succeeded","presentation":{"sequence":4,"category":"search","outcome":"empty","result_count":0}}}',
+      ),
+    ).toMatchObject({
+      type: "activity",
+      activity: {
+        id: "search-empty",
+        state: "succeeded",
+        outcome: "empty",
+        result_count: 0,
+      },
+    });
+  });
+
   it("joins multiline data fields and ignores comments", () => {
     expect(
       parseConversationEventBlock(

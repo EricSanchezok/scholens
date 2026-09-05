@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import math
+import unicodedata
 from collections.abc import Callable, Hashable
 from datetime import datetime
 from typing import cast
@@ -194,6 +195,48 @@ class _ResearchRevisionAdvanced(RuntimeError):
 
 class _JsonDocumentRevisionAdvanced(RuntimeError):
     """A lightweight durable-JSON revision raced one bounded hydration."""
+
+
+def _query_script_bucket(query: str) -> str:
+    has_latin = any("LATIN" in unicodedata.name(character, "") for character in query)
+    has_han = any(
+        "CJK UNIFIED" in unicodedata.name(character, "") for character in query
+    )
+    if has_latin and has_han:
+        return "mixed"
+    if has_han:
+        return "han"
+    if has_latin:
+        return "latin"
+    return "other"
+
+
+def _count_bucket(count: int) -> str:
+    if count == 0:
+        return "0"
+    if count <= 5:
+        return "1_5"
+    if count <= 20:
+        return "6_20"
+    return "21_plus"
+
+
+def _length_bucket(query: str) -> str:
+    if len(query) <= 32:
+        return "short"
+    if len(query) <= 128:
+        return "medium"
+    return "long"
+
+
+def _coverage_bucket(coverage: float) -> str:
+    if coverage >= 1:
+        return "complete"
+    if coverage >= 0.8:
+        return "high"
+    if coverage > 0:
+        return "partial"
+    return "none"
 
 
 def _json(value: object) -> JsonValue:
@@ -1016,6 +1059,42 @@ class WorkspaceToolHandlers:
                 else None
             ),
             searched_scope=parsed.scope,
+            paper_search_mode=(
+                "hybrid"
+                if any(
+                    page.search_mode == "hybrid" for page in paper_source_pages.values()
+                )
+                else "lexical"
+            ),
+            document_semantic_index_coverage=max(
+                (
+                    page.document_semantic_index_coverage
+                    for page in paper_source_pages.values()
+                ),
+                default=0,
+            ),
+            passage_semantic_index_coverage=max(
+                (
+                    page.passage_semantic_index_coverage
+                    for page in paper_source_pages.values()
+                ),
+                default=0,
+            ),
+        )
+        add_counter(
+            "scholens.tool.knowledge_search",
+            attributes={
+                "script": _query_script_bucket(parsed.query),
+                "query_length": _length_bucket(parsed.query),
+                "result_count": _count_bucket(len(result.items)),
+                "search_mode": result.paper_search_mode,
+                "document_coverage": _coverage_bucket(
+                    result.document_semantic_index_coverage
+                ),
+                "passage_coverage": _coverage_bucket(
+                    result.passage_semantic_index_coverage
+                ),
+            },
         )
         sources = tuple(
             _document_source(
@@ -1093,6 +1172,7 @@ class WorkspaceToolHandlers:
                             document_id=paper.document_id,
                             project_id=project_id,
                             entity_id=paper.document_id,
+                            retrieval_modes=paper.retrieval_modes,
                             updated_at=paper.last_accessed_at,
                         ),
                         next_position=KnowledgeProducerPosition(offset=rank + 1),
@@ -1135,6 +1215,7 @@ class WorkspaceToolHandlers:
                                 "start_line": snippet.start_line,
                                 "end_line": snippet.end_line,
                             },
+                            retrieval_modes=paper.retrieval_modes,
                             updated_at=paper.last_accessed_at,
                         ),
                         next_position=next_position,
@@ -1834,9 +1915,19 @@ class WorkspaceToolHandlers:
             guidance=(
                 "Continue with next_cursor until total_match_count is present. Match "
                 "lines are UTF-8 bounded previews; use get_paper_content with the "
-                "returned line number for complete surrounding evidence. "
+                "returned line number for complete surrounding evidence. An empty "
+                "exact search does not prove that the concept is absent; use "
+                "search_scholens_knowledge for paraphrases or translations. "
                 f"{READER_LINK_GUIDANCE}"
             ),
+        )
+        add_counter(
+            "scholens.tool.paper_content_search",
+            attributes={
+                "script": _query_script_bucket(parsed.query),
+                "query_length": _length_bucket(parsed.query),
+                "result_count": _count_bucket(len(result.matches)),
+            },
         )
         sources: list[DocumentSourceCandidate] = []
         for match in page.matches:

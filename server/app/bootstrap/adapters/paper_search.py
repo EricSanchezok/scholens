@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import logging
 import math
@@ -262,6 +262,12 @@ class _SearchRanking:
     retrieval_modes: dict[UUID, set[RetrievalMode]]
     semantic_ids: list[UUID]
     ranked_ids: list[UUID]
+    semantic_passages: dict[UUID, list[PaperSearchSnippet]] = field(
+        default_factory=dict
+    )
+    semantic_available: bool = False
+    document_semantic_coverage: float = 0
+    passage_semantic_coverage: float = 0
 
 
 def _visibility_condition(
@@ -476,7 +482,7 @@ class PostgresPaperSearch:
         self,
         *,
         conditions: list[ColumnElement[bool]],
-    ) -> tuple[int, int, float]:
+    ) -> tuple[int, int, int, float, float]:
         total = int(
             self._db.scalar(select(func.count(Document.id)).where(*conditions)) or 0
         )
@@ -491,7 +497,26 @@ class PostgresPaperSearch:
             )
             or 0
         )
-        return total, semantic, semantic / total if total else 0
+        semantic_passages = int(
+            self._db.scalar(
+                select(func.count(func.distinct(DocumentPassage.document_id)))
+                .join(Document, Document.id == DocumentPassage.document_id)
+                .where(
+                    *conditions,
+                    DocumentPassage.embedding_model_revision
+                    == EMBEDDING_MODEL_REVISION,
+                    DocumentPassage.embedding.is_not(None),
+                )
+            )
+            or 0
+        )
+        return (
+            total,
+            semantic,
+            semantic_passages,
+            semantic / total if total else 0,
+            semantic_passages / total if total else 0,
+        )
 
     def _ranking(
         self,
@@ -547,6 +572,8 @@ class PostgresPaperSearch:
         )
 
         semantic_candidates: list[tuple[UUID, float]] = []
+        passage_candidates: list[tuple[UUID, int, int, str, float]] = []
+        semantic_available = False
         embedder = try_local_embedder() if self._semantic and plan.hybrid else None
         if embedder is not None:
             try:
@@ -575,13 +602,99 @@ class PostgresPaperSearch:
                         .limit(self._CANDIDATE_LIMIT)
                     ).tuples()
                 ]
+                passage_distance = DocumentPassage.embedding.cosine_distance(
+                    query_embedding
+                )
+                passage_conditions: list[ColumnElement[bool]] = [
+                    *conditions,
+                    DocumentPassage.embedding_model_revision
+                    == EMBEDDING_MODEL_REVISION,
+                    DocumentPassage.embedding.is_not(None),
+                ]
+                if has_exact_metadata:
+                    passage_conditions.append(
+                        Document.id.in_(sorted(lexical_ids, key=str))
+                    )
+                passage_candidates = [
+                    (
+                        document_id,
+                        int(start_line),
+                        int(end_line),
+                        str(content),
+                        float(candidate_distance),
+                    )
+                    for (
+                        document_id,
+                        start_line,
+                        end_line,
+                        content,
+                        candidate_distance,
+                    ) in self._db.execute(
+                        select(
+                            DocumentPassage.document_id,
+                            DocumentPassage.start_line,
+                            DocumentPassage.end_line,
+                            func.left(DocumentPassage.content, _PASSAGE_CHARACTERS),
+                            passage_distance.label("cosine_distance"),
+                        )
+                        .join(Document, Document.id == DocumentPassage.document_id)
+                        .where(*passage_conditions)
+                        .order_by(passage_distance, DocumentPassage.id)
+                        .limit(self._CANDIDATE_LIMIT)
+                    ).tuples()
+                ]
+                semantic_available = True
             except Exception:
+                semantic_candidates = []
+                passage_candidates = []
                 logger.exception("paper.search.semantic_lane_failed")
+        best_semantic_distance: dict[UUID, float] = {}
+        for document_id, distance in semantic_candidates:
+            best_semantic_distance[document_id] = min(
+                distance,
+                best_semantic_distance.get(document_id, distance),
+            )
+        for document_id, _start, _end, _content, distance in passage_candidates:
+            best_semantic_distance[document_id] = min(
+                distance,
+                best_semantic_distance.get(document_id, distance),
+            )
         semantic_ids = _accepted_semantic_candidates(
-            semantic_candidates,
+            sorted(
+                best_semantic_distance.items(), key=lambda item: (item[1], str(item[0]))
+            ),
             lexical_ids=lexical_ids,
             has_exact_metadata=has_exact_metadata,
         )
+        semantic_id_set = set(semantic_ids)
+        finite_passage_distances = [
+            distance
+            for document_id, _start, _end, _content, distance in passage_candidates
+            if document_id in semantic_id_set and math.isfinite(distance)
+        ]
+        best_passage_distance = (
+            min(finite_passage_distances) if finite_passage_distances else None
+        )
+        semantic_passages: defaultdict[UUID, list[PaperSearchSnippet]] = defaultdict(
+            list
+        )
+        for document_id, start_line, end_line, content, distance in passage_candidates:
+            if (
+                document_id not in semantic_id_set
+                or len(semantic_passages[document_id]) >= 3
+                or best_passage_distance is None
+                or not math.isfinite(distance)
+                or distance > _E5_SEMANTIC_MAX_COSINE_DISTANCE
+                or distance > best_passage_distance + _E5_SEMANTIC_BEST_DISTANCE_DELTA
+            ):
+                continue
+            semantic_passages[document_id].append(
+                PaperSearchSnippet(
+                    text=json_bounded_prefix(content, max_bytes=900),
+                    start_line=start_line,
+                    end_line=end_line,
+                )
+            )
 
         scores: defaultdict[UUID, float] = defaultdict(float)
         retrieval_modes: defaultdict[UUID, set[RetrievalMode]] = defaultdict(set)
@@ -609,12 +722,23 @@ class PostgresPaperSearch:
                     .order_by(Document.created_at.desc(), Document.id)
                 ).all()
             )
+        (
+            _total,
+            _document_semantic,
+            _passage_semantic,
+            document_coverage,
+            passage_coverage,
+        ) = self._semantic_coverage(conditions=conditions)
         return _SearchRanking(
             conditions=conditions,
             text_query=text_query,
             retrieval_modes=dict(retrieval_modes),
             semantic_ids=semantic_ids,
             ranked_ids=ranked_ids,
+            semantic_passages=dict(semantic_passages),
+            semantic_available=semantic_available,
+            document_semantic_coverage=document_coverage,
+            passage_semantic_coverage=passage_coverage,
         )
 
     def search(
@@ -645,9 +769,6 @@ class PostgresPaperSearch:
         ).all()
         documents = {document.id: (document, entry) for document, entry in rows}
         page_rows = [documents[document_id] for document_id in page_ids]
-        _visible_total, _semantic_total, semantic_coverage = self._semantic_coverage(
-            conditions=ranking.conditions
-        )
         document_ids = [document.id for document, _entry in page_rows]
         passages = (
             _matching_passages(
@@ -662,7 +783,9 @@ class PostgresPaperSearch:
 
         items: list[PaperSearchResult] = []
         for document, library_entry in page_rows:
-            snippets = passages.get(document.id, [])
+            snippets = passages.get(document.id, []) or ranking.semantic_passages.get(
+                document.id, []
+            )
             has_matching_passage = bool(snippets)
             items.append(
                 PaperSearchResult(
@@ -723,8 +846,8 @@ class PostgresPaperSearch:
         return PaperSearchResponse(
             items=items,
             total=len(ranked_ids),
-            search_mode="hybrid" if ranking.semantic_ids else "lexical",
-            semantic_index_coverage=semantic_coverage,
+            search_mode="hybrid" if ranking.semantic_available else "lexical",
+            semantic_index_coverage=ranking.document_semantic_coverage,
         )
 
     def search_candidates(
@@ -739,7 +862,13 @@ class PostgresPaperSearch:
         plan = _query_plan(request.query)
         page_ids = ranking.ranked_ids[request.offset : request.offset + request.limit]
         if not page_ids:
-            return PaperSearchCandidatePage(items=[], total=len(ranking.ranked_ids))
+            return PaperSearchCandidatePage(
+                items=[],
+                total=len(ranking.ranked_ids),
+                search_mode="hybrid" if ranking.semantic_available else "lexical",
+                document_semantic_index_coverage=(ranking.document_semantic_coverage),
+                passage_semantic_index_coverage=ranking.passage_semantic_coverage,
+            )
         actor_library_entry = aliased(
             LibraryPaper,
             name="knowledge_actor_library_entry",
@@ -803,6 +932,9 @@ class PostgresPaperSearch:
                 cast(str | None, row["summary"]),
                 max_bytes=_CANDIDATE_TEXT_JSON_BYTES,
             )
+            selected_passages = passages.get(
+                document_id, []
+            ) or ranking.semantic_passages.get(document_id, [])
             snippets = [
                 PaperSearchSnippet(
                     text=json_bounded_prefix(
@@ -812,7 +944,7 @@ class PostgresPaperSearch:
                     start_line=snippet.start_line,
                     end_line=snippet.end_line,
                 )
-                for snippet in passages.get(document_id, [])[:3]
+                for snippet in selected_passages[:3]
             ]
             if not snippets:
                 fallback = abstract or summary
@@ -826,11 +958,17 @@ class PostgresPaperSearch:
                     created_at=cast(datetime, row["created_at"]),
                     last_accessed_at=cast(datetime, row["last_accessed_at"]),
                     snippets=snippets,
+                    retrieval_modes=sorted(
+                        ranking.retrieval_modes.get(document_id, set())
+                    ),
                 )
             )
         return PaperSearchCandidatePage(
             items=items,
             total=len(ranking.ranked_ids),
+            search_mode="hybrid" if ranking.semantic_available else "lexical",
+            document_semantic_index_coverage=ranking.document_semantic_coverage,
+            passage_semantic_index_coverage=ranking.passage_semantic_coverage,
         )
 
     @staticmethod
@@ -846,8 +984,10 @@ class PostgresPaperSearch:
         *,
         actor: Actor,
     ) -> PaperSearchStats:
-        total, semantic, coverage = self._semantic_coverage(
-            conditions=[accessible_document_condition(user_id=actor.id)]
+        total, semantic, _passages, coverage, _passage_coverage = (
+            self._semantic_coverage(
+                conditions=[accessible_document_condition(user_id=actor.id)]
+            )
         )
         return PaperSearchStats(
             total_papers=total,
