@@ -30,6 +30,7 @@ import {
 } from "@/features/authentication";
 import { useInstallExperience } from "@/features/install-experience";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import { currentAppLocation } from "@/features/workspace-navigation";
 import { DOCUMENTATION_PATH, SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
@@ -427,7 +428,9 @@ export function AccountHubPage({ view }: { view: AccountHubView }) {
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
+      router.replace(
+        `/login?returnTo=${encodeURIComponent(currentAppLocation(pathname))}`,
+      );
     }
   }, [pathname, router, session.status]);
 

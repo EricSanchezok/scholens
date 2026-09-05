@@ -15,8 +15,11 @@ the deliberately deferred boundaries.
 - Conversations, papers, projects, personal research insight, and message
   history are server state owned by TanStack Query. Composer input uses React
   Hook Form and Zod; its form state is owned by `HomeWorkspace` so responsive
-  composition changes never discard an unsent draft. Sidebar and picker state
-  remain local. An in-progress
+  composition changes never discard an unsent draft. Unsent text, reasoning
+  level, and explicit research context also persist in versioned, actor- and
+  surface-scoped session storage across route changes and refresh. The draft is
+  cleared only after turn acceptance. Sidebar collapse persists for the current
+  actor and browser session; picker disclosure remains local. An in-progress
   subscriber is local, but accepted generation and its terminal state are
   Server-owned and survive route changes, backgrounding, reload, and offline
   intervals.

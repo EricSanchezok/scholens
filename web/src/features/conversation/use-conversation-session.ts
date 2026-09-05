@@ -5,6 +5,11 @@ import { useLocale } from "next-intl";
 import * as React from "react";
 
 import { ApiError } from "@/lib/api";
+import {
+  readSessionState,
+  removeSessionState,
+  writeSessionState,
+} from "@/lib/browser/session-state";
 import type { components } from "@/lib/api/generated/schema";
 import {
   createConversationPerformanceTracker,
@@ -68,6 +73,41 @@ type StreamSession = {
   performance?: ConversationPerformanceTracker;
 };
 
+type ConversationDraftV1 = {
+  context: ResearchContext;
+  message: string;
+  reasoningLevel: ReasoningLevel;
+  version: 1;
+};
+
+function isConversationDraft(value: unknown): value is ConversationDraftV1 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ConversationDraftV1>;
+  const context = candidate.context as
+    | {
+        document_ids?: unknown;
+        kind?: unknown;
+        project_ids?: unknown;
+      }
+    | undefined;
+  const validStringArray = (items: unknown) =>
+    items === undefined ||
+    (Array.isArray(items) && items.every((item) => typeof item === "string"));
+  const validContext =
+    context?.kind === "library" ||
+    (context?.kind === "selection" &&
+      validStringArray(context.project_ids) &&
+      validStringArray(context.document_ids));
+  return Boolean(
+    candidate.version === 1 &&
+    typeof candidate.message === "string" &&
+    candidate.message.trim() &&
+    (candidate.reasoningLevel === "standard" ||
+      candidate.reasoningLevel === "deep") &&
+    validContext,
+  );
+}
+
 function sameContext(left: ResearchContext, right: ResearchContext) {
   if (left.kind !== right.kind) return false;
   if (left.kind === "library" || right.kind === "library") return true;
@@ -80,6 +120,7 @@ function sameContext(left: ResearchContext, right: ResearchContext) {
 }
 
 export function useConversationSession({
+  actorId,
   conversationId,
   context: requestedContext,
   getTurnContexts,
@@ -91,7 +132,10 @@ export function useConversationSession({
   scopeType,
   updateExistingContext = false,
   defaultContext = { kind: "library" } satisfies ResearchContext,
+  draftScope,
+  onDraftRestored,
 }: {
+  actorId: number;
   conversationId?: string;
   context?: ResearchContext;
   getTurnContexts?: () => ConversationTurnCreateRequest["contexts"];
@@ -103,6 +147,11 @@ export function useConversationSession({
   scopeType: ConversationScopeType;
   updateExistingContext?: boolean;
   defaultContext?: ResearchContext;
+  draftScope: string;
+  onDraftRestored?: (draft: {
+    context: ResearchContext;
+    reasoningLevel: ReasoningLevel;
+  }) => void;
 }) {
   const queryClient = useQueryClient();
   const locale = useLocale() === "zh-CN" ? "zh-CN" : "en";
@@ -186,6 +235,101 @@ export function useConversationSession({
   }
   const context =
     requestedContext ?? conversationQuery.data?.paper_context ?? defaultContext;
+  const draftKey = `scholens:conversation-draft:v1:${actorId}:${draftScope}:${conversationId ?? "new"}`;
+  const draftDefaultsRef = React.useRef({ context, reasoningLevel });
+  draftDefaultsRef.current = { context, reasoningLevel };
+  const activeDraftRef = React.useRef<{
+    draft: ConversationDraftV1;
+    key: string;
+  }>({
+    draft: { context, message: "", reasoningLevel, version: 1 },
+    key: draftKey,
+  });
+  const draftInitializedRef = React.useRef(false);
+  const loadedDraftKeyRef = React.useRef<string | undefined>(undefined);
+  const restoringDraftRef = React.useRef(false);
+  const draftWriteTimerRef = React.useRef<number | undefined>(undefined);
+  const onDraftRestoredRef = React.useRef(onDraftRestored);
+  onDraftRestoredRef.current = onDraftRestored;
+  if (activeDraftRef.current.key === draftKey) {
+    activeDraftRef.current.draft = {
+      ...activeDraftRef.current.draft,
+      context,
+      reasoningLevel,
+    };
+  }
+
+  const flushDraft = React.useCallback(() => {
+    if (draftWriteTimerRef.current !== undefined) {
+      window.clearTimeout(draftWriteTimerRef.current);
+      draftWriteTimerRef.current = undefined;
+    }
+    const { draft, key } = activeDraftRef.current;
+    if (draft.message.trim()) writeSessionState(key, draft);
+    else if (!submissionInFlight.current) removeSessionState(key);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (loadedDraftKeyRef.current === draftKey) return;
+    if (draftInitializedRef.current) flushDraft();
+    const storedValue = readSessionState<unknown>(draftKey);
+    const storedDraft = isConversationDraft(storedValue)
+      ? storedValue
+      : undefined;
+    if (storedValue !== undefined && !storedDraft) {
+      removeSessionState(draftKey);
+    }
+    const draft = storedDraft
+      ? storedDraft
+      : {
+          ...draftDefaultsRef.current,
+          message: "",
+          version: 1 as const,
+        };
+    activeDraftRef.current = { draft, key: draftKey };
+    draftInitializedRef.current = true;
+    loadedDraftKeyRef.current = draftKey;
+    restoringDraftRef.current = true;
+    composerForm.reset({ message: draft.message }, { keepDefaultValues: true });
+    restoringDraftRef.current = false;
+    if (storedDraft) {
+      onDraftRestoredRef.current?.({
+        context: storedDraft.context,
+        reasoningLevel: storedDraft.reasoningLevel,
+      });
+    }
+  }, [composerForm, draftKey, flushDraft]);
+
+  React.useEffect(() => {
+    const subscription = composerForm.watch((value) => {
+      if (restoringDraftRef.current) return;
+      activeDraftRef.current = {
+        draft: {
+          context,
+          message: value.message ?? "",
+          reasoningLevel,
+          version: 1,
+        },
+        key: draftKey,
+      };
+      if (draftWriteTimerRef.current !== undefined) {
+        window.clearTimeout(draftWriteTimerRef.current);
+      }
+      draftWriteTimerRef.current = window.setTimeout(flushDraft, 250);
+    });
+    const handlePageHide = () => flushDraft();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushDraft();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushDraft();
+    };
+  }, [composerForm, context, draftKey, flushDraft, reasoningLevel]);
   const runningTurn = turnsQuery.data?.items.findLast((turn) =>
     turn.responses.some((response) => response.status === "running"),
   );
@@ -736,6 +880,7 @@ export function useConversationSession({
       setCreatedConversationId(nextConversationId);
     }
     let session: StreamSession | null = null;
+    const submittedDraftKey = draftKey;
     const performance = createConversationPerformanceTracker();
     setLiveTurn(
       createLiveTurn(
@@ -747,6 +892,10 @@ export function useConversationSession({
       ),
     );
     window.requestAnimationFrame(() => performance.markFeedback());
+    activeDraftRef.current = {
+      ...activeDraftRef.current,
+      draft: { ...activeDraftRef.current.draft, message: "" },
+    };
     composerForm.reset();
     try {
       if (
@@ -784,6 +933,7 @@ export function useConversationSession({
       };
       const onAccepted = (streamKind: ConversationStreamKind) => {
         if (!session || !markStreamAccepted(session, streamKind)) return;
+        removeSessionState(submittedDraftKey);
         if (
           creatingConversation &&
           submissionEpoch.current === submissionIdentity

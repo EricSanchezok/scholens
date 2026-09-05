@@ -87,6 +87,10 @@ import {
 } from "./use-conversation-list-controller";
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import { useVisualViewport } from "@/lib/utilities/use-visual-viewport";
+import {
+  useWorkspaceNavigation,
+  workspaceDestinationForPath,
+} from "@/features/workspace-navigation";
 
 export type WorkspaceDestination = "ask" | "library" | "projects" | "me";
 
@@ -274,9 +278,13 @@ function SidebarControl({
   disabledHint?: string;
   onSelect?: () => void;
 }) {
+  const navigation = useWorkspaceNavigation();
+  const destination = href ? workspaceDestinationForPath(href) : undefined;
+  const resolvedHref =
+    href && destination ? navigation.rememberedHref(destination, href) : href;
   const accessibleLabel =
     disabled && disabledHint ? `${label}. ${disabledHint}` : label;
-  const control = href ? (
+  const control = resolvedHref ? (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={accessibleLabel}
@@ -288,10 +296,10 @@ function SidebarControl({
           ? "bg-hover border-transparent"
           : "hover:bg-hover border-transparent",
       )}
-      href={href as Route}
+      href={resolvedHref as Route}
       onClick={(event) => {
         if (!isPrimaryNavigationClick(event)) return;
-        beginRouteNavigation(href);
+        beginRouteNavigation(resolvedHref);
         onSelect?.();
       }}
       prefetch
@@ -301,7 +309,7 @@ function SidebarControl({
         active={Boolean(active)}
         collapsed={collapsed}
         glyph={glyph}
-        href={href}
+        href={resolvedHref}
         label={label}
       />
     </Link>
@@ -1011,6 +1019,11 @@ function MobileDestinationLink({
   href: string;
   label: string;
 }) {
+  const navigation = useWorkspaceNavigation();
+  const destination = workspaceDestinationForPath(href);
+  const resolvedHref = destination
+    ? navigation.rememberedHref(destination, href)
+    : href;
   return (
     <Link
       aria-current={active ? "page" : undefined}
@@ -1020,16 +1033,16 @@ function MobileDestinationLink({
         focusSurfaceVariants({ intent: "selection" }),
         active ? "text-foreground" : "text-secondary",
       )}
-      href={href as Route}
+      href={resolvedHref as Route}
       onClick={(event) => {
-        if (isPrimaryNavigationClick(event)) beginRouteNavigation(href);
+        if (isPrimaryNavigationClick(event)) beginRouteNavigation(resolvedHref);
       }}
       prefetch
     >
       <MobileDestinationContent
         active={active}
         glyph={glyph}
-        href={href}
+        href={resolvedHref}
         label={label}
       />
     </Link>
@@ -1322,7 +1335,7 @@ export function WorkspaceShell({
   actor,
   activeConversationId,
   activeDestination,
-  collapsed,
+  collapsed: initialCollapsed,
   signingOut,
   onCollapsedChange,
   onSignOut,
@@ -1358,8 +1371,13 @@ export function WorkspaceShell({
   children: React.ReactNode;
 }) {
   const t = useTranslations("WorkspaceShell");
+  const workspaceNavigation = useWorkspaceNavigation();
+  const initializeSidebar = workspaceNavigation.initializeSidebar;
+  const setSidebarCollapsed = workspaceNavigation.setSidebarCollapsed;
+  const collapsed = workspaceNavigation.sidebarCollapsed ?? initialCollapsed;
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [searchOpen, setSearchOpen] = React.useState(false);
+  const searchOpen = workspaceNavigation.globalSearchOpen;
+  const setSearchOpen = workspaceNavigation.setGlobalSearchOpen;
   const [animateSidebarLabels, setAnimateSidebarLabels] = React.useState(false);
   const searchReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const [deleteTarget, setDeleteTarget] =
@@ -1426,6 +1444,10 @@ export function WorkspaceShell({
       0)
     : (shellVisualViewport?.offsetTop ?? 0);
 
+  React.useLayoutEffect(() => {
+    initializeSidebar(initialCollapsed);
+  }, [initialCollapsed, initializeSidebar]);
+
   const stopRailAnimations = React.useCallback(() => {
     for (const animation of railAnimationsRef.current) animation.cancel();
     railAnimationsRef.current = [];
@@ -1443,9 +1465,10 @@ export function WorkspaceShell({
       }
       stopRailAnimations();
       setAnimateSidebarLabels(!nextCollapsed);
+      setSidebarCollapsed(nextCollapsed);
       onCollapsedChange(nextCollapsed);
     },
-    [onCollapsedChange, stopRailAnimations],
+    [onCollapsedChange, setSidebarCollapsed, stopRailAnimations],
   );
 
   React.useLayoutEffect(() => {
@@ -1511,18 +1534,21 @@ export function WorkspaceShell({
       searchReturnFocusRef.current = document.activeElement;
     }
     setSearchOpen(true);
-  }, []);
+  }, [setSearchOpen]);
 
-  const handleSearchOpenChange = React.useCallback((nextOpen: boolean) => {
-    setSearchOpen(nextOpen);
-    if (nextOpen) return;
-    const returnTarget = searchReturnFocusRef.current;
-    searchReturnFocusRef.current = null;
-    window.requestAnimationFrame(() => {
-      if (returnTarget?.isConnected) returnTarget.focus();
-      else mobileMenuTriggerRef.current?.focus();
-    });
-  }, []);
+  const handleSearchOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      setSearchOpen(nextOpen);
+      if (nextOpen) return;
+      const returnTarget = searchReturnFocusRef.current;
+      searchReturnFocusRef.current = null;
+      window.requestAnimationFrame(() => {
+        if (returnTarget?.isConnected) returnTarget.focus();
+        else mobileMenuTriggerRef.current?.focus();
+      });
+    },
+    [setSearchOpen],
+  );
 
   React.useEffect(() => {
     function openSearch(event: KeyboardEvent) {
@@ -1536,7 +1562,7 @@ export function WorkspaceShell({
     }
     window.addEventListener("keydown", openSearch);
     return () => window.removeEventListener("keydown", openSearch);
-  }, []);
+  }, [setSearchOpen]);
 
   return (
     <div

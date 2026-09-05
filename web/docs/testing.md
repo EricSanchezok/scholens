@@ -13,6 +13,13 @@
 Prefer the lowest layer that catches the regression. Do not duplicate every
 component assertion in Playwright.
 
+Navigation changes require an origin-to-destination-to-origin assertion, not a
+direct destination visit alone. The route test preserves the origin's complete
+query string and verifies restored focus; virtual collections additionally
+cover a stable item anchor or scroll position. Test a semantic direct-link
+fallback separately when it differs from contextual return. Modified-click URL
+behavior and actor-scoped registry rules stay in focused unit tests.
+
 ## Required commands
 
 ```bash

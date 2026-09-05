@@ -61,7 +61,7 @@ export type ReaderToolbarLabels = {
   download: string;
   openPanel: string;
   closePanel: string;
-  returnLibrary: string;
+  returnToOrigin: string;
   projectContext: (context: string) => string;
   personalContext: string;
   pdfView: string;
@@ -162,7 +162,7 @@ export function ReaderToolbar({
       {!search ? (
         <div className="hidden min-w-0 flex-1 items-center gap-1 2xl:flex">
           <IconButton
-            label={labels.returnLibrary}
+            label={labels.returnToOrigin}
             onClick={onReturn}
             variant="ghost"
           >

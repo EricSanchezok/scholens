@@ -93,6 +93,17 @@ panel keeps the mounted draft and selected conversation. Server resources use
 TanStack Query; forms use React Hook Form and Zod; dialog and menu disclosure
 remains local.
 
+Normal same-tab entry from `/projects` to a Project records the exact list URL,
+source row, and scroll position. Both responsive Project-detail back controls
+restore that context; a direct detail visit falls back to the most recent
+session Projects root, then `/projects`. Entry from personal Activity instead
+returns to that exact Activity range, position, and source Project. Project
+paper links create a separate context so Reader returns to the exact Project
+view and paper collection.
+Modified clicks and source-link copy actions remain canonical. The Workspace
+rail keeps its expanded or collapsed preference across Project, Reader, and
+other Workspace routes for the current actor and browser session.
+
 Desktop detail defaults to one stable editorial canvas with a flat identity
 header and single-layer overview groups, with no reserved chat rail.
 Opening chat adds the same responsive `clamp(23rem, 34vw, 31.25rem)` side panel

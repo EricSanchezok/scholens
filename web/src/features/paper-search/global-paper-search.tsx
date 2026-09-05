@@ -2,7 +2,6 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { Route } from "next";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -27,6 +26,11 @@ import {
   ProjectIcon,
 } from "@/design-system/icons/semantic-icons";
 import { conversationQueries } from "@/features/conversation";
+import {
+  ContextualLink,
+  useNavigationRestorer,
+  type NavigationSnapshot,
+} from "@/features/workspace-navigation";
 import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import type { components } from "@/lib/api/generated/schema";
 import { isSearchQuery, normalizeSearchQuery } from "@/lib/search/query";
@@ -128,6 +132,9 @@ export function GlobalSearch({
   const [query, setQuery] = React.useState("");
   const [committedQuery, setCommittedQuery] = React.useState("");
   const composingRef = React.useRef(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const pendingFocusKeyRef = React.useRef<string | undefined>(undefined);
+  const [focusRestoreEpoch, setFocusRestoreEpoch] = React.useState(0);
   const debouncedQuery = useDebouncedValue(committedQuery);
   const resultFocusRef = React.useRef<(() => void) | undefined>(undefined);
   const normalizedQuery = normalizeSearchQuery(debouncedQuery);
@@ -160,6 +167,45 @@ export function GlobalSearch({
   );
   const hasQuery = isSearchQuery(committedQuery);
 
+  useNavigationRestorer("global-search", {
+    capture: () => ({ committedQuery, kind, open, query }),
+    restore: (snapshot: NavigationSnapshot, { focusKey }) => {
+      const restoredKind =
+        snapshot.kind === "papers" ? "papers" : "conversations";
+      const restoredQuery =
+        typeof snapshot.query === "string" ? snapshot.query : "";
+      const restoredCommittedQuery =
+        typeof snapshot.committedQuery === "string"
+          ? snapshot.committedQuery
+          : restoredQuery;
+      setKind(restoredKind);
+      setQuery(restoredQuery);
+      setCommittedQuery(restoredCommittedQuery);
+      onOpenChange(snapshot.open === true);
+      if (focusKey) {
+        pendingFocusKeyRef.current = focusKey;
+        setFocusRestoreEpoch((current) => current + 1);
+      }
+    },
+  });
+
+  React.useEffect(() => {
+    const focusKey = pendingFocusKeyRef.current;
+    if (!open || !focusKey) return;
+    const target = contentRef.current?.querySelector<HTMLElement>(
+      `[data-navigation-focus="${CSS.escape(focusKey)}"]`,
+    );
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    pendingFocusKeyRef.current = undefined;
+  }, [
+    conversationSearch.data,
+    focusRestoreEpoch,
+    open,
+    paperSearch.data,
+    recentConversations,
+  ]);
+
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setKind("conversations");
@@ -175,6 +221,7 @@ export function GlobalSearch({
         closeLabel={t("close")}
         className="lg:h-[min(88dvh,46rem)] lg:w-[min(92vw,68rem)] lg:rounded-[var(--radius-2xl)]"
         placement="responsive-full"
+        ref={contentRef}
       >
         <DialogTitle className="sr-only">{t("title")}</DialogTitle>
         <DialogDescription className="sr-only">
@@ -256,14 +303,16 @@ export function GlobalSearch({
                     <ResultList inputArrowDownRef={resultFocusRef}>
                       {recentConversations.map((conversation) => (
                         <li key={conversation.id}>
-                          <Link
+                          <ContextualLink
                             className={cn(
                               "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
                               focusSurfaceVariants({ intent: "neutral" }),
                             )}
                             data-search-result=""
+                            focusKey={conversation.id}
                             href={`/?conversation=${conversation.id}` as Route}
-                            onClick={() => handleOpenChange(false)}
+                            onPrimaryNavigate={() => onOpenChange(false)}
+                            originKind="search"
                           >
                             <Icon
                               className="mt-0.5 shrink-0"
@@ -281,7 +330,7 @@ export function GlobalSearch({
                                   ` · ${conversation.scope_label}`}
                               </span>
                             </span>
-                          </Link>
+                          </ContextualLink>
                         </li>
                       ))}
                     </ResultList>
@@ -319,16 +368,18 @@ export function GlobalSearch({
                   <ResultList inputArrowDownRef={resultFocusRef}>
                     {conversationResults.map((result) => (
                       <li key={result.conversation.id}>
-                        <Link
+                        <ContextualLink
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
                             focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
+                          focusKey={result.conversation.id}
                           href={
                             `/?conversation=${result.conversation.id}` as Route
                           }
-                          onClick={() => handleOpenChange(false)}
+                          onPrimaryNavigate={() => onOpenChange(false)}
+                          originKind="search"
                         >
                           <Icon
                             className="mt-0.5 shrink-0"
@@ -358,7 +409,7 @@ export function GlobalSearch({
                               </span>
                             )}
                           </span>
-                        </Link>
+                        </ContextualLink>
                       </li>
                     ))}
                   </ResultList>
@@ -422,14 +473,16 @@ export function GlobalSearch({
                   <ResultList inputArrowDownRef={resultFocusRef}>
                     {paperResults.map((paper) => (
                       <li key={paper.document_id}>
-                        <Link
+                        <ContextualLink
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
                             focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
+                          focusKey={paper.document_id}
                           href={`/reader/${paper.document_id}` as Route}
-                          onClick={() => handleOpenChange(false)}
+                          onPrimaryNavigate={() => onOpenChange(false)}
+                          originKind="search"
                         >
                           <Icon
                             className="mt-0.5 shrink-0"
@@ -451,7 +504,7 @@ export function GlobalSearch({
                               </span>
                             )}
                           </span>
-                        </Link>
+                        </ContextualLink>
                       </li>
                     ))}
                   </ResultList>

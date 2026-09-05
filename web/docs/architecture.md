@@ -80,14 +80,15 @@ outside the feature imports only its public `index.ts` API.
 
 Choose the narrowest durable owner:
 
-| State                                                  | Owner                                       |
-| ------------------------------------------------------ | ------------------------------------------- |
-| Backend resources, loading, caching, invalidation      | TanStack Query                              |
-| Shareable filters, selection in a URL, active tab/page | Route/search params                         |
-| Form values and validation                             | React Hook Form + Zod                       |
-| Ephemeral interaction state                            | Local React state                           |
-| Stable cross-tree UI preference, such as appearance    | A focused Context                           |
-| Authentication/session truth                           | The auth integration and typed API contract |
+| State                                                  | Owner                                        |
+| ------------------------------------------------------ | -------------------------------------------- |
+| Backend resources, loading, caching, invalidation      | TanStack Query                               |
+| Shareable filters, selection in a URL, active tab/page | Route/search params                          |
+| Form values and validation                             | React Hook Form + Zod                        |
+| Ephemeral interaction state                            | Local React state                            |
+| Stable cross-tree UI preference, such as appearance    | A focused Context                            |
+| Same-tab origin, restoration snapshot, and shell state | Workspace navigation Context + session state |
+| Authentication/session truth                           | The auth integration and typed API contract  |
 
 Do not copy Query data into Context or a global store. Do not use Context as an
 event bus. A new global state library requires evidence that URL, Query, forms,

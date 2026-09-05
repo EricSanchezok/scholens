@@ -35,6 +35,11 @@ import { AddIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
+  currentAppLocation,
+  useNavigationScrollRestorer,
+  useWorkspaceNavigation,
+} from "@/features/workspace-navigation";
+import {
   CollectionToolbar,
   CollectionToolbarSelectTrigger,
 } from "@/features/paper-collection";
@@ -111,6 +116,8 @@ function SearchControl({
 
 export function ProjectsWorkspace({ actor }: { actor: Actor }) {
   const router = useRouter();
+  const navigation = useWorkspaceNavigation();
+  const updateContextRoute = navigation.updateContextRoute;
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -130,16 +137,17 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
     project: Project;
   } | null>(null);
   const projectsQuery = useQuery(projectQueries.list(state));
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  useNavigationScrollRestorer("projects-list", { rootRef: contentRef });
   usePrimaryContentReady(projectsQuery.isSuccess);
 
   const replaceSearch = React.useCallback(
     (patch: Partial<ProjectsSearchState>) => {
-      const next = serializeProjectsSearch({ ...state, ...patch }).toString();
-      router.replace((next ? `/projects?${next}` : "/projects") as Route, {
-        scroll: false,
-      });
+      const params = serializeProjectsSearch({ ...state, ...patch });
+      const next = params.toString();
+      updateContextRoute((next ? `/projects?${next}` : "/projects") as Route);
     },
-    [router, state],
+    [state, updateContextRoute],
   );
 
   const createMutation = useMutation({
@@ -224,7 +232,10 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
+      <div
+        className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
+        ref={contentRef}
+      >
         <header className="hidden min-h-11 items-center justify-between gap-6 lg:flex">
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">
             {t("title")}
@@ -413,7 +424,9 @@ export function ProjectsPage() {
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      router.replace(`/login?returnTo=${encodeURIComponent("/projects")}`);
+      router.replace(
+        `/login?returnTo=${encodeURIComponent(currentAppLocation("/projects"))}`,
+      );
     }
   }, [router, session.status]);
 

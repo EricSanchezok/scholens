@@ -43,6 +43,10 @@ import {
   usePaperSearchWorkbench,
 } from "@/features/paper-search";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import {
+  currentAppLocation,
+  useWorkspaceNavigation,
+} from "@/features/workspace-navigation";
 import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 import { isSearchQuery } from "@/lib/search/query";
 import {
@@ -126,6 +130,8 @@ function DebouncedLibrarySearch({
 
 export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const router = useRouter();
+  const navigation = useWorkspaceNavigation();
+  const updateContextRoute = navigation.updateContextRoute;
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -171,14 +177,17 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   }, [zoteroOpen]);
 
   const replaceSearch = React.useCallback(
-    (patch: Partial<LibrarySearchState>) => {
+    (
+      patch: Partial<LibrarySearchState>,
+      history: "push" | "replace" = "replace",
+    ) => {
       const next = { ...parsed, ...patch };
-      const query = serializeLibrarySearch(next).toString();
-      router.replace((query ? `/library?${query}` : "/library") as Route, {
-        scroll: false,
-      });
+      const params = serializeLibrarySearch(next);
+      const query = params.toString();
+      const href = (query ? `/library?${query}` : "/library") as Route;
+      updateContextRoute(href, { history });
     },
-    [parsed, router],
+    [parsed, updateContextRoute],
   );
 
   React.useEffect(() => {
@@ -193,11 +202,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     if (state) {
       const next = clearZoteroCallbackParams(searchParams.toString());
       const query = next.toString();
-      router.replace((query ? `/library?${query}` : "/library") as Route, {
-        scroll: false,
-      });
+      updateContextRoute((query ? `/library?${query}` : "/library") as Route);
     }
-  }, [router, searchParams, toast, zoteroT]);
+  }, [searchParams, toast, updateContextRoute, zoteroT]);
 
   const summaryQuery = useQuery(libraryQueries.summary());
   const tagsQuery = useQuery({
@@ -443,14 +450,17 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
 
   function handleTabChange(value: string) {
     const tab = value as LibraryTab;
-    replaceSearch({
-      cursor: undefined,
-      kinds: tab === "outputs" ? parsed.kinds : [],
-      sort: tab === "outputs" ? "updated_desc" : "added_desc",
-      tab,
-      tagIds: tab === "papers" ? parsed.tagIds : [],
-      statuses: tab === "papers" ? parsed.statuses : [],
-    });
+    replaceSearch(
+      {
+        cursor: undefined,
+        kinds: tab === "outputs" ? parsed.kinds : [],
+        sort: tab === "outputs" ? "updated_desc" : "added_desc",
+        tab,
+        tagIds: tab === "papers" ? parsed.tagIds : [],
+        statuses: tab === "papers" ? parsed.statuses : [],
+      },
+      "push",
+    );
   }
 
   async function handleDownload(documentId: string) {
@@ -699,7 +709,9 @@ export function LibraryPage() {
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      router.replace(`/login?returnTo=${encodeURIComponent("/library")}`);
+      router.replace(
+        `/login?returnTo=${encodeURIComponent(currentAppLocation("/library"))}`,
+      );
     }
   }, [router, session.status]);
 

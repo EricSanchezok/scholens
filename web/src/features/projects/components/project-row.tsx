@@ -1,7 +1,6 @@
 "use client";
 
 import type { Route } from "next";
-import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { EditIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
+import { ContextualLink } from "@/features/workspace-navigation";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 
@@ -43,13 +43,15 @@ export function ProjectRow({
       spacing="compact"
     >
       <article data-project-row="">
-        <Link
+        <ContextualLink
           aria-label={project.title}
           className={cn(
             "flex min-w-0 flex-1 items-start gap-3 rounded-[var(--radius-lg)] px-2 py-3 sm:gap-4 sm:px-3",
             focusSurfaceVariants({ intent: "neutral" }),
           )}
           href={`/projects/${project.id}` as Route}
+          focusKey={project.id}
+          originKind="project"
         >
           <FramePanel
             className="mt-0.5 grid size-10 shrink-0 place-items-center"
@@ -92,7 +94,7 @@ export function ProjectRow({
               </span>
             </span>
           </span>
-        </Link>
+        </ContextualLink>
         <div className="mt-1 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -103,9 +105,13 @@ export function ProjectRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/projects/${project.id}` as Route}>
+                <ContextualLink
+                  focusKey={project.id}
+                  href={`/projects/${project.id}` as Route}
+                  originKind="project"
+                >
                   {t("actions.open")}
-                </Link>
+                </ContextualLink>
               </DropdownMenuItem>
               {project.capabilities.edit_project && (
                 <DropdownMenuItem onSelect={() => onEdit(project)}>

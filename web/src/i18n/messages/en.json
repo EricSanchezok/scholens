@@ -808,7 +808,13 @@
   },
   "Reader": {
     "untitled": "Untitled paper",
-    "returnLibrary": "Return to library",
+    "return": {
+      "activity": "Return to reading activity",
+      "library": "Return to library",
+      "project": "Return to project",
+      "reader": "Return to previous paper",
+      "search": "Return to search results"
+    },
     "library": "Library",
     "loadingDocument": "Opening paper",
     "tryAgain": "Try again",
@@ -1369,6 +1375,7 @@
     },
     "detail": {
       "back": "Back to projects",
+      "returnActivity": "Return to reading activity",
       "manage": "Manage project",
       "openChat": "Chat",
       "closeChat": "Close project chat",

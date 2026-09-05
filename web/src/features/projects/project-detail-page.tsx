@@ -8,7 +8,6 @@ import {
   useQueries,
 } from "@tanstack/react-query";
 import type { Route } from "next";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
@@ -81,6 +80,12 @@ import {
   type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import {
+  ContextualLink,
+  currentAppLocation,
+  useNavigationScrollRestorer,
+  useWorkspaceNavigation,
+} from "@/features/workspace-navigation";
 import {
   chunkPaperSummaryDocumentIds,
   CompactPaperActivityDuration,
@@ -169,6 +174,7 @@ function ProjectSearchField({
 }
 
 function ProjectChat({
+  actorId,
   conversationId,
   conversations,
   conversationsLoading,
@@ -178,6 +184,7 @@ function ProjectChat({
   onConversationPinError,
   project,
 }: {
+  actorId: number;
   conversationId?: string;
   conversations: components["schemas"]["ConversationSummaryResponse"][];
   conversationsLoading: boolean;
@@ -204,15 +211,24 @@ function ProjectChat({
     [project.id],
   );
   const session = useConversationSession({
+    actorId,
     context: contextOverrides[conversationId ?? "new"],
     conversationId,
     defaultContext,
+    draftScope: `project:${project.id}`,
     onConversationCreated: (id) => onConversationChange(id),
     onSubmissionError: () =>
       toast.notify({
         title: conversationT("error"),
         description: conversationT("retryHint"),
       }),
+    onDraftRestored: (draft) => {
+      setReasoningLevel(draft.reasoningLevel);
+      setContextOverrides((current) => ({
+        ...current,
+        [conversationId ?? "new"]: draft.context,
+      }));
+    },
     reasoningLevel,
     scopeId: project.id,
     scopeType: "project",
@@ -336,12 +352,14 @@ function ProjectPaperRow({
       spacing="none"
       variant="ghost"
     >
-      <Link
+      <ContextualLink
         className={cn(
           "hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
           focusSurfaceVariants({ intent: "neutral" }),
         )}
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
+        focusKey={paper.document_id}
+        originKind="project"
       >
         <span className="min-w-0">
           <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">
@@ -351,7 +369,7 @@ function ProjectPaperRow({
             {paper.authors?.join(", ") || t("unknownAuthors")}
           </span>
         </span>
-      </Link>
+      </ContextualLink>
       {canRemove && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -515,6 +533,13 @@ export function ProjectDetailWorkspace({
   projectId: string;
 }) {
   const router = useRouter();
+  const navigation = useWorkspaceNavigation();
+  const updateContextRoute = navigation.updateContextRoute;
+  const detailScrollRef = React.useRef<HTMLDivElement>(null);
+  useNavigationScrollRestorer("project-detail", {
+    getScroller: () => detailScrollRef.current,
+    rootRef: detailScrollRef,
+  });
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -715,19 +740,21 @@ export function ProjectDetailWorkspace({
   });
 
   const replaceSearch = React.useCallback(
-    (patch: Partial<ProjectDetailSearchState>) => {
-      const next = serializeProjectDetailSearch({
+    (
+      patch: Partial<ProjectDetailSearchState>,
+      history: "push" | "replace" = "replace",
+    ) => {
+      const params = serializeProjectDetailSearch({
         ...state,
         ...patch,
-      }).toString();
-      router.replace(
-        (next
-          ? `/projects/${projectId}?${next}`
-          : `/projects/${projectId}`) as Route,
-        { scroll: false },
-      );
+      });
+      const next = params.toString();
+      const href = (
+        next ? `/projects/${projectId}?${next}` : `/projects/${projectId}`
+      ) as Route;
+      updateContextRoute(href, { history });
     },
-    [projectId, router, state],
+    [projectId, state, updateContextRoute],
   );
   const projectPaperSearchWorkbench = usePaperSearchWorkbench({
     enabled: paperSearchActive,
@@ -918,6 +945,7 @@ export function ProjectDetailWorkspace({
   const memberCount = project.num_collaborators + 1;
   const renderChat = (onClose?: () => void) => (
     <ProjectChat
+      actorId={actor.id}
       conversationId={state.conversation}
       conversations={conversationsQuery.data?.items ?? []}
       conversationsLoading={conversationsQuery.isPending}
@@ -1065,6 +1093,7 @@ export function ProjectDetailWorkspace({
     },
     contentState: projectPaperContentState,
     items: projectPaperContentState === undefined ? projectWorkbenchItems : [],
+    navigationOrigin: "project",
     onStatusChange: (item, status) => {
       if (item.inLibrary) {
         statusMutation.mutate({
@@ -1085,6 +1114,13 @@ export function ProjectDetailWorkspace({
   };
   const projectPaperWorkbenchProps: PaperCollectionWorkbenchProps =
     projectPaperSearchWorkbenchWithActivity ?? projectPaperBrowseProps;
+  const projectsReturnHref = navigation.rememberedHref("projects", "/projects");
+  const returnLabel =
+    navigation.context?.originKind === "activity"
+      ? t("detail.returnActivity")
+      : t("detail.back");
+  const returnFromProjectDetail = () =>
+    navigation.returnFromContext(projectsReturnHref);
 
   return (
     <WorkspaceShell
@@ -1101,16 +1137,17 @@ export function ProjectDetailWorkspace({
         </span>
       }
       mobileHeaderLeading={
-        <Link
-          aria-label={t("detail.back")}
+        <button
+          aria-label={returnLabel}
           className={cn(
             "hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]",
             focusSurfaceVariants({ intent: "neutral" }),
           )}
-          href="/projects"
+          onClick={returnFromProjectDetail}
+          type="button"
         >
           <Icon glyph={BackIcon} size={20} />
-        </Link>
+        </button>
       }
       mobileHeaderTrailing={
         <div className="flex items-center gap-1">
@@ -1162,6 +1199,7 @@ export function ProjectDetailWorkspace({
           )}
           data-project-detail-scroll=""
           layout="size"
+          ref={detailScrollRef}
           tabIndex={state.view === "papers" ? undefined : 0}
           transition={motionTransitions.layout}
         >
@@ -1178,16 +1216,17 @@ export function ProjectDetailWorkspace({
               className="hidden min-h-11 min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 lg:grid"
               data-project-detail-header=""
             >
-              <Link
-                aria-label={t("detail.back")}
+              <button
+                aria-label={returnLabel}
                 className={cn(
                   "hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]",
                   focusSurfaceVariants({ intent: "neutral" }),
                 )}
-                href="/projects"
+                onClick={returnFromProjectDetail}
+                type="button"
               >
                 <Icon glyph={BackIcon} size={20} />
-              </Link>
+              </button>
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
                   <h1
@@ -1301,7 +1340,7 @@ export function ProjectDetailWorkspace({
                   "flex min-h-0 flex-1 flex-col overflow-hidden",
               )}
               onValueChange={(view: string) =>
-                replaceSearch({ view: view as ProjectView })
+                replaceSearch({ view: view as ProjectView }, "push")
               }
               value={state.view}
             >
@@ -1349,7 +1388,9 @@ export function ProjectDetailWorkspace({
                         {t("detail.recentPapers")}
                       </h2>
                       <Button
-                        onClick={() => replaceSearch({ view: "papers" })}
+                        onClick={() =>
+                          replaceSearch({ view: "papers" }, "push")
+                        }
                         size="sm"
                         variant="ghost"
                       >
@@ -1389,7 +1430,9 @@ export function ProjectDetailWorkspace({
                           {t("detail.recentOutputs")}
                         </h2>
                         <Button
-                          onClick={() => replaceSearch({ view: "outputs" })}
+                          onClick={() =>
+                            replaceSearch({ view: "outputs" }, "push")
+                          }
                           size="sm"
                           variant="ghost"
                         >
@@ -1727,7 +1770,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   React.useEffect(() => {
     if (session.status === "anonymous") {
       router.replace(
-        `/login?returnTo=${encodeURIComponent(`/projects/${projectId}`)}`,
+        `/login?returnTo=${encodeURIComponent(currentAppLocation(`/projects/${projectId}`))}`,
       );
     }
   }, [projectId, router, session.status]);

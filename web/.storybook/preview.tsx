@@ -211,6 +211,7 @@ const preview: Preview = {
     a11y: { test: "error" },
     controls: { expanded: true },
     layout: "fullscreen",
+    nextjs: { appDirectory: true },
     msw: {
       handlers: [
         foundationHandler,

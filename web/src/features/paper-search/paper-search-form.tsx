@@ -91,12 +91,6 @@ export function PaperSearchForm({
           const nextDraft = event.currentTarget.value;
           if (invalid) setInvalidDraft(undefined);
           onDraftChange(nextDraft);
-          if (
-            normalizeSearchQuery(nextDraft).length === 0 &&
-            committedQuery.length > 0
-          ) {
-            onCommit("");
-          }
         }}
         onCompositionEnd={() => {
           composingRef.current = false;
