@@ -49,17 +49,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_document_passages_embedding_hnsw_cosine",
-        table_name="document_passages",
-        schema="scholens",
-    )
-    op.drop_index(
-        "ix_document_passages_embedding_revision",
-        table_name="document_passages",
-        schema="scholens",
-    )
-    op.drop_column("document_passages", "embedded_at", schema="scholens")
-    op.drop_column("document_passages", "embedding_source_digest", schema="scholens")
-    op.drop_column("document_passages", "embedding_model_revision", schema="scholens")
-    op.drop_column("document_passages", "embedding", schema="scholens")
+    # Expand revisions are intentionally forward-only. Application rollback is
+    # safe because every added field is nullable; destructive schema cleanup
+    # belongs in a later contract revision after the compatibility window.
+    raise RuntimeError("passage_embeddings_expand_revision_is_forward_only")
