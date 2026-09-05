@@ -38,7 +38,7 @@ Run it from an MCP host with `uvx`:
 Expose the research repository as an MCP root in the host. If the host cannot
 provide roots, add `--allowed-root /absolute/path/to/repository`. Relative paths
 must resolve to exactly one file beneath the exposed roots. Symlink escapes,
-directories, non-PDF signatures, empty files, and PDFs over 30 MB are rejected.
+directories, non-PDF signatures, empty files, and PDFs over 30 MiB are rejected.
 The remote service receives only the plain filename, size, checksum, and bytes;
 the local absolute path is never sent or included in results.
 
@@ -70,7 +70,7 @@ original papers in Scholens.
 ## Upload behavior
 
 `upload_local_paper` accepts an absolute path beneath an exposed root or a
-relative path that resolves beneath exactly one root. It reads at most 30 MB,
+relative path that resolves beneath exactly one root. It reads at most 30 MiB,
 checks the extension and PDF signature, hashes the exact bytes, prepares a
 short-lived checksummed upload, transfers the bytes, and starts the canonical
 asynchronous ingestion. Supply the bound `project_id` to add the completed
@@ -82,6 +82,11 @@ state or the latest durable job snapshot; use its next-action guidance and a
 bounded `get_job` wait instead of rapid polling. The connector's authenticated
 remote-read timeout covers the full 240-second server wait plus transport
 overhead.
+
+An oversized local file returns the stable `local_pdf_too_large` code with
+exact `actual_bytes` and `max_bytes` details. Its remediation tells the Agent to
+compress or optimize a copy to 30 MiB or less, preserve the original and text
+readability, upload the compressed copy, and avoid retrying the unchanged file.
 
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The

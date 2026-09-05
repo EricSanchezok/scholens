@@ -25,7 +25,8 @@ from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import McpError
 from pydantic import AnyUrl
 
-MAX_PDF_BYTES = 30 * 1024 * 1024
+MAX_PDF_MIB = 30
+MAX_PDF_BYTES = MAX_PDF_MIB * 1024 * 1024
 PREPARE_TOOL = "prepare_paper_upload"
 LOCAL_UPLOAD_TOOL = "upload_local_paper"
 _REMOTE_URL_MAX_LENGTH = 2048
@@ -46,6 +47,36 @@ def _remote_tool_timeout() -> httpx.Timeout:
 
 class LocalUploadError(ValueError):
     """Safe, actionable input error returned to the local Agent."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "local_pdf_invalid",
+        details: dict[str, object] | None = None,
+        remediation: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = dict(details) if details is not None else None
+        self.remediation = remediation
+
+
+def _pdf_too_large_error(actual_bytes: int) -> LocalUploadError:
+    return LocalUploadError(
+        f"The selected PDF exceeds the {MAX_PDF_MIB} MiB upload limit",
+        code="local_pdf_too_large",
+        details={
+            "actual_bytes": actual_bytes,
+            "max_bytes": MAX_PDF_BYTES,
+        },
+        remediation=(
+            f"Compress or optimize a copy of the PDF to {MAX_PDF_MIB} MiB or less, "
+            "preserve the original file and text readability, then call "
+            "upload_local_paper with the compressed copy. Do not retry the unchanged "
+            "file."
+        ),
+    )
 
 
 class RemoteToolSession(Protocol):
@@ -158,8 +189,10 @@ def resolve_local_pdf(raw_path: str, roots: Sequence[Path]) -> Path:
     if candidate.suffix.casefold() != ".pdf":
         raise LocalUploadError("Only files with a .pdf extension can be uploaded")
     size = candidate.stat().st_size
-    if size <= 0 or size > MAX_PDF_BYTES:
-        raise LocalUploadError("The PDF must be between 1 byte and 30 MB")
+    if size <= 0:
+        raise LocalUploadError("The PDF must contain at least 1 byte")
+    if size > MAX_PDF_BYTES:
+        raise _pdf_too_large_error(size)
     with candidate.open("rb") as stream:
         if stream.read(5) != b"%PDF-":
             raise LocalUploadError("The selected file does not have a PDF signature")
@@ -170,7 +203,10 @@ def _read_bounded_pdf(path: Path) -> bytes:
     """Re-read through a hard byte ceiling in case the file changed after validation."""
     with path.open("rb") as stream:
         content = stream.read(MAX_PDF_BYTES + 1)
-    if not content.startswith(b"%PDF-") or len(content) > MAX_PDF_BYTES:
+        actual_bytes = os.fstat(stream.fileno()).st_size
+    if len(content) > MAX_PDF_BYTES:
+        raise _pdf_too_large_error(actual_bytes)
+    if not content.startswith(b"%PDF-"):
         raise LocalUploadError("The selected file changed or is no longer a valid PDF")
     return content
 
@@ -217,10 +253,10 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
         description=(
             "Use when a known PDF exists on this computer and should be ingested into "
             "Scholens. Do not use for paper discovery, DOI/arXiv import, directories, "
-            "or paths outside MCP roots. The connector reads only the selected PDF, "
-            "uploads its exact bytes directly to secure staging, starts ingestion, and "
-            "returns no local path. Next: follow the returned terminal or timed-out job "
-            "guidance instead of rapidly polling."
+            f"or paths outside MCP roots. The file must not exceed {MAX_PDF_MIB} MiB. "
+            "The connector reads only the selected PDF, uploads its exact bytes directly "
+            "to secure staging, starts ingestion, and returns no local path. Next: follow "
+            "the returned terminal or timed-out job guidance instead of rapidly polling."
         ),
         inputSchema={
             "type": "object",
@@ -231,7 +267,8 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
                     "minLength": 1,
                     "description": (
                         "Absolute path beneath an exposed MCP root, or a relative path "
-                        "that identifies exactly one PDF beneath those roots."
+                        "that identifies exactly one non-empty PDF of at most "
+                        f"{MAX_PDF_MIB} MiB beneath those roots."
                     ),
                 },
                 "project_id": {
@@ -318,6 +355,15 @@ def _local_error_result(
             )
         ],
         isError=True,
+    )
+
+
+def _local_upload_error_result(error: LocalUploadError) -> types.CallToolResult:
+    return _local_error_result(
+        code=error.code,
+        message=str(error),
+        details=error.details,
+        remediation=error.remediation,
     )
 
 
@@ -555,10 +601,7 @@ async def _run(*, remote_url: str, access_key: str, roots: Sequence[Path]) -> No
                         roots=await _client_roots(roots),
                     )
                 except LocalUploadError as exc:
-                    return _local_error_result(
-                        code="local_pdf_invalid",
-                        message=str(exc),
-                    )
+                    return _local_upload_error_result(exc)
                 except httpx.HTTPStatusError:
                     return _local_error_result(
                         code="local_pdf_upload_failed",
