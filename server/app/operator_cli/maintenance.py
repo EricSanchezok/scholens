@@ -7,8 +7,10 @@ from typing import cast
 from uuid import UUID
 
 import click
+from scholens_ai import EMBEDDING_MODEL_REVISION, try_local_embedder
 
 from app.modules.reading_activity.application import ReadingActivityRetentionResult
+from app.modules.papers.application.maintenance import PassageEmbeddingWrite
 from app.operator_cli.common import (
     CliState,
     OutputGroup,
@@ -73,6 +75,87 @@ def backfill_passages(
         "indexed_passages": result.indexed_passages,
     }
     emit(state, payload)
+
+
+@maintenance_group.command("backfill-passage-embeddings")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(1, 512),
+    default=128,
+    show_default=True,
+    help="Maximum passages embedded outside a database transaction.",
+)
+@click.option(
+    "--apply", is_flag=True, help="Apply changes; otherwise only count candidates."
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
+@click.pass_obj
+@guarded
+def backfill_passage_embeddings(
+    state: CliState,
+    actor_email: str,
+    batch_size: int,
+    apply: bool,
+    yes: bool,
+) -> None:
+    actor_user = load_user(actor_email)
+    snapshot = executor().query(
+        lambda capabilities: (
+            capabilities.passage_maintenance.passage_embedding_candidates(
+                actor=current_admin(capabilities, actor_user.id),
+                batch_size=batch_size,
+            )
+        )
+    )
+    if not apply or not snapshot.items:
+        emit(
+            state,
+            {
+                "status": "unchanged",
+                "dry_run": not apply,
+                "candidates": snapshot.candidates,
+                "indexed_passages": 0,
+                "stale_passages": 0,
+            },
+        )
+        return
+    confirm("Backfill local passage-search embeddings?", yes=yes)
+    embedder = try_local_embedder()
+    if embedder is None:
+        raise click.ClickException("Local embedding model is not configured.")
+    embeddings = embedder.embed_passages(
+        [candidate.content for candidate in snapshot.items]
+    )
+    records = tuple(
+        PassageEmbeddingWrite(
+            passage_id=candidate.passage_id,
+            document_id=candidate.document_id,
+            start_line=candidate.start_line,
+            source_digest=candidate.source_digest,
+            embedding=tuple(embedding),
+        )
+        for candidate, embedding in zip(snapshot.items, embeddings, strict=True)
+    )
+    result = executor().command(
+        lambda capabilities: capabilities.passage_maintenance.apply_passage_embeddings(
+            actor=current_admin(capabilities, actor_user.id),
+            operation=cli_operation("maintenance.backfill-passage-embeddings"),
+            candidates=snapshot.candidates,
+            records=records,
+            model_revision=EMBEDDING_MODEL_REVISION,
+        )
+    )
+    emit(
+        state,
+        {
+            "status": "changed" if result.indexed_passages else "unchanged",
+            "dry_run": False,
+            "candidates": result.candidates,
+            "indexed_passages": result.indexed_passages,
+            "stale_passages": result.stale_passages,
+        },
+    )
 
 
 @maintenance_group.command("purge-reading-session-pages")

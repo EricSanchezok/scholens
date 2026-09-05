@@ -433,15 +433,21 @@ class KnowledgeSearchResult(BaseModel):
     entity_id: UUID
     locator: dict[str, JsonValue] | None = None
     updated_at: datetime
+    retrieval_modes: list[Literal["exact", "full_text", "fuzzy", "semantic"]] = Field(
+        default_factory=list, max_length=4
+    )
 
 
 class KnowledgeSearchOutput(BaseModel):
     items: list[KnowledgeSearchResult]
     next_cursor: str | None = None
     searched_scope: KnowledgeScope
+    paper_search_mode: Literal["hybrid", "lexical"] = "lexical"
+    document_semantic_index_coverage: float = Field(default=0, ge=0, le=1)
+    passage_semantic_index_coverage: float = Field(default=0, ge=0, le=1)
     guidance: str = (
-        "Use reader_url as the durable user-facing paper link and write it as "
-        "[title](reader_url) in Markdown. Use get_paper_content for surrounding "
+        "Substitute the actual returned reader_url into a durable user-facing Markdown "
+        "link; never emit the literal placeholder reader_url. Use get_paper_content for surrounding "
         "paper text and get_annotation_thread or get_research_output for the "
         "complete stored item."
     )

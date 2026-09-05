@@ -522,8 +522,8 @@
         "reading": "Reading relevant sources…",
         "updatingWorkspace": "Updating your workspace…",
         "usingConnector": "Using {connector}…",
-        "completeSummary": "Research complete · {count, plural, one {# action} other {# actions}} · {sources, plural, one {# cited source} other {# cited sources}}",
-        "partialSummary": "Partially complete · {count, plural, one {# action} other {# actions}} · {sources, plural, one {# cited source} other {# cited sources}}",
+        "completeSummary": "Research complete · {count, plural, one {# action} other {# actions}} · {availableSources, plural, one {# available source} other {# available sources}} · {sources, plural, one {# cited source} other {# cited sources}}",
+        "partialSummary": "Partially complete · {count, plural, one {# failed action} other {# actions, some failed}} · {availableSources, plural, one {# available source} other {# available sources}} · {sources, plural, one {# cited source} other {# cited sources}}",
         "stopped": "Stopped",
         "failed": "Could not complete",
         "connectorFallback": "a connector",
@@ -538,6 +538,10 @@
         "state": {
           "running": "In progress",
           "succeeded": "Completed",
+          "results": "Found {count, plural, one {# result} other {# results}}",
+          "empty": "No matches found",
+          "changed": "Updated",
+          "unchanged": "No change needed",
           "failed": "Failed"
         }
       }

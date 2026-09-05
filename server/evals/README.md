@@ -2,6 +2,27 @@
 
 This directory contains maintained end-to-end and offline evaluations.
 
+## Tool reliability
+
+`tool_reliability_eval_manifest.json` contains 32 redacted acceptance scenarios
+covering non-overlapping tool routing, exact versus conceptual retrieval,
+single-step recovery, and citation admission. Run every scenario three times in
+the live-model staging harness, export the redacted observations, and grade them
+against the committed thresholds before a tool-catalog or retrieval release:
+
+```bash
+cd server
+uv run python -m evals.run_tool_reliability_eval /path/to/redacted-runs.json
+```
+
+The input contains exactly three records per case with `case_id`, `run`,
+`selected_tools`, `task_success`, `schema_valid_after_one_retry`,
+`unauthorized_calls`, and category-specific `retrieval_hit_at_5` or
+`source_admission_correct`. It must contain no prompts, arguments, paper text,
+provider bodies, credentials, or resource IDs. CI validates the manifest shape, catalog
+references, deterministic retrieval behavior, and source-admission regressions;
+it never requires provider credentials or production text.
+
 ## Citation resilience
 
 `citation_resilience_eval_manifest.json` is a redacted, deterministic

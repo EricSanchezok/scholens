@@ -112,6 +112,8 @@ const searchActivity = {
   subject: "chain-of-thought compression for efficient language models",
   source_count: 3,
   artifact_count: 0,
+  outcome: "results" as const,
+  result_count: 3,
 };
 
 const readActivity = {
@@ -123,6 +125,8 @@ const readActivity = {
   subject: "Reasoning Efficiently: Models, Methods, and Open Questions",
   source_count: 2,
   artifact_count: 0,
+  outcome: "results" as const,
+  result_count: 2,
 };
 
 const researchTrace = {
@@ -825,7 +829,9 @@ export const MobileWorklogExpanded: Story = {
     await userEvent.click(disclosure);
     await waitFor(() =>
       expect(
-        canvas.getByText("已完成研究 · 3 项操作 · 3 个已引用来源"),
+        canvas.getByText(
+          "已完成研究 · 3 项操作 · 3 个可用来源 · 3 个已引用来源",
+        ),
       ).toBeVisible(),
     );
   },
@@ -1015,9 +1021,39 @@ export const CompletedCollapsed: Story = {
   },
   play: async ({ canvasElement }) => {
     const disclosure = within(canvasElement).getByRole("button", {
-      name: "Research complete · 2 actions · 3 cited sources",
+      name: "Research complete · 2 actions · 3 available sources · 3 cited sources",
     });
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  },
+};
+
+export const EmptySearchOutcome: Story = {
+  args: {
+    turns: [],
+    liveTurn: liveTurn({
+      entries: [
+        {
+          ...searchActivity,
+          subject: "a deliberately absent concept",
+          source_count: 0,
+          outcome: "empty",
+          result_count: 0,
+        },
+      ],
+      content: "No matching stored research was found.",
+      phase: "ready",
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: "Research complete · 1 action · 0 available sources · 0 cited sources",
+      }),
+    );
+    await expect(
+      canvas.getByText("Searched 1 time · No matches found"),
+    ).toBeVisible();
   },
 };
 
@@ -1083,10 +1119,12 @@ export const PartialFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const disclosure = canvas.getByRole("button", {
-      name: "Partially complete · 2 actions · 3 cited sources",
+      name: "Partially complete · 2 actions, some failed · 3 available sources · 3 cited sources",
     });
     await userEvent.click(disclosure);
-    await expect(canvas.getByText("Searched 1 time · Completed")).toBeVisible();
+    await expect(
+      canvas.getByText("Searched 1 time · Found 3 results"),
+    ).toBeVisible();
     await expect(canvas.getByText("Read 1 source · Failed")).toBeVisible();
   },
 };

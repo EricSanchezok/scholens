@@ -72,6 +72,7 @@ function worklogSummary(
   entries: ConversationTraceEntry[],
   phase: ConversationPhase,
   sources: number,
+  availableSources: number,
   failure: ConversationFailure | null,
   connectionState: LiveTurn["connectionState"],
   stopFailure: boolean,
@@ -122,6 +123,7 @@ function worklogSummary(
   return t(failed ? "activity.partialSummary" : "activity.completeSummary", {
     count: operations.length,
     sources,
+    availableSources,
   });
 }
 
@@ -157,7 +159,19 @@ function batchLabel(
     .join(" · ");
   const state = {
     running: t("activity.state.running"),
-    succeeded: t("activity.state.succeeded"),
+    succeeded:
+      batch.activities[0]?.outcome === "empty"
+        ? t("activity.state.empty")
+        : batch.activities[0]?.outcome === "changed"
+          ? t("activity.state.changed")
+          : batch.activities[0]?.outcome === "unchanged"
+            ? t("activity.state.unchanged")
+            : batch.activities[0]?.category === "search" &&
+                batch.activities[0]?.result_count != null
+              ? t("activity.state.results", {
+                  count: batch.activities[0].result_count,
+                })
+              : t("activity.state.succeeded"),
     failed: t("activity.state.failed"),
   }[batch.state];
   return t("activity.batchState", { activity, state });
@@ -218,6 +232,7 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
 export function ConversationWorklog({
   entries,
   sourceTotal,
+  availableSourceTotal,
   phase,
   failure,
   provisionalItems,
@@ -230,6 +245,7 @@ export function ConversationWorklog({
 }: {
   entries: ConversationTraceEntry[];
   sourceTotal: number;
+  availableSourceTotal?: number;
   phase: ConversationPhase;
   failure: ConversationFailure | null;
   provisionalItems: ProvisionalAssistantItem[];
@@ -281,6 +297,7 @@ export function ConversationWorklog({
     entries,
     phase,
     sourceTotal,
+    availableSourceTotal ?? sourceTotal,
     failure,
     connectionState,
     stopFailure,

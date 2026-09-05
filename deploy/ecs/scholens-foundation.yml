@@ -142,6 +142,11 @@ Resources:
           Prefix: zotero-imports/
           ExpirationInDays: 2
           NoncurrentVersionExpiration: {NoncurrentDays: 1}
+        - Id: ExpirePassageEmbeddingArtifacts
+          Status: Enabled
+          Prefix: jobs/pdf-postprocess/
+          ExpirationInDays: 2
+          NoncurrentVersionExpiration: {NoncurrentDays: 1}
       OwnershipControls:
         Rules:
         - {ObjectOwnership: BucketOwnerEnforced}

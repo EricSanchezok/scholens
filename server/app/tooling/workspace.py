@@ -70,6 +70,32 @@ CONVERSATION_TOOL_PROFILE = "conversation"
 MCP_TOOL_PROFILE = "mcp"
 
 
+def _tool_domain(name: str) -> str:
+    if "annotation" in name or "comment" in name:
+        return "annotations"
+    if "job" in name:
+        return "jobs"
+    if "project" in name or "invitation" in name or "collaborator" in name:
+        return "projects"
+    if "output" in name:
+        return "outputs"
+    if "library" in name or "tag" in name or name == "collect_public_paper":
+        return "library"
+    if "ingest" in name or "upload" in name:
+        return "ingestion"
+    if "paper" in name or "citation" in name or name == "search_scholens_knowledge":
+        return "papers"
+    return "workspace"
+
+
+def _tool_intent(name: str) -> str:
+    return {
+        "search_scholens_knowledge": "conceptual_stored_knowledge_retrieval",
+        "search_paper_content": "exact_known_paper_text_matching",
+        "get_paper_content": "known_paper_line_range_read",
+    }.get(name, name)
+
+
 def _description(*, use: str, avoid: str, result: str, next_step: str) -> str:
     """Build a consistent decision-oriented description without implementation detail."""
     return (
@@ -134,6 +160,8 @@ def _tool(
             activity_subject_field=subject,
             allow_repeated_calls=allow_repeated_calls,
             replacement_tool=replacement_tool,
+            domain=_tool_domain(name),
+            intent=_tool_intent(name),
         )
     return ToolDefinition(
         name=name,
@@ -152,6 +180,8 @@ def _tool(
         activity_subject_field=subject,
         allow_repeated_calls=allow_repeated_calls,
         replacement_tool=replacement_tool,
+        domain=_tool_domain(name),
+        intent=_tool_intent(name),
     )
 
 
@@ -187,10 +217,22 @@ def build_workspace_tool_catalog(
             name="search_scholens_knowledge",
             title="Search Scholens knowledge",
             description=_description(
-                use="you need facts or prior work already stored in Scholens",
-                avoid="you need to discover papers on the internet",
-                result="ranked paper, passage, annotation, comment, and output matches",
-                next_step="open the relevant bounded resource before citing or changing it.",
+                use=(
+                    "you need natural-language concept, paraphrase, or cross-language "
+                    "matches in papers or prior work already stored in Scholens"
+                ),
+                avoid=(
+                    "you need internet discovery or an exact literal/regular-expression "
+                    "match inside one known paper"
+                ),
+                result=(
+                    "ranked paper, body-passage, annotation, comment, and output matches "
+                    "with retrieval modes and exact source locators"
+                ),
+                next_step=(
+                    "read surrounding paper lines with get_paper_content before citing, "
+                    "or open the relevant bounded resource before changing it."
+                ),
             ),
             input_model=wc.SearchKnowledgeInput,
             output_model=wc.KnowledgeSearchOutput,
@@ -250,10 +292,19 @@ def build_workspace_tool_catalog(
             name="search_paper_content",
             title="Search inside one paper",
             description=_description(
-                use="you know the paper UUID and need locations matching text or a pattern",
-                avoid="you need cross-paper search",
+                use=(
+                    "you know the paper UUID and need exact literal text or a regular "
+                    "expression, such as \\bWASD\\b or natural language|text command"
+                ),
+                avoid=(
+                    "you need concepts, paraphrases, translations, or cross-paper search; "
+                    "spaces here mean one contiguous phrase, so do not paste a keyword list"
+                ),
                 result="bounded matching lines with source locators",
-                next_step="read surrounding lines with get_paper_content before concluding.",
+                next_step=(
+                    "read surrounding lines with get_paper_content; if exact search is "
+                    "empty, use search_scholens_knowledge before concluding absence."
+                ),
             ),
             input_model=wc.SearchPaperContentInput,
             output_model=wc.PaperContentSearchOutput,

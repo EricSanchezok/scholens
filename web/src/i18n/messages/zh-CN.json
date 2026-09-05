@@ -522,8 +522,8 @@
         "reading": "正在阅读相关资料…",
         "updatingWorkspace": "正在更新你的工作区…",
         "usingConnector": "正在使用 {connector}…",
-        "completeSummary": "已完成研究 · {count} 项操作 · {sources} 个已引用来源",
-        "partialSummary": "部分完成 · {count} 项操作 · {sources} 个已引用来源",
+        "completeSummary": "已完成研究 · {count} 项操作 · {availableSources} 个可用来源 · {sources} 个已引用来源",
+        "partialSummary": "部分完成 · {count} 项操作中有失败 · {availableSources} 个可用来源 · {sources} 个已引用来源",
         "stopped": "已停止",
         "failed": "未能完成",
         "connectorFallback": "连接器",
@@ -538,6 +538,10 @@
         "state": {
           "running": "进行中",
           "succeeded": "已完成",
+          "results": "找到 {count} 项",
+          "empty": "未找到匹配",
+          "changed": "已更新",
+          "unchanged": "无需更改",
           "failed": "失败"
         }
       }

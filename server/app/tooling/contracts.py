@@ -93,6 +93,18 @@ class ExternalSourceCandidate:
 ToolSourceCandidate: TypeAlias = DocumentSourceCandidate | ExternalSourceCandidate
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ToolOutcomePresentation:
+    """Sanitized success semantics for user-facing activity displays."""
+
+    outcome: Literal["results", "empty", "changed", "unchanged"]
+    result_count: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.result_count is not None and self.result_count < 0:
+            raise ValueError("tool result_count must be non-negative")
+
+
 class ToolStructuredResult(BaseModel, Generic[PayloadT]):
     """Typed structured payload shared by Agent and MCP result adapters."""
 
@@ -153,6 +165,7 @@ class ToolOutcome:
     artifacts: list[dict[str, JsonValue]] = field(default_factory=list)
     action: dict[str, JsonValue] | None = None
     resource_links: tuple[ToolResourceLink, ...] = ()
+    presentation: ToolOutcomePresentation | None = None
 
 
 ToolHandler = Callable[[CapabilitiesT, ToolExecutionContext, BaseModel], ToolOutcome]
@@ -208,6 +221,8 @@ class ToolDefinition(Generic[CapabilitiesT]):
     activity_subject_field: str | None = None
     allow_repeated_calls: bool = False
     replacement_tool: str | None = None
+    domain: str = "workspace"
+    intent: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -216,6 +231,12 @@ class ToolDefinition(Generic[CapabilitiesT]):
             or not self.name.isidentifier()
         ):
             raise ValueError("tool names must be non-empty lowercase identifiers")
+        if not self.domain or not self.domain.isidentifier():
+            raise ValueError("tool domains must be non-empty identifiers")
+        if self.intent is None:
+            object.__setattr__(self, "intent", self.name)
+        elif not self.intent.strip():
+            raise ValueError("tool intent must not be empty")
         if self.activity_subject_field is not None:
             properties = self.input_model.model_json_schema().get("properties", {})
             if self.activity_subject_field not in properties:

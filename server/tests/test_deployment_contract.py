@@ -179,6 +179,7 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
     for name, prefix in (
         ("ExpireStagedPaperUploads", "uploads/"),
         ("ExpireStagedZoteroImports", "zotero-imports/"),
+        ("ExpirePassageEmbeddingArtifacts", "jobs/pdf-postprocess/"),
     ):
         assert content_lifecycle[name] == {
             "Id": name,
@@ -2280,6 +2281,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_24_1700_reading_activity_ledger.py",
         "2026_08_25_1100_failed_ingestion_dismissal.py",
         "2026_08_26_1200_source_reservation_nullable_digest.py",
+        "2026_09_05_1400_passage_embeddings.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

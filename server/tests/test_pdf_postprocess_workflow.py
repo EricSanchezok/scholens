@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from uuid import UUID, uuid4
+import hashlib
+from unittest.mock import patch
 
 import pytest
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    PassageEmbeddingRecord,
+    encode_passage_embedding_artifact,
+)
 
 from app.bootstrap.adapters.citation_provider import CitationProviderResult
 from app.bootstrap.workflows.pdf_postprocess import (
@@ -172,6 +179,64 @@ async def test_pdf_postprocess_carries_validated_embedding_into_finalize() -> No
     assert (  # type: ignore[union-attr]
         callbacks.resolution.embedding_source_digest == "a" * 64
     )
+
+
+@pytest.mark.asyncio
+async def test_pdf_postprocess_validates_artifact_before_atomic_finalize() -> None:
+    events: list[str] = []
+    callbacks = _Callbacks(events)
+    workflow = PdfPostprocessWorkflow(
+        executor=_Executor(_Capabilities(callbacks)),  # type: ignore[arg-type]
+        reader=_Reader(events),
+        provider=_Provider(events),  # type: ignore[arg-type]
+        operation_factory=OperationContextFactory(),
+    )
+    job_id = uuid4()
+    artifact = encode_passage_embedding_artifact(
+        model_revision=EMBEDDING_MODEL_REVISION,
+        records=(
+            PassageEmbeddingRecord(
+                source_digest="a" * 64,
+                embedding=(1.0,) + (0.0,) * 383,
+            ),
+        ),
+    )
+    storage_key = f"jobs/pdf-postprocess/{job_id}/passage-embeddings-v1.bin"
+
+    with (
+        patch(
+            "app.bootstrap.workflows.pdf_postprocess.s3_service.object_size_bytes",
+            return_value=len(artifact),
+        ),
+        patch(
+            "app.bootstrap.workflows.pdf_postprocess.s3_service.download_bytes",
+            return_value=artifact,
+        ),
+        patch(
+            "app.bootstrap.workflows.pdf_postprocess.s3_service.delete_file",
+            return_value=True,
+        ) as delete_file,
+    ):
+        await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=job_id,
+            payload={
+                "task_id": str(job_id),
+                "passage_embedding_artifact": {
+                    "storage_key": storage_key,
+                    "sha256": hashlib.sha256(artifact).hexdigest(),
+                    "model_revision": EMBEDDING_MODEL_REVISION,
+                    "dimension": 384,
+                    "passage_count": 1,
+                    "byte_size": len(artifact),
+                },
+            },
+        )
+
+    assert callbacks.resolution is not None
+    assert callbacks.resolution.passage_embeddings[0].source_digest == "a" * 64  # type: ignore[union-attr]
+    delete_file.assert_called_once_with(storage_key)
 
 
 @pytest.mark.asyncio

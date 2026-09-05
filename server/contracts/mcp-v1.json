@@ -45,7 +45,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -808,7 +808,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -1712,7 +1712,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "status": {
@@ -2082,7 +2082,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -2472,7 +2472,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "research_output": {
@@ -3416,7 +3416,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                       "title": "Reader Url"
                     }
                   }
@@ -3761,7 +3761,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -6957,7 +6957,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -7097,7 +7097,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -8350,7 +8350,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               }
             },
@@ -8650,7 +8650,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               }
             },
@@ -9276,7 +9276,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -11270,7 +11270,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -11410,7 +11410,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -17556,7 +17556,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -18217,7 +18217,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "representation": {
@@ -19043,7 +19043,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "result": {
@@ -19912,7 +19912,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "status": {
@@ -20589,7 +20589,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "representation": {
@@ -21814,7 +21814,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "size_bytes": {
@@ -22598,7 +22598,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               }
             },
@@ -23257,7 +23257,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "start_line": {
@@ -23847,7 +23847,7 @@
                 "type": "string"
               },
               "guidance": {
-                "default": "Use reader_url as the durable user-facing Scholens link. When writing Markdown, notes, reports, or citations, use [title](reader_url). Keep DOI, arXiv, or source URLs as provenance only; never persist temporary file_url, preview_url, or upload URLs.",
+                "default": "Use the actual returned reader_url as the durable user-facing Scholens link. When writing Markdown, notes, reports, or citations, substitute it into the link target; never emit the literal text reader_url. Keep DOI, arXiv, or source URLs as provenance only; never persist temporary file_url, preview_url, or upload URLs.",
                 "maxLength": 1000,
                 "title": "Guidance",
                 "type": "string"
@@ -23863,7 +23863,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               }
             },
@@ -24481,7 +24481,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "representation": {
@@ -26638,7 +26638,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -27299,7 +27299,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "representation": {
@@ -28146,7 +28146,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "source_kind": {
@@ -28484,7 +28484,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "result": {
@@ -29465,7 +29465,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "source_kind": {
@@ -29791,7 +29791,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "result": {
@@ -30878,7 +30878,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resolved_at": {
@@ -32171,7 +32171,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "result": {
@@ -33398,7 +33398,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                       "title": "Reader Url"
                     }
                   }
@@ -34716,7 +34716,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                      "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                       "title": "Reader Url"
                     }
                   }
@@ -38388,7 +38388,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "status": {
@@ -40157,7 +40157,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -41384,7 +41384,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "source": {
@@ -41896,7 +41896,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -46667,7 +46667,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -47371,7 +47371,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "source_kind": {
@@ -47709,7 +47709,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "result": {
@@ -48470,7 +48470,7 @@
         "read_only": true
       },
       "confirmation_policy": "none",
-      "description": "Use when you know the paper UUID and need locations matching text or a pattern. Do not use when you need cross-paper search. Returns bounded matching lines with source locators. Next: read surrounding lines with get_paper_content before concluding. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
+      "description": "Use when you know the paper UUID and need exact literal text or a regular expression, such as \\bWASD\\b or natural language|text command. Do not use when you need concepts, paraphrases, translations, or cross-paper search; spaces here mean one contiguous phrase, so do not paste a keyword list. Returns bounded matching lines with source locators. Next: read surrounding lines with get_paper_content; if exact search is empty, use search_scholens_knowledge before concluding absence. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
       "execution": "query",
       "input_schema": {
         "additionalProperties": false,
@@ -48837,7 +48837,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "total_match_count": {
@@ -49095,7 +49095,7 @@
         "read_only": true
       },
       "confirmation_policy": "none",
-      "description": "Use when you need facts or prior work already stored in Scholens. Do not use when you need to discover papers on the internet. Returns ranked paper, passage, annotation, comment, and output matches. Next: open the relevant bounded resource before citing or changing it. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
+      "description": "Use when you need natural-language concept, paraphrase, or cross-language matches in papers or prior work already stored in Scholens. Do not use when you need internet discovery or an exact literal/regular-expression match inside one known paper. Returns ranked paper, body-passage, annotation, comment, and output matches with retrieval modes and exact source locators. Next: read surrounding paper lines with get_paper_content before citing, or open the relevant bounded resource before changing it. When a result includes reader_url, use it as the durable user-facing Scholens Markdown link; retain DOI, arXiv, and source URLs as provenance only.",
       "execution": "query",
       "input_schema": {
         "$defs": {
@@ -49639,8 +49639,15 @@
           },
           "KnowledgeSearchOutput": {
             "properties": {
+              "document_semantic_index_coverage": {
+                "default": 0,
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Document Semantic Index Coverage",
+                "type": "number"
+              },
               "guidance": {
-                "default": "Use reader_url as the durable user-facing paper link and write it as [title](reader_url) in Markdown. Use get_paper_content for surrounding paper text and get_annotation_thread or get_research_output for the complete stored item.",
+                "default": "Substitute the actual returned reader_url into a durable user-facing Markdown link; never emit the literal placeholder reader_url. Use get_paper_content for surrounding paper text and get_annotation_thread or get_research_output for the complete stored item.",
                 "title": "Guidance",
                 "type": "string"
               },
@@ -49662,6 +49669,22 @@
                 ],
                 "default": null,
                 "title": "Next Cursor"
+              },
+              "paper_search_mode": {
+                "default": "lexical",
+                "enum": [
+                  "hybrid",
+                  "lexical"
+                ],
+                "title": "Paper Search Mode",
+                "type": "string"
+              },
+              "passage_semantic_index_coverage": {
+                "default": 0,
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Passage Semantic Index Coverage",
+                "type": "number"
               },
               "searched_scope": {
                 "discriminator": {
@@ -49830,12 +49853,26 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
                 "title": "Resource Uri",
                 "type": "string"
+              },
+              "retrieval_modes": {
+                "items": {
+                  "enum": [
+                    "exact",
+                    "full_text",
+                    "fuzzy",
+                    "semantic"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 4,
+                "title": "Retrieval Modes",
+                "type": "array"
               },
               "score": {
                 "minimum": 0,
@@ -52291,7 +52328,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -54077,7 +54114,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "target_document_id": {
@@ -54217,7 +54254,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "resource_uri": {
@@ -55394,7 +55431,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link, for example [title](reader_url). It is null when no document is available yet.",
+                "description": "Authenticated browser URL for reading this stored paper in Scholens. Use it as the durable user-facing Markdown link by substituting the actual returned URL, for example [Paper title](https://scholens.example/reader/<document-id>). Never emit the literal placeholder reader_url. It is null when no document is available yet.",
                 "title": "Reader Url"
               },
               "status": {

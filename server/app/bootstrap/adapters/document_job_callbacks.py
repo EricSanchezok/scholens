@@ -163,6 +163,7 @@ def _enqueue_pdf_postprocess(
     correlation_id: uuid.UUID,
     semantic_text: str,
     semantic_digest: str,
+    parser_markdown_s3_key: str | None,
 ) -> PersistedJob:
     postprocess_job_id = uuid.uuid4()
     base_url = get_webhook_base_url().rstrip("/")
@@ -187,6 +188,7 @@ def _enqueue_pdf_postprocess(
                 ),
                 "semantic_text": semantic_text,
                 "semantic_source_digest": semantic_digest,
+                "parser_markdown_s3_key": parser_markdown_s3_key,
             },
             job_id=postprocess_job_id,
         ),
@@ -459,6 +461,15 @@ def _apply_pdf_postprocess(
         db,
         document_id=paper.id,
         raw_content=paper.raw_content,
+        embeddings=(
+            {
+                record.source_digest: list(record.embedding)
+                for record in resolution.passage_embeddings
+            }
+            if resolution.passage_embeddings
+            else None
+        ),
+        embedding_model_revision=resolution.passage_embedding_model_revision,
     )
 
     if (
@@ -1125,6 +1136,7 @@ async def handle_paper_processing_webhook(
                     correlation_id=operation.trace.correlation_id,
                     semantic_text=semantic_text,
                     semantic_digest=semantic_source_digest(semantic_text),
+                    parser_markdown_s3_key=result.parser_markdown_s3_key,
                 )
                 changes: list[OperationChange] = []
                 if completed:

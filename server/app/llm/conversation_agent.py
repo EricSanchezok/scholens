@@ -89,8 +89,11 @@ from app.tooling import (
     ToolDispatcher,
     ToolExecutionContext,
     ToolOutcome,
+    ToolOutcomePresentation,
 )
 from app.tooling.source_extraction import extract_external_sources
+from app.tooling.error_projection import project_tool_error
+from app.tooling.outcome_presentation import outcome_presentation
 from app.tooling.workspace import CONVERSATION_TOOL_PROFILE
 from pydantic import TypeAdapter
 from pydantic_ai import (
@@ -448,6 +451,10 @@ class ScholensConversationAgent:
                 if value is not None and value.strip()
             )
             for paper in context_snapshot.papers
+            if any(
+                value is not None and value.strip()
+                for value in (paper.raw_content, paper.abstract)
+            )
         }
         deps = _ConversationAgentDependencies(
             actor=actor,
@@ -499,7 +506,7 @@ class ScholensConversationAgent:
             # Retries are only for tool argument validation raised by our tool
             # boundary. Plain text terminal answers have no output validator and
             # therefore cannot enter the old final-answer retry loop.
-            retries=2,
+            retries=1,
         )
 
         result_seen = False
@@ -1123,6 +1130,7 @@ class ScholensConversationAgent:
                         sources=outcome.sources,
                         artifacts=outcome.artifacts,
                         action=outcome.action,
+                        presentation=outcome.presentation,
                     ),
                 )
                 self._load_document_source_texts(deps, outcome)
@@ -1148,6 +1156,7 @@ class ScholensConversationAgent:
                     succeeded=True,
                     source_count=len(source_keys),
                     artifact_count=len(outcome.artifacts),
+                    presentation=outcome_presentation(outcome),
                 )
                 track_event(
                     "tool_call",
@@ -1194,12 +1203,7 @@ class ScholensConversationAgent:
                 )
                 if exc.code == "tool_arguments_invalid":
                     raise ModelRetry(_tool_argument_retry_message(exc)) from exc
-                return {
-                    "error": {
-                        "code": exc.code,
-                        "message": "The requested tool could not be used. Reassess and continue if possible.",
-                    }
-                }
+                return {"error": project_tool_error(exc, tool_name=name)}
             except Exception:
                 logger.exception("conversation.agent.tool_failed", extra={"tool": name})
                 self._record_tool_failure(
@@ -1285,6 +1289,7 @@ class ScholensConversationAgent:
         succeeded: bool,
         source_count: int | None = None,
         artifact_count: int | None = None,
+        presentation: ToolOutcomePresentation | None = None,
     ) -> None:
         current = deps.activities.get(call_id)
         if current is None:
@@ -1294,6 +1299,10 @@ class ScholensConversationAgent:
                 "state": "succeeded" if succeeded else "failed",
                 "source_count": source_count,
                 "artifact_count": artifact_count,
+                "outcome": (presentation.outcome if presentation is not None else None),
+                "result_count": (
+                    presentation.result_count if presentation is not None else None
+                ),
             }
         )
 
@@ -1341,7 +1350,7 @@ class ScholensConversationAgent:
             source.document_id
             for source in outcome.sources
             if isinstance(source, DocumentSourceCandidate)
-            and source.document_id not in deps.document_source_texts
+            and not deps.document_source_texts.get(source.document_id)
         }
         for document_id in missing_ids:
             try:
@@ -1564,9 +1573,10 @@ only for the IDs that remain active. Do not reissue a mutation merely to observe
 its job.
 
 When any Scholens tool result includes reader_url, use it as the durable browser
-link in user-facing Markdown, notes, reports, and citations (for example
-[paper title](reader_url)). Keep DOI, arXiv, and source URLs only as provenance;
-never persist temporary file_url, preview_url, or upload URLs.
+link in user-facing Markdown, notes, reports, and citations by substituting the
+actual returned URL into the link target. Never emit the literal placeholder
+reader_url. Keep DOI, arXiv, and source URLs only as provenance; never persist
+temporary file_url, preview_url, or upload URLs.
 
 Initial server-validated answer material:
 {initial_packet.model_dump_json()}
@@ -1622,6 +1632,12 @@ Initial server-validated answer material:
         )
         if not entries and citation_summary is None:
             return None
+        for reason, count in packet.coverage.rejected_source_reasons.items():
+            add_counter(
+                "scholens.conversation.source.rejections",
+                value=count,
+                attributes={"reason": reason},
+            )
         return ConversationTrace(
             entries=entries,
             citation_summary=citation_summary,

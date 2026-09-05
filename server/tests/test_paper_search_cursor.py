@@ -540,13 +540,20 @@ def test_search_total_and_mode_use_only_accepted_semantic_candidates(
         (accepted_id, 0.10),
         (rejected_id, 0.30),
     ]
+    passage_rows = Mock()
+    passage_rows.tuples.return_value = []
     detail_rows = Mock()
     detail_rows.all.return_value = []
-    db.execute.side_effect = [candidate_rows, semantic_rows, detail_rows]
+    db.execute.side_effect = [
+        candidate_rows,
+        semantic_rows,
+        passage_rows,
+        detail_rows,
+    ]
     lexical_rows = Mock()
     lexical_rows.all.return_value = []
     db.scalars.return_value = lexical_rows
-    db.scalar.side_effect = [0, 0]
+    db.scalar.side_effect = [0, 0, 0]
 
     class _Embedder:
         def embed_query(self, _query: str) -> list[float]:
@@ -708,12 +715,12 @@ def test_library_search_compiles_with_distinct_result_and_visibility_rows() -> N
 
     assert response.items == []
     assert response.total == 0
-    assert len(compiled_sql) == 5
+    assert len(compiled_sql) == 6
     assert any(
         "LEFT OUTER JOIN scholens.library_papers AS actor_library_entry" in statement
         for statement in compiled_sql
     )
-    for statement in [compiled_sql[0], compiled_sql[1], *compiled_sql[3:]]:
+    for statement in compiled_sql[:5]:
         assert (
             "EXISTS (SELECT scholens.library_papers.id "
             "FROM scholens.library_papers "
@@ -762,10 +769,68 @@ def test_short_numeric_search_skips_fuzzy_full_text_and_semantic_candidate_lanes
     assert response.items == []
     assert response.total == 0
     assert response.search_mode == "lexical"
-    assert len(compiled_sql) == 4
+    assert len(compiled_sql) == 5
     candidate_statement = compiled_sql[0]
     assert "similarity(" not in candidate_statement
     assert "search_text_compact" not in candidate_statement
     assert "ts_vector" not in candidate_statement
-    assert not any("document_passages" in statement for statement in compiled_sql)
     assert not any("cosine_distance" in statement for statement in compiled_sql)
+
+
+def test_semantic_passage_lane_is_authorization_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = Mock(spec=Session)
+    compiled_sql: list[str] = []
+
+    class _Embedder:
+        def embed_query(self, _query: str) -> list[float]:
+            return [1.0] + [0.0] * 383
+
+    def compile_statement(statement: ClauseElement) -> str:
+        compiled = " ".join(
+            str(statement.compile(dialect=postgresql.dialect())).split()
+        )
+        compiled_sql.append(compiled)
+        return compiled
+
+    rows = Mock()
+    rows.all.return_value = []
+    rows.tuples.return_value = []
+    db.execute.side_effect = lambda statement: (compile_statement(statement), rows)[1]
+    db.scalars.side_effect = lambda statement: (compile_statement(statement), rows)[1]
+    db.scalar.side_effect = lambda statement: (compile_statement(statement), 0)[1]
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.paper_search.try_local_embedder",
+        lambda: _Embedder(),
+    )
+
+    PostgresPaperSearch(db).search(
+        actor=_actor(),
+        request=PaperSearchQuery(
+            query="跨语言的世界模型控制",
+            collection=LibraryPaperCollection(),
+            filters=PaperSearchFilters(),
+            sort=PaperSearchSort.RELEVANCE,
+            limit=10,
+            offset=0,
+        ),
+    )
+
+    passage_queries = [
+        statement
+        for statement in compiled_sql
+        if "document_passages.embedding" in statement and "cosine_distance" in statement
+    ]
+    assert len(passage_queries) == 1
+    assert "JOIN scholens.documents" in passage_queries[0]
+    assert "EXISTS (SELECT scholens.library_papers.id" in passage_queries[0]
+    assert "embedding_model_revision" in passage_queries[0]
+    semantic_queries = [
+        statement for statement in compiled_sql if "cosine_distance" in statement
+    ]
+    assert len(semantic_queries) == 2
+    assert all(
+        "EXISTS (SELECT scholens.library_papers.id" in statement
+        for statement in semantic_queries
+    )

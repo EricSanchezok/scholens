@@ -8,6 +8,7 @@ from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
+from scholens_ai import PassageEmbeddingRecord
 
 from app.modules.jobs.application.actions import (
     JOB_COMPLETED,
@@ -75,6 +76,8 @@ class PdfPostprocessResolution:
     embedding: list[float] | None = None
     embedding_model_revision: str | None = None
     embedding_source_digest: str | None = None
+    passage_embeddings: tuple[PassageEmbeddingRecord, ...] = ()
+    passage_embedding_model_revision: str | None = None
 
 
 @runtime_checkable

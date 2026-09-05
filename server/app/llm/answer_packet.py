@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from collections import Counter
 from uuid import UUID
 
 from app.modules.conversations.application.contracts.answer_packet import (
@@ -117,6 +118,7 @@ class SourceRegistry:
             else None
         )
         self.rejected_sources = 0
+        self._rejected_source_reasons: Counter[str] = Counter()
 
     @property
     def sources(self) -> list[AnswerSource]:
@@ -134,8 +136,13 @@ class SourceRegistry:
             registry._dedupe[fingerprint] = source.key
         return registry
 
-    def reject(self) -> None:
+    @property
+    def rejected_source_reasons(self) -> dict[str, int]:
+        return dict(self._rejected_source_reasons)
+
+    def reject(self, reason: str = "invalid_external_source") -> None:
         self.rejected_sources += 1
+        self._rejected_source_reasons[reason] += 1
 
     def add(self, candidate: ToolSourceCandidate) -> list[int]:
         if isinstance(candidate, DocumentSourceCandidate):
@@ -155,11 +162,11 @@ class SourceRegistry:
             else None
         )
         if self._document_source_texts is not None and verified_texts is None:
-            self.rejected_sources += 1
+            self.reject("missing_verified_document")
             return []
         chunks = _document_chunks(candidate.excerpt)
         if not chunks:
-            self.rejected_sources += 1
+            self.reject("empty_excerpt")
             return []
         keys: list[int] = []
         for chunk in chunks:
@@ -167,7 +174,7 @@ class SourceRegistry:
             if verified_texts is not None and not any(
                 normalized in source_text for source_text in verified_texts
             ):
-                self.rejected_sources += 1
+                self.reject("excerpt_not_in_document")
                 continue
             fingerprint = hashlib.sha256(
                 f"document:{candidate.document_id}:{normalized}".encode()
@@ -194,7 +201,7 @@ class SourceRegistry:
         normalized_url = normalize_external_url(candidate.url)
         excerpt = candidate.excerpt.strip() if candidate.excerpt else ""
         if normalized_url is None or not excerpt:
-            self.rejected_sources += 1
+            self.reject("invalid_external_source")
             return []
         fingerprint = hashlib.sha256(
             f"external:{normalized_url}:{_normalized_external_reference(excerpt)}".encode()
@@ -235,7 +242,7 @@ class AnswerPacketBuilder:
         # tool observations are appended during a single agent run.
         for source_index, candidate in enumerate(direct_sources):
             if isinstance(candidate, ExternalSourceCandidate):
-                registry.reject()
+                registry.reject("external_direct_source")
                 continue
             keys = registry.add(candidate)
             if not keys:
@@ -267,7 +274,7 @@ class AnswerPacketBuilder:
                     arguments=observation.args,
                     payload=observation.payload,
                 ):
-                    registry.reject()
+                    registry.reject("external_verification_failed")
                     continue
                 verified_candidates.append(candidate)
             source_keys = registry.add_all(verified_candidates)
@@ -299,6 +306,7 @@ class AnswerPacketBuilder:
             truncated_actions=0,
             context_truncated=False,
             rejected_sources=registry.rejected_sources,
+            rejected_source_reasons=registry.rejected_source_reasons,
             failed_observations=agent_state.failed_observations,
         )
         packet = AnswerPacket(

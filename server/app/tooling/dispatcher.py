@@ -25,6 +25,7 @@ from app.tooling.contracts import (
     ToolDefinition,
 )
 from app.tooling.invocations import ToolInvocationGateway, tool_arguments_hash
+from app.tooling.outcome_presentation import outcome_presentation
 from app.tooling.results import (
     persisted_tool_outcome,
     restore_tool_outcome,
@@ -181,30 +182,58 @@ class ToolDispatcher(Generic[CapabilitiesT]):
         status = "success"
         execution = "unknown"
         error_code = "none"
+        outcome_class = "results"
+        failure_class = "none"
+        domain = "unknown"
         try:
-            return await self._dispatch(
+            outcome = await self._dispatch(
                 name=name,
                 raw_arguments=raw_arguments,
                 context=context,
                 access=access,
             )
+            outcome_class = outcome_presentation(outcome).outcome
+            return outcome
         except AppError as exc:
             status = "failure"
             error_code = exc.code
+            outcome_class = "failed"
+            failure_class = (
+                "caller_input"
+                if exc.kind is FailureKind.INVALID_ARGUMENT
+                else (
+                    "technical"
+                    if exc.kind
+                    in {
+                        FailureKind.INTERNAL,
+                        FailureKind.UNAVAILABLE,
+                        FailureKind.DEPENDENCY_FAILURE,
+                    }
+                    else "expected_business"
+                )
+            )
             raise
         except BaseException:
             status = "failure"
             error_code = "unexpected"
+            outcome_class = "failed"
+            failure_class = "technical"
             raise
         finally:
             try:
-                execution = self._catalog.definition_for(access, name).execution.value
+                definition = self._catalog.definition_for(access, name)
+                execution = definition.execution.value
+                domain = definition.domain
             except KeyError:
                 pass
             attributes = {
                 "tool": name,
+                "domain": domain,
+                "channel": access.profile_name,
                 "execution": execution,
                 "status": status,
+                "outcome_class": outcome_class,
+                "failure_class": failure_class,
                 "source": "local",
                 "error_code": error_code,
             }

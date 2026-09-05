@@ -21,6 +21,18 @@ from scholens_ai.embeddings import (
     semantic_source_digest,
     try_local_embedder,
 )
+from scholens_ai.passages import (
+    MAX_PASSAGE_EMBEDDINGS,
+    MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES,
+    PASSAGE_EMBEDDING_BATCH_SIZE,
+    PASSAGE_STRIDE_LINES,
+    DecodedPassageEmbeddingArtifact,
+    DocumentPassageWindow,
+    PassageEmbeddingRecord,
+    build_document_passages,
+    decode_passage_embedding_artifact,
+    encode_passage_embedding_artifact,
+)
 
 __all__ = [
     "EMBEDDING_DIMENSION",
@@ -40,4 +52,14 @@ __all__ = [
     "semantic_document_text",
     "semantic_source_digest",
     "try_local_embedder",
+    "MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES",
+    "MAX_PASSAGE_EMBEDDINGS",
+    "PASSAGE_EMBEDDING_BATCH_SIZE",
+    "PASSAGE_STRIDE_LINES",
+    "DecodedPassageEmbeddingArtifact",
+    "DocumentPassageWindow",
+    "PassageEmbeddingRecord",
+    "build_document_passages",
+    "decode_passage_embedding_artifact",
+    "encode_passage_embedding_artifact",
 ]

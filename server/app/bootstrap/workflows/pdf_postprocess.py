@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass
 from typing import Protocol
@@ -29,6 +30,13 @@ from app.shared.application import (
 )
 from app.shared.domain import AppError, FailureKind
 from pydantic import ValidationError
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    PassageEmbeddingRecord,
+    decode_passage_embedding_artifact,
+)
+
+from app.helpers.s3 import s3_service
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +105,9 @@ class PdfPostprocessWorkflow:
                 _require_fields(snapshot),
             )
         )
+        passage_embeddings = (
+            self._load_passage_embeddings(callback) if not snapshot.terminal else ()
+        )
         resolution = PdfPostprocessResolution(
             doi=metadata_resolution.doi,
             journal=metadata_resolution.journal,
@@ -106,12 +117,19 @@ class PdfPostprocessWorkflow:
             embedding=callback.embedding,
             embedding_model_revision=callback.embedding_model_revision,
             embedding_source_digest=callback.embedding_source_digest,
+            passage_embeddings=passage_embeddings,
+            passage_embedding_model_revision=(
+                callback.passage_embedding_artifact.model_revision
+                if passage_embeddings
+                and callback.passage_embedding_artifact is not None
+                else None
+            ),
         )
         finalize_operation = self._operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
-        return await self._executor.command_async(
+        result = await self._executor.command_async(
             lambda capabilities: capabilities.job_callbacks.complete_pdf_postprocess(
                 actor=actor,
                 operation=finalize_operation,
@@ -120,6 +138,52 @@ class PdfPostprocessWorkflow:
                 resolution=resolution,
             )
         )
+        if callback.passage_embedding_artifact is not None:
+            if not s3_service.delete_file(
+                callback.passage_embedding_artifact.storage_key
+            ):
+                logger.warning(
+                    "paper.pdf_postprocess.passage_artifact_cleanup_failed",
+                    extra={"job_id": str(job_id)},
+                )
+        return result
+
+    @staticmethod
+    def _load_passage_embeddings(
+        callback: PdfPostprocessCallback,
+    ) -> tuple[PassageEmbeddingRecord, ...]:
+        metadata = callback.passage_embedding_artifact
+        if metadata is None:
+            return ()
+        expected_key = (
+            f"jobs/pdf-postprocess/{callback.task_id}/passage-embeddings-v1.bin"
+        )
+        try:
+            if metadata.storage_key != expected_key:
+                raise ValueError("passage embedding artifact key does not match job")
+            if metadata.model_revision != EMBEDDING_MODEL_REVISION:
+                raise ValueError("passage embedding model revision is unsupported")
+            if s3_service.object_size_bytes(metadata.storage_key) != metadata.byte_size:
+                raise ValueError("passage embedding artifact size changed")
+            data = s3_service.download_bytes(metadata.storage_key)
+            if len(data) != metadata.byte_size:
+                raise ValueError("passage embedding artifact size changed")
+            if hashlib.sha256(data).hexdigest() != metadata.sha256:
+                raise ValueError("passage embedding artifact digest mismatch")
+            artifact = decode_passage_embedding_artifact(data)
+            if (
+                artifact.model_revision != metadata.model_revision
+                or artifact.dimension != metadata.dimension
+                or len(artifact.records) != metadata.passage_count
+            ):
+                raise ValueError("passage embedding artifact metadata mismatch")
+            return artifact.records
+        except Exception:
+            logger.exception(
+                "paper.pdf_postprocess.passage_artifact_rejected",
+                extra={"job_id": str(callback.task_id)},
+            )
+            return ()
 
     def _resolve_external(
         self,

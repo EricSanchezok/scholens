@@ -72,6 +72,7 @@ class AnswerCoverage(BaseModel):
     truncated_actions: int = Field(ge=0)
     context_truncated: bool = False
     rejected_sources: int = Field(ge=0)
+    rejected_source_reasons: dict[str, int] = Field(default_factory=dict)
     failed_observations: int = Field(ge=0)
 
 

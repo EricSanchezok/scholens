@@ -40,6 +40,7 @@ from app.tooling import (
     serialize_tool_success,
 )
 from app.tooling.workspace import MCP_TOOL_PROFILE
+from app.tooling.error_projection import tool_error_remediation as _error_remediation
 from app.transport.client_ip import UNKNOWN_CLIENT_IP, normalize_client_ip
 from app.transport.mcp.references import (
     mcp_invocation_id,
@@ -286,108 +287,6 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     )
     schema["type"] = "object"
     return schema
-
-
-def _is_oversized_prepare_upload_error(
-    *,
-    details: dict[str, object] | None,
-    tool_name: str | None,
-) -> bool:
-    if tool_name != "prepare_paper_upload" or details is None:
-        return False
-    errors = details.get("errors")
-    if not isinstance(errors, list):
-        return False
-    return any(
-        isinstance(error, dict)
-        and error.get("type") == "less_than_equal"
-        and error.get("loc") == ["size_bytes"]
-        for error in errors
-    )
-
-
-def _error_remediation(
-    *,
-    kind: FailureKind,
-    code: str,
-    details: dict[str, object] | None = None,
-    replacement_tool: str | None = None,
-    tool_name: str | None = None,
-) -> str:
-    if code == "tool_arguments_invalid":
-        if _is_oversized_prepare_upload_error(
-            details=details,
-            tool_name=tool_name,
-        ):
-            return (
-                "The declared PDF exceeds the 30 MiB upload limit. Preserve the "
-                "original and its readability, compress or optimize a copy to 30 MiB "
-                "or less, then call Scholens:prepare_paper_upload with the copy's "
-                "filename, exact size, and SHA-256. Do not retry unchanged bytes or "
-                "metadata."
-            )
-        return (
-            "Correct the named arguments using this tool's input schema, then call "
-            "the same tool again. Do not guess identifiers or opaque cursors."
-        )
-    if code.endswith("_cursor_invalid") or code.endswith("_cursor_expired"):
-        return (
-            "Return the exact opaque cursor from the previous response with "
-            "unchanged filters, or omit it to start over."
-        )
-    if replacement_tool is not None:
-        return (
-            f"Do not retry the same unbounded request. Use {replacement_tool} "
-            "and continue its opaque cursor until the complete result is read."
-        )
-    if code == "tool_result_budget_exceeded":
-        return (
-            "Do not retry the same unbounded request. Reduce limit or filters, or "
-            "continue from a returned cursor or Resource; report the diagnostic ID "
-            "if the documented bounded request still fails."
-        )
-    if code == "mcp_request_too_large":
-        return (
-            "Send one JSON-RPC request within the advertised MCP request-body limit. "
-            "Use bounded tool pages instead of embedding stored content in arguments."
-        )
-    if code in {"confirmation_required", "confirmation_stale"}:
-        return (
-            "Show the returned impact preview to the user. Call the same tool with "
-            "unchanged arguments and the returned confirmation token only after approval."
-        )
-    if kind is FailureKind.PERMISSION_DENIED:
-        return (
-            "Do not retry unchanged. Ask the user to grant the required Access Key and "
-            "resource permission, or choose a resource the caller can access."
-        )
-    if kind is FailureKind.NOT_FOUND:
-        return (
-            "Verify the immutable UUID or token with a list/get tool. The resource may "
-            "have been deleted or may not be visible to this caller."
-        )
-    if kind is FailureKind.CONFLICT:
-        return (
-            "Refresh the affected resource, preserve any supplied idempotency key, and "
-            "retry only after adapting to its current state."
-        )
-    if kind is FailureKind.PAYLOAD_TOO_LARGE:
-        return (
-            "Reduce the request to its advertised limit. For reads, use bounded pages "
-            "or summary tools; for uploads, choose a smaller PDF and start a new session."
-        )
-    if kind is FailureKind.RATE_LIMITED:
-        return (
-            "Wait before retrying; reuse the same idempotency key for the same action."
-        )
-    if kind in {FailureKind.DEPENDENCY_FAILURE, FailureKind.UNAVAILABLE}:
-        return (
-            "Retry after a short delay with the same idempotency key. If the failure "
-            "persists, report the diagnostic ID to the user."
-        )
-    if kind is FailureKind.UNAUTHENTICATED:
-        return "Reconnect with an active Scholens Access Key; never place the key in tool arguments."
-    return "Review the error code and details, correct the request, and avoid blind retries."
 
 
 def _record_mcp_diagnostic(

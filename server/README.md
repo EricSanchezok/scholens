@@ -350,11 +350,12 @@ idempotent Library/Project fixture for the selected synthetic account. It does
 not create or modify Identity users and is never invoked by `serve`.
 
 Paper search defaults to `PAPER_SEARCH_BACKEND=postgres_hybrid`. It combines
-compact exact/trigram matching, weighted PostgreSQL full text, and the pinned
-local multilingual embedding model at `SCHOLENS_EMBEDDING_MODEL_PATH`; no query
-or paper text is sent to a model provider. `postgres_fts` selects the same
-authorization-first lexical lanes without semantic retrieval. A missing or
-unavailable model degrades a request to lexical results.
+compact exact/trigram matching, weighted PostgreSQL full text, and document- and
+passage-level projections from the pinned local multilingual embedding model at
+`SCHOLENS_EMBEDDING_MODEL_PATH`; no query or paper text is sent to a model
+provider. `postgres_fts` selects the same authorization-first lexical lanes
+without semantic retrieval. A missing or unavailable model, rejected passage
+artifact, or partial vector backfill degrades a request to lexical results.
 
 Existing or stale semantic projections are maintained with a bounded dry-run
 first:
@@ -362,13 +363,17 @@ first:
 ```bash
 uv run scholens maintenance backfill-search-embeddings --batch-size 100 --json
 uv run scholens maintenance backfill-search-embeddings --batch-size 100 --apply --yes --json
+uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --json
+uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --apply --yes --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --apply --yes --json
 ```
 
-Repeat the apply command until `candidates` reaches zero. The projection is
-versioned and digest-bound, so a model or source-text change is reindexed
-without rewriting canonical Document content.
+Repeat each apply command until `candidates` reaches zero. Both semantic
+projections are versioned and digest-bound, so a model or source-text change is
+reindexed without rewriting canonical Document content. Passage inference runs
+outside the database transaction and the apply command revalidates each content
+digest before updating it.
 
 The `maintenance fix-annotation-offsets` and
 `maintenance reprocess-contaminated-documents` repairs are also bounded and
@@ -805,9 +810,13 @@ inventory are injected so the model acts on real capabilities. External
 literature discovery stays connector-owned.
 
 Local tool argument validation returns only sanitized field locations, error
-types, and messages to the model through a bounded retry. Raw arguments remain
-private. Tool error metrics retain the stable tool name, provider, and error
-code so repeated schema mismatches are observable without logging payloads.
+types, and messages to the model through one bounded retry. Raw arguments remain
+private. The canonical catalog gives every tool a unique intent and domain.
+Conversation and MCP share structured error projection with stable code,
+retryability, and remediation. Successful calls expose `results`, `empty`,
+`changed`, or `unchanged` internally, so an expected empty search is not shown
+as a technical failure. Metrics retain only low-cardinality domain, channel,
+outcome/failure class, provider, and error code without logging payloads.
 
 Unified Conversation agent workflow:
 

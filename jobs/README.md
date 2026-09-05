@@ -79,11 +79,17 @@ second full download.
    produces an audit archive (`mineru-result.zip`).
 6. Extract metadata with DeepSeek unless the caller supplied authoritative
    metadata, as Zotero imports do.
-7. Build the bounded title/keywords/summary/abstract semantic projection with
-   the pinned local multilingual embedding model. Embedding failure is
-   non-fatal and leaves lexical search available.
-8. Send the result, optional versioned embedding, and token usage to Server
-   through an HMAC-signed webhook.
+7. Build the bounded title/keywords/summary/abstract semantic projection and
+   canonical five-line passage projections with the pinned local multilingual
+   embedding model. Passage embeddings are encoded as a size-bounded,
+   checksummed binary artifact under the task-owned S3 prefix; only its metadata
+   enters the callback body. Embedding failure is non-fatal and leaves lexical
+   search available.
+8. Send the result, optional versioned document embedding, optional passage
+   artifact metadata, and token usage to Server through an HMAC-signed webhook.
+   Server validates the artifact key, size, digest, revision, dimensions,
+   normalization, and record count before atomically indexing it, then removes
+   the temporary object after finalization.
 
 The Jobs PDF callback transport temporarily owns one rolling-deploy
 compatibility retry for the additive `result.page_count` field. It retries
@@ -92,6 +98,13 @@ exactly once without that field only when a Server 422 body identifies
 transport failure remains terminal. Remove this adapter after the accepting
 Server release is deployed to every callback consumer and callbacks queued
 against the older contract have drained.
+
+The PDF post-process callback similarly retries exactly once without
+`passage_embedding_artifact` only when an older Server identifies that exact
+top-level field as extra. The artifact is derived data and its two-day S3
+lifecycle bounds an object left behind by that compatibility path. Remove this
+adapter only after the accepting Server release is deployed everywhere and old
+post-process jobs have drained.
 
 Jobs and Server consume one shared callback-size contract. The exact compact
 JSON body is rejected before HTTP above 64 MiB; PDF results separately cap

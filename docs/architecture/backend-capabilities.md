@@ -395,9 +395,19 @@ always wins over a concurrent generated title.
 
 Every model-visible research workspace tool is defined once in
 `server/app/tooling/workspace.py`. A `ToolDefinition` owns its stable name,
-description, Pydantic input model, execution kind, and application handler.
+unique intent, domain, description, Pydantic input model, execution kind, and
+application handler.
 Independent Conversation and MCP profiles select definitions from the same
 catalog; transports never copy schemas or handlers.
+
+The same boundary also owns outcome and error semantics. A successful handler
+is classified as `results`, `empty`, `changed`, or `unchanged`, with a bounded
+result count when the payload exposes one. Conversation publishes that state in
+its sanitized activity record instead of presenting an expected empty query as
+a failure. Both Conversation and MCP project `AppError` through the same stable
+code, retryability, message, and remediation mapping. Telemetry records only
+tool domain, channel, outcome class, and low-cardinality failure class; raw
+arguments and result content never become dimensions.
 
 The catalog is designed around a Project as the durable knowledge boundary for
 an external research repository. `create_project` and `get_project` return its
@@ -815,9 +825,10 @@ data or responsibility.
 
 `PaperSearchPort` is the stable application boundary. The default
 `postgres_hybrid` adapter applies authorization before candidate retrieval,
-then fuses four PostgreSQL lanes with reciprocal-rank fusion: compact exact
-matching for joined terms, trigram tolerance, weighted full-text metadata and
-passages, and cosine distance over a local multilingual E5 projection. The
+then fuses PostgreSQL lanes with reciprocal-rank fusion: compact exact matching
+for joined terms, trigram tolerance, weighted full-text metadata and passages,
+and cosine distance over local multilingual E5 document and passage
+projections. The
 embedding model and its tokenizer are pinned image artifacts; queries and paper
 text do not leave Scholens for semantic retrieval. `postgres_fts` remains an
 explicit lexical-only degradation backend, and semantic runtime failure falls
@@ -855,13 +866,21 @@ must add a production-shaped `EXPLAIN ANALYZE` latency gate and choose an
 index-backed candidate strategy; changing to PostgreSQL's `%` operator without
 controlling its session threshold would silently change recall.
 
-`Document.search_text_compact` and `DocumentSearchEmbedding` are derived search
-projections. The latter is keyed by document and model revision and carries a
-digest of the bounded title/keywords/summary/abstract source. PDF completion
-may upsert the current embedding, while the bounded, repeatable
-`maintenance backfill-search-embeddings` command finds missing or stale digests
-for existing documents. Retrieval responses report their active mode and
-semantic coverage; raw user queries are not written to analytics telemetry.
+`Document.search_text_compact`, `DocumentSearchEmbedding`, and passage
+embeddings on `DocumentPassage` are derived search projections. The document
+projection is keyed by document and model revision and carries a digest of the
+bounded title/keywords/summary/abstract source. Passage vectors are keyed to
+the canonical five-line, three-line-stride passage content by SHA-256. PDF
+post-processing transfers them through a checksummed, size-bounded binary S3
+artifact whose key is bound to the callback task; Server validates it before
+atomically replacing the passage index. The bounded, repeatable
+`maintenance backfill-search-embeddings` and
+`maintenance backfill-passage-embeddings` commands find missing or stale
+digests for existing documents and passages. Embedding inference occurs outside
+the database transaction and writes revalidate content digests. Retrieval
+responses report their active mode, per-result retrieval modes, and document
+and passage semantic coverage; raw user queries are not written to analytics
+telemetry.
 `PAPER_SEARCH_BACKEND` is validated at startup. HTTP, Agent, and MCP consumers
 continue to depend only on the application port and public search contract.
 

@@ -49,6 +49,9 @@ capability the agent uses when evidence is needed, not a mandatory prelude to
 every response. When tools are used, the product may disclose a concise,
 inspectable activity history, but it must not expose model chain-of-thought,
 raw tool arguments, provider heartbeats, or internal iteration mechanics.
+That history distinguishes a successful empty search and a successful no-op
+from a technical failure, and distinguishes evidence made available to the
+agent from citations actually attached to the answer.
 
 That consistency includes the surrounding interface. New pages may have
 different information architecture and density, but they should not invent an
@@ -78,7 +81,8 @@ or expand the MCP identity surface.
 Library and Project collections are working research memory, not archival page
 tables. A researcher should be able to recover a paper from an exact title,
 joined or misspelled terms, or an approximate description of its subject and
-claim without remembering the original wording. Search must preserve scope and
+claim—including a claim expressed only in the paper body—without remembering
+the original wording. Search must preserve scope and
 permissions, make relevance understandable, and degrade to lexical retrieval
 rather than returning an error when semantic indexing is temporarily
 incomplete.

@@ -4,6 +4,7 @@ import asyncio
 import re
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -287,6 +288,8 @@ async def _events(
     scope: ConversationChatScope | None = None,
     connector_set: ResolvedConnectorToolSet | None = None,
     allow_repeated_calls: bool = False,
+    context_snapshot: ConversationContextSnapshot | None = None,
+    executor: Any | None = None,
 ) -> list[ConversationAgentStreamEvent]:
     runtime = ScholensConversationAgent(
         catalog=_catalog(allow_repeated_calls=allow_repeated_calls),
@@ -316,9 +319,9 @@ async def _events(
                 status="active",
                 email_verified=True,
             ),
-            executor=_Executor(),  # type: ignore[arg-type]
+            executor=executor or _Executor(),  # type: ignore[arg-type]
             conversation_scope=scope or _scope(),
-            context_snapshot=_snapshot(dispatcher),
+            context_snapshot=context_snapshot or _snapshot(dispatcher),
             conversation_id=conversation_id,
             client_ip="127.0.0.1",
             request_operation=operation,
@@ -835,6 +838,8 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
             subject="reasoning compression",
             source_count=1,
             artifact_count=0,
+            outcome="results",
+            result_count=1,
         ),
     ]
     assert dispatcher.calls == [
@@ -851,6 +856,83 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
     assert isinstance(trace, ConversationTrace)
     assert trace.citation_summary is not None
     assert trace.citation_summary.source_count == 1
+
+
+@pytest.mark.asyncio
+async def test_project_tool_source_reloads_when_context_snapshot_has_no_text() -> None:
+    async def research_answer(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        has_result = any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        )
+        if not has_result:
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"reasoning compression"}',
+                    tool_call_id="search-project",
+                )
+            }
+            return
+        yield _grounded_text_answer("The project source is available.", info)
+
+    class _PaperContent:
+        @staticmethod
+        def read(**_kwargs: object) -> object:
+            return SimpleNamespace(
+                raw_content=("Validated evidence about chain-of-thought compression."),
+                abstract=None,
+            )
+
+    class _SourceCapabilities:
+        paper_content = _PaperContent()
+
+    class _SourceExecutor:
+        @staticmethod
+        def query(operation: Any) -> Any:
+            return operation(_SourceCapabilities())
+
+    dispatcher = _Dispatcher()
+    project_id = uuid4()
+    snapshot = ConversationContextSnapshot(
+        papers=[
+            ChatPaperSnapshot(
+                document_id=dispatcher.document_id,
+                title="A project paper",
+                abstract=None,
+                raw_content=None,
+                keywords=None,
+                authors=["Researcher"],
+                publish_date=None,
+            )
+        ],
+        projects=[],
+        available_document_count=1,
+    )
+    events = await _events(
+        model=FunctionModel(stream_function=research_answer),
+        dispatcher=dispatcher,
+        query="总结这个项目里的论文",
+        scope=ConversationChatScope(
+            scope_type=ConversationScopeType.PROJECT,
+            project_id=project_id,
+            document_id=None,
+            paper_context=SelectedPaperCollection(project_ids=[project_id]),
+            tool_permissions=frozenset({WorkspacePermission.READ}),
+            title_is_default=False,
+        ),
+        context_snapshot=snapshot,
+        executor=_SourceExecutor(),
+    )
+
+    result = _result(events)
+    assert result.trace is not None
+    assert result.trace.citation_summary is not None
+    assert result.trace.citation_summary.available_source_count == 1
+    assert result.trace.citation_summary.rejected_source_count == 0
 
 
 @pytest.mark.asyncio

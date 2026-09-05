@@ -1709,6 +1709,35 @@
             "title": "Kind",
             "type": "string"
           },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "results",
+                  "empty",
+                  "changed",
+                  "unchanged"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "result_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Count"
+          },
           "sequence": {
             "minimum": 1.0,
             "title": "Sequence",

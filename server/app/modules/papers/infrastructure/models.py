@@ -406,6 +406,14 @@ class DocumentPassage(Base):
     __table_args__ = (
         UniqueConstraint("document_id", "start_line"),
         Index("ix_document_passages_ts_vector", "ts_vector", postgresql_using="gin"),
+        Index("ix_document_passages_embedding_revision", "embedding_model_revision"),
+        Index(
+            "ix_document_passages_embedding_hnsw_cosine",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_where=text("embedding IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
@@ -419,5 +427,15 @@ class DocumentPassage(Base):
     end_line: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     ts_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
+    embedding_model_revision: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    embedding_source_digest: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    embedded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     document: Mapped["Document"] = relationship("Document")

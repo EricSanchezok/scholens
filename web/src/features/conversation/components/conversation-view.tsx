@@ -63,11 +63,13 @@ export type ConversationEmptyState = {
 };
 
 function LiveConversationWorklog({
+  availableSourceTotal,
   historical,
   onOpenChange,
   sourceTotal,
   store,
 }: {
+  availableSourceTotal: number;
   historical?: boolean;
   onOpenChange?: (open: boolean) => void;
   sourceTotal: number;
@@ -90,6 +92,7 @@ function LiveConversationWorklog({
       phase={snapshot.phase}
       provisionalItems={snapshot.provisionalItems}
       sourceTotal={sourceTotal}
+      availableSourceTotal={availableSourceTotal}
       startedAtMs={snapshot.startedAtMs}
       stopFailure={snapshot.stopFailure}
     />
@@ -258,6 +261,9 @@ function AssistantMessage({
     >
       {liveStore ? (
         <LiveConversationWorklog
+          availableSourceTotal={
+            citationSummary?.available_source_count ?? sourceTotal
+          }
           historical={historical}
           onOpenChange={onActivityOpenChange}
           sourceTotal={sourceTotal}
@@ -265,6 +271,9 @@ function AssistantMessage({
         />
       ) : (
         <ConversationWorklog
+          availableSourceTotal={
+            citationSummary?.available_source_count ?? sourceTotal
+          }
           entries={entries}
           failure={failure ?? null}
           historical={historical}
