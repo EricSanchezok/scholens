@@ -83,7 +83,7 @@ describe("PaperSearchForm", () => {
     expect(input).toHaveFocus();
   });
 
-  it("clears a committed query as soon as the draft becomes empty", async () => {
+  it("keeps a cleared draft local until Enter commits it", async () => {
     const onCommit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -92,6 +92,9 @@ describe("PaperSearchForm", () => {
     const input = screen.getByRole("searchbox", { name: "Search papers" });
 
     await user.clear(input);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    await user.keyboard("{Enter}");
     expect(onCommit).toHaveBeenCalledWith("");
   });
 
