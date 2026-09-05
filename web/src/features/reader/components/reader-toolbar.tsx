@@ -50,6 +50,7 @@ export type ReaderToolbarLabels = {
   fit: string;
   fitWidth: string;
   fitPage: string;
+  zoomLevel: string;
   search: string;
   closeSearch: string;
   noSearchResults: string;
@@ -91,7 +92,7 @@ export function ReaderToolbar({
   view,
   search,
   translation,
-  zoom,
+  zoomPercent,
 }: {
   className?: string;
   fitMode: ReaderFitMode;
@@ -105,7 +106,7 @@ export function ReaderToolbar({
   onPageChange: (page: number) => void;
   onReturn: () => void;
   onViewChange: (view: ReaderDocumentView) => void;
-  onZoomChange: (zoom: number) => void;
+  onZoomChange: (zoomPercent: number) => void;
   pageCount: number;
   pageNumber: number;
   panelOpen: boolean;
@@ -136,13 +137,18 @@ export function ReaderToolbar({
   };
   title: string;
   view: ReaderDocumentView;
-  zoom: number;
+  zoomPercent?: number;
 }) {
   const selectedProjectContext = projectContext?.projectId
     ? (projectContext.options.find(
         (project) => project.id === projectContext.projectId,
       )?.title ?? labels.personalContext)
     : labels.personalContext;
+  const fitLabel =
+    fitMode === "custom"
+      ? labels.fit
+      : `${labels.fit}: ${fitMode === "page" ? labels.fitPage : labels.fitWidth}`;
+  const zoomValue = zoomPercent === undefined ? "—" : `${zoomPercent}%`;
 
   return (
     <div
@@ -383,28 +389,38 @@ export function ReaderToolbar({
           {view === "pdf" ? (
             <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
               <IconButton
+                disabled={zoomPercent === undefined}
                 label={labels.zoomOut}
-                onClick={() => onZoomChange(Math.max(zoom - 0.1, 0.5))}
+                onClick={() => {
+                  if (zoomPercent !== undefined) {
+                    onZoomChange(Math.max(zoomPercent - 10, 50));
+                  }
+                }}
                 variant="ghost"
               >
                 <Icon glyph={ZoomOutIcon} size={20} />
               </IconButton>
-              <span className="text-secondary w-12 text-center text-xs tabular-nums">
-                {Math.round(zoom * 100)}%
+              <span
+                aria-label={`${labels.zoomLevel}: ${zoomValue}`}
+                className="text-secondary w-12 text-center text-xs tabular-nums"
+              >
+                {zoomValue}
               </span>
               <IconButton
+                disabled={zoomPercent === undefined}
                 label={labels.zoomIn}
-                onClick={() => onZoomChange(Math.min(zoom + 0.1, 3))}
+                onClick={() => {
+                  if (zoomPercent !== undefined) {
+                    onZoomChange(Math.min(zoomPercent + 10, 300));
+                  }
+                }}
                 variant="ghost"
               >
                 <Icon glyph={ZoomInIcon} size={20} />
               </IconButton>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <IconButton
-                    label={`${labels.fit}: ${fitMode === "page" ? labels.fitPage : labels.fitWidth}`}
-                    variant="ghost"
-                  >
+                  <IconButton label={fitLabel} variant="ghost">
                     <Icon glyph={FitIcon} size={20} />
                   </IconButton>
                 </DropdownMenuTrigger>

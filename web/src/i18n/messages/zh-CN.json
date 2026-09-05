@@ -855,6 +855,7 @@
       "search": "搜索 PDF",
       "showOutline": "展开论文目录",
       "zoomIn": "放大",
+      "zoomLevel": "缩放比例",
       "zoomOut": "缩小"
     },
     "reflow": {

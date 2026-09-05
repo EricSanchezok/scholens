@@ -6,6 +6,7 @@ import {
   normalizeReaderSelectionRects,
   readerAnnotationPaintMode,
   readerPdfSourceScrollTop,
+  resolveReaderPdfScale,
   selectReaderViewportPage,
 } from "./pdf-page";
 import type { ReaderAnnotationSummary } from "../reader-types";
@@ -162,6 +163,44 @@ describe("readerPdfSourceScrollTop", () => {
         sourceRect: { height: 0.02, width: 0.7, x: 0.15, y: 0 },
       }),
     ).toBe(0);
+  });
+});
+
+describe("resolveReaderPdfScale", () => {
+  const containerSize = { height: 700, width: 900 };
+  const pageSize = { height: 800, width: 600 };
+
+  it("fits the PDF to the available document width", () => {
+    expect(
+      resolveReaderPdfScale({
+        containerSize,
+        fitMode: "width",
+        pageSize,
+        zoom: 1,
+      }),
+    ).toBeCloseTo(868 / 600);
+  });
+
+  it("uses the smaller dimension when fitting the complete page", () => {
+    expect(
+      resolveReaderPdfScale({
+        containerSize,
+        fitMode: "page",
+        pageSize,
+        zoom: 1,
+      }),
+    ).toBeCloseTo(668 / 800);
+  });
+
+  it("uses the explicit zoom in custom mode", () => {
+    expect(
+      resolveReaderPdfScale({
+        containerSize,
+        fitMode: "custom",
+        pageSize,
+        zoom: 1.6,
+      }),
+    ).toBe(1.6);
   });
 });
 

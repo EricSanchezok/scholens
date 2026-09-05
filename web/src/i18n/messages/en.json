@@ -855,6 +855,7 @@
       "search": "Search PDF",
       "showOutline": "Show document outline",
       "zoomIn": "Zoom in",
+      "zoomLevel": "Zoom level",
       "zoomOut": "Zoom out"
     },
     "reflow": {

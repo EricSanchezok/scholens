@@ -64,6 +64,7 @@ import {
 } from "./api/queries";
 import {
   PdfPage,
+  type ReaderEffectiveZoom,
   type ReaderFitMode,
   type ReaderPdfSourceTarget,
 } from "./components/pdf-page";
@@ -165,7 +166,10 @@ function ReaderDocumentWorkspace({
   }>();
   const [pageCount, setPageCount] = React.useState(1);
   const [fitMode, setFitMode] = React.useState<ReaderFitMode>("width");
-  const [zoom, setZoom] = React.useState(1);
+  const [customZoomPercent, setCustomZoomPercent] = React.useState(100);
+  const [effectiveZoom, setEffectiveZoom] = React.useState<
+    ReaderEffectiveZoom & { documentId: string }
+  >();
   const [reflowOutlineOpen, setReflowOutlineOpen] = React.useState(false);
   const [mobileReflowOutlineOpen, setMobileReflowOutlineOpen] =
     React.useState(false);
@@ -284,6 +288,14 @@ function ReaderDocumentWorkspace({
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
   const pageNumber = Math.min(rawPage, pageCount);
+  const zoomPercent =
+    fitMode === "custom"
+      ? customZoomPercent
+      : effectiveZoom?.documentId === documentId &&
+          effectiveZoom.fitMode === fitMode &&
+          effectiveZoom.pageNumber === pageNumber
+        ? effectiveZoom.zoomPercent
+        : undefined;
   const panel = readReaderPanel(searchParams.get("panel"));
   const conversationId = searchParams.get("conversation") ?? undefined;
   const filteredAnnotations = React.useMemo(() => {
@@ -683,6 +695,23 @@ function ReaderDocumentWorkspace({
     [],
   );
 
+  const handleEffectiveZoomChange = React.useCallback(
+    (nextZoom: ReaderEffectiveZoom) => {
+      setEffectiveZoom((current) => {
+        if (
+          current?.documentId === documentId &&
+          current.fitMode === nextZoom.fitMode &&
+          current.pageNumber === nextZoom.pageNumber &&
+          current.zoomPercent === nextZoom.zoomPercent
+        ) {
+          return current;
+        }
+        return { ...nextZoom, documentId };
+      });
+    },
+    [documentId],
+  );
+
   const handlePdfInternalDestination = React.useCallback(
     (destination: unknown) => void resolveDestination(destination),
     [resolveDestination],
@@ -722,6 +751,7 @@ function ReaderDocumentWorkspace({
       search: t("toolbar.search"),
       showOutline: t("toolbar.showOutline"),
       zoomIn: t("toolbar.zoomIn"),
+      zoomLevel: t("toolbar.zoomLevel"),
       zoomOut: t("toolbar.zoomOut"),
     }),
     [t],
@@ -1062,8 +1092,8 @@ function ReaderDocumentWorkspace({
                     setMobileReflowOutlineOpen(false);
                     updateLocation({ view: nextView });
                   }}
-                  onZoomChange={(nextZoom) => {
-                    setZoom(nextZoom);
+                  onZoomChange={(nextZoomPercent) => {
+                    setCustomZoomPercent(nextZoomPercent);
                     setFitMode("custom");
                   }}
                   pageCount={pageCount}
@@ -1123,7 +1153,7 @@ function ReaderDocumentWorkspace({
                     status: fullTranslationStatus,
                   }}
                   view={readerView}
-                  zoom={zoom}
+                  zoomPercent={zoomPercent}
                 />
                 {reflowNudge.visible ? (
                   <ReaderMobileReflowNudge
@@ -1176,6 +1206,7 @@ function ReaderDocumentWorkspace({
                       pageErrorTitle={t("pageErrorTitle")}
                       downloadLabel={t("downloadInstead")}
                       onDownload={handleDownload}
+                      onEffectiveZoomChange={handleEffectiveZoomChange}
                       onRenderError={handlePdfRenderError}
                       onActiveTextSelectionChange={
                         handleActiveTextSelectionChange
@@ -1268,7 +1299,7 @@ function ReaderDocumentWorkspace({
                           : undefined
                       }
                       sourceTarget={reflowSourceTarget}
-                      zoom={zoom}
+                      zoom={customZoomPercent / 100}
                     />
                   ) : null}
                   <AnimatePresence initial={false}>
