@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import socket
 
 import httpx
@@ -173,3 +174,31 @@ def test_provider_source_resolution_preserves_safe_failure_code(
     assert raised.value.status == status
     assert raised.value.retryable is retryable
     assert raised.value.retry_after == 7
+
+
+def test_source_temp_cleanup_is_idempotent(
+    tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-1.7\n%%EOF")
+
+    tasks._cleanup_source_temp(str(source), job_id="job-1")
+    with caplog.at_level(logging.WARNING):
+        tasks._cleanup_source_temp(str(source), job_id="job-1")
+
+    assert not source.exists()
+    assert "job.source_temp.cleanup_failed" not in caplog.messages
+
+
+def test_source_temp_cleanup_reports_real_os_failures(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def deny_cleanup(_path: str) -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(tasks.os, "unlink", deny_cleanup)
+
+    with caplog.at_level(logging.WARNING):
+        tasks._cleanup_source_temp("/tmp/source.pdf", job_id="job-1")
+
+    assert "job.source_temp.cleanup_failed" in caplog.messages

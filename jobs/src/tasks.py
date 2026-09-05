@@ -1060,6 +1060,18 @@ def _cleanup_pdf_temp(path: str | None) -> None:
         logger.warning("job.pdf_temp.cleanup_failed")
 
 
+def _cleanup_source_temp(path: str, *, job_id: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        # _process_pdf_task owns and removes a supplied local path. Treat the
+        # outer source-ingestion cleanup as idempotent instead of reporting a
+        # successful inner cleanup as an operational failure.
+        return
+    except OSError:
+        logger.warning("job.source_temp.cleanup_failed", extra={"job_id": job_id})
+
+
 @celery_app.task(
     bind=True,
     name="upload_and_process_file",
@@ -1273,10 +1285,7 @@ def ingest_source_and_process(
             )
         raise
     finally:
-        try:
-            os.unlink(source_path.name)
-        except OSError:
-            logger.warning("job.source_temp.cleanup_failed", extra={"job_id": task_id})
+        _cleanup_source_temp(source_path.name, job_id=task_id)
 
 
 @celery_app.task(
