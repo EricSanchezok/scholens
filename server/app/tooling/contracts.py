@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+import time
 from typing import Generic, Literal, Protocol, TypeAlias, TypeVar
 from uuid import UUID
 
@@ -110,6 +111,8 @@ class ToolExecutionContext:
     anchor_document_id: UUID | None
     invocation_id: str
     client_ip: str
+    request_started_monotonic: float = field(default_factory=time.monotonic)
+    response_reserve_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if (
@@ -125,6 +128,22 @@ class ToolExecutionContext:
             or len(self.client_ip) > 64
         ):
             raise ValueError("tool client_ip must be a bounded normalized string")
+        if self.request_started_monotonic < 0:
+            raise ValueError("tool request start must be monotonic")
+        if self.response_reserve_seconds < 0:
+            raise ValueError("tool response reserve must not be negative")
+
+    def observation_deadline(self, *, wait_seconds: int) -> float:
+        """Return the transport-aware deadline for observing durable work.
+
+        Submission is never rolled back merely because this deadline has passed.
+        Callers take one current snapshot and return the durable job handle.
+        """
+
+        return self.request_started_monotonic + max(
+            0.0,
+            float(wait_seconds) - self.response_reserve_seconds,
+        )
 
 
 @dataclass(frozen=True, slots=True)

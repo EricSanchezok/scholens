@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
@@ -15,8 +15,6 @@ import { localeDirection, type AppLocale } from "@/i18n/config";
 import { formats } from "@/i18n/formats";
 import { PRODUCTION_APP_ORIGIN } from "@/lib/product";
 import "@/styles/globals.css";
-
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("Metadata");
@@ -96,7 +94,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: motionInitializationScript }}
         />
       </head>
-      <body className={geist.variable}>
+      <body className={GeistSans.variable}>
         <ServiceWorkerRegistration />
         <NextIntlClientProvider
           formats={formats}

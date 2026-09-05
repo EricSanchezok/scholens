@@ -108,11 +108,13 @@ class JobWaiter:
         actor: Actor,
         job_id: UUID,
         wait_seconds: int,
+        deadline: float | None = None,
     ) -> WaitableJobResponse:
         result = await self.wait_for_many(
             actor=actor,
             job_ids=(job_id,),
             wait_seconds=wait_seconds,
+            deadline=deadline,
         )
         return result.items[0]
 
@@ -122,12 +124,15 @@ class JobWaiter:
         actor: Actor,
         job_ids: Sequence[UUID],
         wait_seconds: int,
+        deadline: float | None = None,
     ) -> WaitForJobsResponse:
         ordered_ids = tuple(job_ids)
         if not ordered_ids:
             raise ValueError("job_ids must not be empty")
         started = self._clock()
-        deadline = started + wait_seconds
+        observation_deadline = (
+            started + wait_seconds if deadline is None else max(0.0, deadline)
+        )
         poll_count = 0
         jobs = await self._load(actor=actor, job_ids=ordered_ids)
         poll_count += 1
@@ -135,7 +140,7 @@ class JobWaiter:
         delay = _INITIAL_POLL_SECONDS
 
         while not self._all_terminal(jobs):
-            remaining = deadline - self._clock()
+            remaining = observation_deadline - self._clock()
             if remaining <= 0:
                 break
             jittered_delay = delay * (1.0 + self._jitter(-_JITTER_RATIO, _JITTER_RATIO))
@@ -145,7 +150,7 @@ class JobWaiter:
             last_observed_at = self._clock()
             delay = min(delay * 2, _MAX_POLL_SECONDS)
 
-        if not self._all_terminal(jobs) and last_observed_at < deadline:
+        if not self._all_terminal(jobs) and last_observed_at < observation_deadline:
             jobs = await self._load(actor=actor, job_ids=ordered_ids)
             poll_count += 1
 

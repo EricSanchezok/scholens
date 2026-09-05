@@ -48,6 +48,7 @@ from src.schemas import (
     DocumentReflowRequest,
     IntegrationUseEvent,
     JobIntegrationCredentialResponse,
+    JobSourceUrlResponse,
     ResearchDataTableResult,
     ZoteroJobCredentialResponse,
 )
@@ -478,6 +479,54 @@ class SourceDownloadError(RuntimeError):
         self.status = status
         self.retryable = retryable
         self.retry_after = retry_after
+
+
+def _response_error_code(response: requests.Response, default: str) -> str:
+    try:
+        payload = response.json()
+    except (requests.JSONDecodeError, TypeError, ValueError):
+        return default
+    if not isinstance(payload, dict):
+        return default
+    error = payload.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str):
+        return error["code"]
+    return str(payload.get("code") or default)
+
+
+def _resolve_source_url(url: str) -> str:
+    response: requests.Response | None = None
+    try:
+        response = post_signed_json(url, {}, timeout=30)
+    except requests.RequestException as exc:
+        raise SourceDownloadError(
+            "paper_source_resolution_unavailable",
+            retryable=True,
+        ) from exc
+    try:
+        status = response.status_code
+        if status >= 400:
+            try:
+                retry_after = float(response.headers.get("Retry-After", "0") or 0)
+            except ValueError:
+                retry_after = 0.0
+            raise SourceDownloadError(
+                _response_error_code(response, "paper_source_resolution_failed"),
+                status=status,
+                retryable=status in {408, 425, 429} or status >= 500,
+                retry_after=max(0.0, min(retry_after, 60.0)),
+            )
+        try:
+            payload = JobSourceUrlResponse.model_validate(response.json())
+        except (TypeError, ValueError) as exc:
+            raise SourceDownloadError(
+                "paper_source_resolution_invalid",
+                status=status,
+                retryable=True,
+            ) from exc
+        return payload.resolved_url
+    finally:
+        response.close()
 
 
 def _source_host(url: str) -> str | None:
@@ -944,6 +993,7 @@ def ingest_source_and_process(
     claim_url: str,
     credential_url: str,
     filename: str | None = None,
+    source_resolve_url: str | None = None,
 ) -> dict[str, Any]:
     """Materialize a URL/upload source and process its local file in one task."""
     task_id = str(self.request.id)
@@ -978,11 +1028,13 @@ def ingest_source_and_process(
                 extra={"job_id": task_id, "content_length": size},
             )
         else:
-            upload_object_key = source.get("upload_object_key")
-            if isinstance(upload_object_key, str) and upload_object_key:
+            object_key = source.get("canonical_object_key") or source.get(
+                "upload_object_key"
+            )
+            if isinstance(object_key, str) and object_key:
                 try:
                     size = s3_service.download_file_to_path(
-                        upload_object_key,
+                        object_key,
                         source_path.name,
                         max_bytes=SOURCE_MAX_BYTES,
                     )
@@ -1000,11 +1052,16 @@ def ingest_source_and_process(
                         raise SourceDownloadError("invalid_pdf")
             else:
                 resolved_url = source.get("resolved_url")
-                if not isinstance(resolved_url, str) or not resolved_url:
+                if not isinstance(resolved_url, str):
+                    resolved_url = ""
+                if not resolved_url and not source_resolve_url:
                     raise SourceDownloadError("paper_source_pdf_unavailable")
                 last_error: SourceDownloadError | None = None
                 for attempt in range(1, SOURCE_MAX_ATTEMPTS + 1):
                     try:
+                        if not resolved_url:
+                            assert source_resolve_url is not None
+                            resolved_url = _resolve_source_url(source_resolve_url)
                         digest, size = _stream_url_to_file(
                             resolved_url,
                             source_path.name,

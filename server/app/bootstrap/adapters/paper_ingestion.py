@@ -45,6 +45,8 @@ from app.modules.papers.application.ingestion import (
     FetchedPdf,
     IngestionCancellationPlan,
     IngestionCancellationState,
+    PendingPaperSource,
+    PreparedPaperSource,
     RetrySource,
     SourceReadyResult,
 )
@@ -55,7 +57,7 @@ from app.modules.papers.application.upload_intent import (
 from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind, JsonValue
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
@@ -171,6 +173,39 @@ class DefaultPaperSourceResolver:
                 if candidate:
                     return candidate
             self._raise_unavailable()
+        self._raise_unavailable()
+
+    async def prepare(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        kind: str,
+        value: str,
+    ) -> PreparedPaperSource:
+        """Validate a source locally; defer DOI provider I/O to its durable job."""
+
+        del operation
+        normalized = value.strip()
+        if kind == "url":
+            parsed = urlparse(normalized)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                self._raise_unavailable()
+            return PreparedPaperSource(value=normalized, resolved_url=normalized)
+        if kind == "arxiv":
+            arxiv_id = self.normalize_arxiv_id(normalized)
+            if arxiv_id is None:
+                self._raise_unavailable()
+            return PreparedPaperSource(
+                value=arxiv_id,
+                resolved_url=f"https://arxiv.org/pdf/{arxiv_id}",
+            )
+        if kind == "doi":
+            doi = normalize_doi(normalized)
+            if doi is None:
+                self._raise_unavailable()
+            self._openalex.require_ready(actor=actor)
+            return PreparedPaperSource(value=doi, resolved_url=None)
         self._raise_unavailable()
 
     @classmethod
@@ -367,14 +402,41 @@ class SqlPaperIngestionGateway:
         display_name: str,
         source_kind: str,
         fingerprint: str,
+        source_value: str | None,
         resolved_url: str | None,
         upload_id: UUID | None,
         idempotency_key: str | None,
         job_id: UUID,
         upload_object_key: str | None = None,
+        canonical_object_key: str | None = None,
         expected_sha256: str | None = None,
+        retry_of: UUID | None = None,
     ) -> AcceptedIngestion:
         """Create a byte-free reservation and hand source materialization to Jobs."""
+        original_reservation: UploadReservation | None = None
+        durable_key: str | None = None
+        if retry_of is not None:
+            original = self._require_failed(actor=actor, job_id=retry_of, lock=True)
+            original_reservation = self._require_retry_reservation(original)
+            project_id = original.project_id
+            add_to_library = resolve_add_to_library(
+                original_reservation.add_to_library,
+                project_id=project_id,
+            )
+            durable_key = (
+                f"pdf-ingestion-retry:{actor.id}:{retry_of}:{idempotency_key}"
+                if idempotency_key is not None
+                else None
+            )
+        source_lock_key = (
+            "paper-source:v1:"
+            f"{actor.id}:{project_id if project_id is not None else '-'}:{fingerprint}"
+        )
+        self._db.execute(
+            select(
+                func.pg_advisory_xact_lock(func.hashtextextended(source_lock_key, 0))
+            )
+        )
         fingerprint_matches = DurableJob.payload["source"]["fingerprint"].as_string()
         existing = self._db.scalar(
             select(UploadReservation)
@@ -400,9 +462,11 @@ class SqlPaperIngestionGateway:
         source: dict[str, JsonValue] = {
             "kind": source_kind,
             "fingerprint": fingerprint,
+            "value": source_value,
             "resolved_url": resolved_url,
             "upload_id": str(upload_id) if upload_id is not None else None,
             "upload_object_key": upload_object_key,
+            "canonical_object_key": canonical_object_key,
             "expected_sha256": expected_sha256,
         }
         reserved = reserve_upload(
@@ -418,6 +482,7 @@ class SqlPaperIngestionGateway:
             content_sha256=None,
             add_to_library=add_to_library,
             idempotency_key=idempotency_key,
+            durable_idempotency_key=durable_key,
             job_id=job_id,
             source=source,
         )
@@ -443,6 +508,9 @@ class SqlPaperIngestionGateway:
                     "source_ready_url": (
                         f"{base_url}/internal/v1/jobs/{durable_job.id}/source-ready"
                     ),
+                    "source_resolve_url": (
+                        f"{base_url}/internal/v1/jobs/{durable_job.id}/source-url"
+                    ),
                     "webhook_url": (
                         f"{base_url}/internal/v1/jobs/{durable_job.id}/complete"
                     ),
@@ -458,6 +526,8 @@ class SqlPaperIngestionGateway:
                 },
             )
             self._db.flush()
+            if original_reservation is not None:
+                original_reservation.superseded_by_id = reservation.id
         elif durable_job.dispatch is None:
             raise RuntimeError("source_ingestion_is_not_dispatchable")
         return AcceptedIngestion(
@@ -466,6 +536,44 @@ class SqlPaperIngestionGateway:
             processing_required=durable_job.status
             not in {JobStatus.COMPLETED.value, JobStatus.CANCELLED.value},
         )
+
+    def source_for_resolution(
+        self, *, actor: Actor, job_id: UUID
+    ) -> PendingPaperSource:
+        """Return only the provider reference owned by one running PDF job."""
+
+        job = self._db.scalar(
+            select(DurableJob).where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == actor.id,
+                DurableJob.operation == JobOperation.PDF_PROCESS.value,
+            )
+        )
+        if job is None:
+            self._not_found()
+        if job.status != JobStatus.RUNNING.value:
+            raise AppError(
+                code="job_not_running",
+                message="A paper source can be resolved only for a running job",
+                kind=FailureKind.CONFLICT,
+            )
+        source = job.payload.get("source")
+        kind = source.get("kind") if isinstance(source, dict) else None
+        value = source.get("value") if isinstance(source, dict) else None
+        resolved_url = source.get("resolved_url") if isinstance(source, dict) else None
+        if kind != "doi" or not isinstance(value, str) or not value:
+            raise AppError(
+                code="paper_source_resolution_forbidden",
+                message="This job has no unresolved provider-backed paper source",
+                kind=FailureKind.PERMISSION_DENIED,
+            )
+        if isinstance(resolved_url, str) and resolved_url:
+            raise AppError(
+                code="paper_source_already_resolved",
+                message="This paper source is already resolved",
+                kind=FailureKind.CONFLICT,
+            )
+        return PendingPaperSource(kind=kind, value=value)
 
     def source_ready(
         self,

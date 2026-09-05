@@ -1,6 +1,7 @@
 [data-theme="default"] {
   --theme-font-interface:
-    "var(--font-geist, Geist)", "PingFang SC", "Microsoft YaHei", sans-serif;
+    "var(--font-geist-sans, Geist)", "PingFang SC", "Microsoft YaHei",
+    sans-serif;
   --theme-font-weight-medium: 500;
   --theme-font-weight-normal: 400;
   --theme-font-weight-semibold: 600;

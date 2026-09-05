@@ -402,6 +402,7 @@ def create_job_completion_processor(
     operation_factory: OperationContextFactory,
     openalex: UserOpenAlex,
 ) -> JobCompletionProcessor:
+    from app.bootstrap.container import build_paper_source_resolver
     from app.bootstrap.adapters.citation_provider import CitationMetadataProvider
     from app.bootstrap.adapters.document_job_callbacks import (
         SqlAlchemyPdfPostprocessReader,
@@ -427,6 +428,7 @@ def create_job_completion_processor(
             operations=DefaultZoteroOperations(),
             operation_factory=operation_factory,
         ),
+        source_resolver=build_paper_source_resolver(openalex=openalex),
     )
 
 

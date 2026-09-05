@@ -7,8 +7,10 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import math
 import os
 import sys
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
@@ -33,6 +35,7 @@ _REMOTE_URL_MAX_LENGTH = 2048
 _UPLOAD_URL_MAX_LENGTH = 8192
 MAX_TOOL_WAIT_SECONDS = 240
 REMOTE_TOOL_TIMEOUT_SECONDS = MAX_TOOL_WAIT_SECONDS + 30
+TOOL_RESPONSE_RESERVE_SECONDS = 3
 
 ListToolsHandler = Callable[[], Awaitable[list[types.Tool]]]
 CallToolHandler = Callable[[str, dict[str, object]], Awaitable[types.CallToolResult]]
@@ -43,6 +46,14 @@ ReadResourceHandler = Callable[[AnyUrl], Awaitable[list[ReadResourceContents]]]
 
 def _remote_tool_timeout() -> httpx.Timeout:
     return httpx.Timeout(REMOTE_TOOL_TIMEOUT_SECONDS, connect=10)
+
+
+def _remaining_observation_seconds(*, requested: int, started: float) -> int:
+    elapsed = max(0.0, time.monotonic() - started)
+    return max(
+        0,
+        math.ceil(requested - elapsed - TOOL_RESPONSE_RESERVE_SECONDS),
+    )
 
 
 class LocalUploadError(ValueError):
@@ -466,6 +477,7 @@ async def upload_local_paper(
     roots: Sequence[Path],
 ) -> types.CallToolResult:
     """Upload one root-authorized local PDF without sending its path remotely."""
+    started = time.monotonic()
     raw_path = arguments.get("path")
     if not isinstance(raw_path, str):
         raise LocalUploadError("path must be a string")
@@ -510,7 +522,10 @@ async def upload_local_paper(
         "source": {"kind": "upload", "upload_id": upload_id},
         "project_id": project_id,
         "add_to_library": add_to_library,
-        "wait_seconds": wait_seconds,
+        "wait_seconds": _remaining_observation_seconds(
+            requested=cast(int, wait_seconds),
+            started=started,
+        ),
     }
     if idempotency_key is not None:
         source_arguments["idempotency_key"] = idempotency_key

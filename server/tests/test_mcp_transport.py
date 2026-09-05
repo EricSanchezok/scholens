@@ -43,7 +43,7 @@ from app.transport.mcp.server import (
     _error_remediation,
     build_mcp_transport,
 )
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from mcp.server.transport_security import TransportSecuritySettings
 import json
 import pytest
@@ -239,6 +239,15 @@ async def _initialize(client: AsyncClient) -> dict[str, str]:
     if session_id is not None:
         initialized_headers["mcp-session-id"] = session_id
     return initialized_headers
+
+
+def _mcp_json(response: Response) -> dict[str, Any]:
+    if response.headers.get("content-type", "").startswith("text/event-stream"):
+        for line in response.text.splitlines():
+            if line.startswith("data: "):
+                return cast(dict[str, Any], json.loads(line.removeprefix("data: ")))
+        raise AssertionError("MCP event stream contained no JSON-RPC message")
+    return cast(dict[str, Any], response.json())
 
 
 def _request_scope(*, content_length: int | None = None) -> Scope:
@@ -475,7 +484,8 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
                 },
             )
 
-    tools = listed.json()["result"]["tools"]
+    assert listed.headers["content-type"].startswith("text/event-stream")
+    tools = _mcp_json(listed)["result"]["tools"]
     tool_names = {tool["name"] for tool in tools}
     tools_by_name = {tool["name"]: tool for tool in tools}
     assert len(tool_names) == 64
@@ -503,7 +513,7 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
     assert tools_by_name["get_project"]["inputSchema"]["properties"]["project_id"][
         "description"
     ]
-    assert called.json()["result"]["structuredContent"]["result"] == {
+    assert _mcp_json(called)["result"]["structuredContent"]["result"] == {
         "tool": "list_projects",
         "arguments": {"limit": 10},
     }
@@ -580,14 +590,17 @@ async def test_mcp_advertises_bounded_scholens_resource_templates_and_projects()
                 },
             )
 
-    resource_uris = {item["uri"] for item in resources.json()["result"]["resources"]}
+    resource_uris = {
+        item["uri"] for item in _mcp_json(resources)["result"]["resources"]
+    }
     assert resource_uris == {
         "scholens://library",
         "scholens://projects",
         f"scholens://projects/{project_id}",
     }
     template_uris = {
-        item["uriTemplate"] for item in templates.json()["result"]["resourceTemplates"]
+        item["uriTemplate"]
+        for item in _mcp_json(templates)["result"]["resourceTemplates"]
     }
     assert template_uris == {
         "scholens://papers/{document_id}",
@@ -625,7 +638,7 @@ async def test_mcp_tool_list_uses_access_key_permission_snapshot() -> None:
                 },
             )
 
-    tool_names = {tool["name"] for tool in response.json()["result"]["tools"]}
+    tool_names = {tool["name"] for tool in _mcp_json(response)["result"]["tools"]}
     assert "search_scholens_knowledge" in tool_names
     assert "search_papers" not in tool_names
     assert "create_project" not in tool_names
@@ -675,8 +688,8 @@ async def test_mcp_reauthenticates_permissions_on_each_request() -> None:
                 },
             )
 
-    before_names = {tool["name"] for tool in before.json()["result"]["tools"]}
-    after_names = {tool["name"] for tool in after.json()["result"]["tools"]}
+    before_names = {tool["name"] for tool in _mcp_json(before)["result"]["tools"]}
+    after_names = {tool["name"] for tool in _mcp_json(after)["result"]["tools"]}
     assert "create_project" not in before_names
     assert "create_project" in after_names
 
@@ -722,8 +735,9 @@ async def test_mcp_tool_call_enforces_the_same_permission_snapshot() -> None:
                 },
             )
 
-    error = json.loads(response.json()["result"]["content"][0]["text"])["error"]
-    assert "structuredContent" not in response.json()["result"]
+    body = _mcp_json(response)
+    error = json.loads(body["result"]["content"][0]["text"])["error"]
+    assert "structuredContent" not in body["result"]
     assert error["kind"] == "not_found"
     assert error["code"] == "tool_not_found"
     assert error["message"] == "Tool not found"
@@ -761,7 +775,7 @@ async def test_mcp_maps_application_errors_to_structured_tool_errors() -> None:
                 },
             )
 
-    result = response.json()["result"]
+    result = _mcp_json(response)["result"]
     assert result["isError"] is True
     assert "structuredContent" not in result
     error = json.loads(result["content"][0]["text"])["error"]
@@ -802,7 +816,7 @@ async def test_mcp_omits_nonfinite_or_oversized_application_error_details() -> N
     assert "NaN" not in response.text
     assert "Infinity" not in response.text
     assert len(response.content) < 16 * 1024
-    error = json.loads(response.json()["result"]["content"][0]["text"])["error"]
+    error = json.loads(_mcp_json(response)["result"]["content"][0]["text"])["error"]
     assert error["code"] == "test_conflict"
     assert "details" not in error
 
@@ -846,7 +860,7 @@ async def test_mcp_maps_a_nonfinite_tool_success_to_a_strict_json_error() -> Non
             )
 
     assert "NaN" not in response.text
-    result = response.json()["result"]
+    result = _mcp_json(response)["result"]
     assert result["isError"] is True
     error = json.loads(result["content"][0]["text"])["error"]
     assert error["code"] == "tool_result_invalid"
@@ -894,7 +908,7 @@ async def test_mcp_rejects_a_nonfinite_tool_argument_as_strict_json() -> None:
             )
 
     assert "NaN" not in response.text
-    result = response.json()["result"]
+    result = _mcp_json(response)["result"]
     assert result["isError"] is True
     error = json.loads(result["content"][0]["text"])["error"]
     assert error["code"] == "tool_arguments_invalid"
@@ -950,7 +964,7 @@ async def test_prepare_upload_size_error_explains_how_to_recover() -> None:
                 },
             )
 
-    result = response.json()["result"]
+    result = _mcp_json(response)["result"]
     assert result["isError"] is True
     error = json.loads(result["content"][0]["text"])["error"]
     assert error["code"] == "tool_arguments_invalid"
@@ -1031,7 +1045,7 @@ async def test_mcp_budget_matches_the_complete_unicode_call_tool_result() -> Non
                 },
             )
 
-    exact_result = exact.json()["result"]
+    exact_result = _mcp_json(exact)["result"]
     exact_bytes = len(
         json.dumps(
             exact_result,
@@ -1045,7 +1059,7 @@ async def test_mcp_budget_matches_the_complete_unicode_call_tool_result() -> Non
     assert "\\u4e2d" not in exact_result["content"][0]["text"]
     assert exact_result["content"][1]["type"] == "resource_link"
 
-    over_result = over.json()["result"]
+    over_result = _mcp_json(over)["result"]
     assert over_result["isError"] is True
     over_error = json.loads(over_result["content"][0]["text"])["error"]
     assert over_error["code"] == "tool_result_budget_exceeded"
@@ -1090,4 +1104,6 @@ async def test_mcp_call_runs_through_the_shared_dispatcher() -> None:
                 },
             )
 
-    assert response.json()["result"]["structuredContent"]["result"] == {"actor_id": 7}
+    assert _mcp_json(response)["result"]["structuredContent"]["result"] == {
+        "actor_id": 7
+    }

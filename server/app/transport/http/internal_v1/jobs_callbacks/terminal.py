@@ -13,6 +13,7 @@ from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     JobFailureCallback,
     SourceReadyCallback,
+    JobSourceUrlResponse,
 )
 from app.shared.application import (
     ApplicationExecutor,
@@ -28,6 +29,18 @@ from app.transport.http.internal_v1.authentication import (
 from fastapi import APIRouter, Depends, Query, Request
 
 terminal_router = APIRouter()
+
+
+@terminal_router.post(
+    "/jobs/{job_id}/source-url",
+    response_model=JobSourceUrlResponse,
+)
+async def resolve_source_url(
+    job_id: uuid.UUID,
+    verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    processor: JobCompletionProcessor = Depends(get_job_completion_processor),
+) -> JobSourceUrlResponse:
+    return await processor.resolve_source_url(job_id=job_id, verified=verified)
 
 
 @terminal_router.post("/jobs/{job_id}/source-ready")

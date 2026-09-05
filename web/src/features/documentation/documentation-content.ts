@@ -163,7 +163,7 @@ export function createDocumentationFacts(
       codex: {
         language: "toml",
         referenceUrl: "https://learn.chatgpt.com/docs/extend/mcp.md",
-        configuration: `[mcp_servers.scholens]\nurl = "${mcpUrl}"\nbearer_token_env_var = "SCHOLENS_ACCESS_KEY"`,
+        configuration: `[mcp_servers.scholens]\nurl = "${mcpUrl}"\nbearer_token_env_var = "SCHOLENS_ACCESS_KEY"\ntool_timeout_sec = 270`,
         credential: `export SCHOLENS_ACCESS_KEY="YOUR_ACCESS_KEY"`,
       },
       "claude-desktop": {
@@ -281,7 +281,7 @@ Official client reference: ${facts.clients.cursor.referenceUrl}
 ${facts.clients.generic.configuration}
 \`\`\`
 
-The client must send the Access Key as an Authorization Bearer token on every MCP request.
+The client must send the Access Key as an Authorization Bearer token on every MCP request. Clients that use the maximum 240-second job observation window should allow at least 270 seconds for the complete tool call.
 
 ## Local PDF upload
 
@@ -338,7 +338,7 @@ ${facts.bindingMarkdown}
 - **A tool is missing:** the key lacks the permission that exposes it. Edit the key or create a narrowly scoped replacement.
 - **Client does not refresh:** restart Codex, Claude Desktop, or Cursor after changing MCP configuration.
 - **Local file rejected:** expose the repository as an MCP root or pass \`--allowed-root\`; use a non-empty PDF no larger than ${facts.maxLocalPdfMegabytes} MB.
-- **Long operation:** ingestion is asynchronous. Poll \`get_job\` with the returned job UUID.
+- **Long operation:** ingestion is asynchronous. Set \`wait_seconds\` from 0 through 240 (default 30). An elapsed observation returns the active job UUID as a normal result; call \`get_job\` with a bounded wait instead of rapid polling. Configure a 270-second client tool timeout before requesting the 240-second maximum.
 
 Web documentation: ${facts.docsUrl}
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
@@ -16,6 +17,7 @@ from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     JobFailureCallback,
+    JobSourceUrlResponse,
     SourceReadyCallback,
 )
 from app.modules.jobs.application.callbacks import (
@@ -49,6 +51,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from app.bootstrap.workflows.paper_ingestion import PaperSourceResolver
+
 
 @dataclass(frozen=True, slots=True)
 class _ResumedJob:
@@ -79,12 +84,47 @@ class JobCompletionProcessor:
         operation_factory: OperationContextFactory,
         pdf_postprocess: PdfPostprocessWorkflow,
         zotero_background: ZoteroBackgroundWorkflow,
+        source_resolver: PaperSourceResolver,
     ) -> None:
         self._session_factory = session_factory
         self._executor = executor
         self._operation_factory = operation_factory
         self._pdf_postprocess = pdf_postprocess
         self._zotero_background = zotero_background
+        self._source_resolver = source_resolver
+
+    async def resolve_source_url(
+        self,
+        *,
+        job_id: UUID,
+        verified: VerifiedJobCallback,
+    ) -> JobSourceUrlResponse:
+        """Resolve a provider-backed source only after its durable job is running."""
+
+        facts = self._causality(job_id=job_id)
+        resumed = self._resume(facts=facts, verified=verified)
+        if facts.operation is not JobOperation.PDF_PROCESS:
+            raise AppError(
+                code="job_operation_mismatch",
+                message="Job operation does not match source resolution",
+                kind=FailureKind.CONFLICT,
+            )
+        if resumed.actor is None:
+            raise RuntimeError("source_resolution_job_owner_missing")
+        actor = resumed.actor
+        source = self._executor.query(
+            lambda capabilities: capabilities.paper_ingestion.source_for_resolution(
+                actor=actor,
+                job_id=job_id,
+            )
+        )
+        resolved_url = await self._source_resolver.resolve(
+            actor=actor,
+            operation=resumed.operation,
+            kind=source.kind,
+            value=source.value,
+        )
+        return JobSourceUrlResponse(resolved_url=resolved_url)
 
     async def complete(
         self,

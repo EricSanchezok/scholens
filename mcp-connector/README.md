@@ -77,11 +77,40 @@ asynchronous ingestion. Supply the bound `project_id` to add the completed
 paper to that Project; omit it for the personal Library. The completed paper
 is also added to the caller's personal Library by default
 (`add_to_library=true`); pass `add_to_library=false` to keep a Project upload
-Project-only. The tool waits up to 30 seconds by default and returns terminal
-state or the latest durable job snapshot; use its next-action guidance and a
-bounded `get_job` wait instead of rapid polling. The connector's authenticated
-remote-read timeout covers the full 240-second server wait plus transport
-overhead.
+Project-only. The Agent selects `wait_seconds` from 0 through 240 (default 30).
+Terminal state returns early; expiry returns the latest durable job snapshot
+and job UUID as a normal tool result, so the Agent can follow its next-action
+guidance with a bounded `get_job` call instead of rapid polling. Local hashing,
+upload preparation, and transfer consume the same observation budget; they do
+not add a second full wait. The connector's authenticated remote-read timeout
+is 270 seconds and covers the 240-second maximum plus transport overhead.
+
+The outer MCP host must allow the same maximum. For Codex, add
+`tool_timeout_sec = 270` to the `mcp_servers.scholens` table. For Synergy, add
+`callTimeout: 270000` to its Scholens MCP server entry. For example:
+
+```toml
+[mcp_servers.scholens]
+command = "uvx"
+args = ["--from", "git+https://github.com/EricSanchezok/scholens.git@main#subdirectory=mcp-connector", "scholens-mcp"]
+tool_timeout_sec = 270
+```
+
+```json
+{
+  "mcp": {
+    "scholens": {
+      "type": "local",
+      "command": ["uvx", "--from", "git+https://github.com/EricSanchezok/scholens.git@main#subdirectory=mcp-connector", "scholens-mcp"],
+      "environment": {
+        "SCHOLENS_MCP_URL": "https://scholens.example/mcp",
+        "SCHOLENS_ACCESS_KEY": "{env:SCHOLENS_ACCESS_KEY}"
+      },
+      "callTimeout": 270000
+    }
+  }
+}
+```
 
 An oversized local file returns the stable `local_pdf_too_large` code with
 exact `actual_bytes` and `max_bytes` details. Its remediation tells the Agent to

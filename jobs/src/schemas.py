@@ -20,6 +20,12 @@ class ZoteroJobCredentialResponse(JobIntegrationCredentialResponse):
     zotero_user_id: str = Field(min_length=1, max_length=64)
 
 
+class JobSourceUrlResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolved_url: str = Field(min_length=1, max_length=2_048)
+
+
 class IntegrationUseEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -183,7 +183,7 @@ _RESEARCH_OUTPUT_KINDS = (
 )
 _GENERATED_OUTPUT_KINDS = _RESEARCH_OUTPUT_KINDS[1:]
 _BATCH_INGESTION_CONCURRENCY = 4
-_BATCH_ACCEPTANCE_TIMEOUT_SECONDS = 45
+_BATCH_ACCEPTANCE_TIMEOUT_SECONDS = 5.0
 _PAPER_DISPLAY_TITLE_JSON_BYTES = 512
 _LEGACY_TOOL_DURABLE_JSON_UTF8_BYTES = legacy_payload_json_utf8_budget()
 
@@ -3532,6 +3532,7 @@ class WorkspaceToolHandlers:
                 actor=context.actor,
                 job_id=result.id,
                 wait_seconds=parsed.wait_seconds,
+                deadline=context.observation_deadline(wait_seconds=parsed.wait_seconds),
             )
         )
         document_id = result.document_id or job.document_id
@@ -3707,6 +3708,7 @@ class WorkspaceToolHandlers:
                 actor=context.actor,
                 job_ids=[result.id for result in accepted_results],
                 wait_seconds=parsed.wait_seconds,
+                deadline=context.observation_deadline(wait_seconds=parsed.wait_seconds),
             )
             jobs_by_id = {
                 job.id: self._job_with_reader_url(job) for job in waited.items
@@ -3834,6 +3836,7 @@ class WorkspaceToolHandlers:
                 actor=context.actor,
                 job_id=result.id,
                 wait_seconds=parsed.wait_seconds,
+                deadline=context.observation_deadline(wait_seconds=parsed.wait_seconds),
             )
         )
         document_id = result.document_id or job.document_id
@@ -4116,6 +4119,7 @@ class WorkspaceToolHandlers:
                 actor=context.actor,
                 job_id=parsed.job_id,
                 wait_seconds=parsed.wait_seconds,
+                deadline=context.observation_deadline(wait_seconds=parsed.wait_seconds),
             )
         )
         return ToolOutcome(
@@ -4136,6 +4140,7 @@ class WorkspaceToolHandlers:
             actor=context.actor,
             job_ids=parsed.job_ids,
             wait_seconds=parsed.wait_seconds,
+            deadline=context.observation_deadline(wait_seconds=parsed.wait_seconds),
         )
         response = response.model_copy(
             update={"items": [self._job_with_reader_url(job) for job in response.items]}

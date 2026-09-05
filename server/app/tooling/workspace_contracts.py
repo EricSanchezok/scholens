@@ -104,8 +104,10 @@ CONFIRMATION_DESCRIPTION = (
     "arguments only after approval."
 )
 WAIT_SECONDS_DESCRIPTION = (
-    "Maximum time to await terminal job status before returning the latest durable "
-    "snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling."
+    "Agent-selected maximum time to observe terminal job status; defaults to 30 "
+    "seconds and accepts 0 through 240. Expiry is a successful active-job response "
+    "with the durable job UUID, never a job failure. Use 0 for an immediate snapshot "
+    "and do not implement rapid polling."
 )
 
 ProjectId = Annotated[UUID, Field(description=PROJECT_ID_DESCRIPTION)]
@@ -1218,7 +1220,7 @@ class WaitForJobsInput(ToolInput):
         ),
     )
     wait_seconds: int = Field(
-        default=120,
+        default=30,
         ge=0,
         le=240,
         description=WAIT_SECONDS_DESCRIPTION,

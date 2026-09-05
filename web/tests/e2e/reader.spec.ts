@@ -1403,23 +1403,10 @@ test("creates a persistent document highlight with the full color palette", asyn
   expect(hitTest.paintPointerEvents).toBe("none");
   expect(hitTest.hitTextLayer).toBe(true);
 
-  const highlightBox = await persistedHighlight.first().boundingBox();
-  expect(highlightBox).not.toBeNull();
-  if (highlightBox) {
-    await page.mouse.move(
-      highlightBox.x + Math.max(2, highlightBox.width * 0.15),
-      highlightBox.y + highlightBox.height / 2,
-    );
-    await page.mouse.down();
-    await page.mouse.move(
-      highlightBox.x + Math.max(4, highlightBox.width * 0.85),
-      highlightBox.y + highlightBox.height / 2,
-    );
-    await page.mouse.up();
-    await expect(
-      page.getByRole("button", { name: "Highlight selection" }),
-    ).toBeVisible({ timeout: 5_000 });
-  }
+  await selectPdfPassage(page, 2);
+  await expect(
+    page.getByRole("button", { name: "Highlight selection" }),
+  ).toBeVisible();
 });
 
 test("keeps a replacement selection when highlight creation resolves late", async ({

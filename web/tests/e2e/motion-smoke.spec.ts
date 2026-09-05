@@ -910,7 +910,12 @@ test("uses the explicit reduced policy for one-step conversation scrolling", asy
       main.evaluate((element) => element.scrollHeight > element.clientHeight),
     )
     .toBe(true);
-  await main.evaluate((element) => element.scrollTo({ top: 0 }));
+  await main.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: -1 }),
+    );
+  });
   const jumpToLatest = page.getByRole("button", {
     name: "Jump to the latest response",
   });

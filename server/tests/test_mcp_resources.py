@@ -91,6 +91,7 @@ from tests.test_mcp_transport import (
     _actor,
     _application,
     _initialize,
+    _mcp_json,
 )
 
 PROJECT_ID = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
@@ -594,7 +595,7 @@ async def test_mcp_resource_discovery_bounds_historical_project_titles() -> None
                 },
             )
 
-    body = response.json()
+    body = _mcp_json(response)
     assert "error" not in body
     resources = body["result"]["resources"]
     project_resources = [
@@ -632,7 +633,7 @@ async def test_mcp_reads_every_resource_kind_as_typed_bounded_json() -> None:
             for name, uri in uris.items():
                 response = await _read_resource(client, headers, uri, name)
                 assert response.status_code == 200
-                body = response.json()
+                body = _mcp_json(response)
                 assert "error" not in body
                 content = body["result"]["contents"][0]
                 assert content["mimeType"] == "application/json"
@@ -724,7 +725,7 @@ async def test_mcp_paper_resource_bounds_a_single_very_long_preview_line() -> No
                 "large-preview",
             )
 
-    content = response.json()["result"]["contents"][0]
+    content = _mcp_json(response)["result"]["contents"][0]
     payload = json.loads(content["text"])
     assert payload.get("truncated") is not True
     assert payload["content_preview"]["truncated"] is True
@@ -765,7 +766,7 @@ async def test_paper_resource_large_content_never_requests_the_full_snapshot() -
                 "hostile-paper-size",
             )
 
-    assert "error" not in response.json()
+    assert "error" not in _mcp_json(response)
     assert executor.capabilities.paper_content.preview_calls == 1
 
 
@@ -788,7 +789,7 @@ async def test_mcp_resource_projects_historical_metadata_before_serializing() ->
                 "large-paper",
             )
 
-    content = response.json()["result"]["contents"][0]
+    content = _mcp_json(response)["result"]["contents"][0]
     payload = json.loads(content["text"])
     assert len(content["text"].encode("utf-8")) <= 200_000
     assert payload["resource_uri"] == f"scholens://papers/{PAPER_ID}"
@@ -844,7 +845,7 @@ async def test_mcp_resource_errors_use_bounded_actionable_jsonrpc_errors(
             headers = await _initialize(client)
             response = await _read_resource(client, headers, uri, application_code)
 
-    error = response.json()["error"]
+    error = _mcp_json(response)["error"]
     assert error["code"] == jsonrpc_code
     assert error["data"]["error"]["code"] == application_code
     assert error["data"]["error"]["stage"] == "mcp_resource_read"
@@ -872,7 +873,7 @@ async def test_mcp_resource_permission_error_has_a_stable_server_code() -> None:
                 "permission-denied",
             )
 
-    error = response.json()["error"]
+    error = _mcp_json(response)["error"]
     assert error["code"] == -32003
     assert error["data"]["error"]["code"] == "mcp_resource_permission_denied"
     assert error["data"]["error"]["kind"] == "permission_denied"
@@ -900,7 +901,7 @@ async def test_mcp_resource_internal_error_never_echoes_the_exception() -> None:
                 "internal-error",
             )
 
-    error = response.json()["error"]
+    error = _mcp_json(response)["error"]
     assert error["code"] == -32603
     assert error["message"] == "The Scholens resource could not be read"
     assert error["data"]["error"]["code"] == "mcp_resource_read_failed"
@@ -934,7 +935,7 @@ async def test_mcp_resource_application_error_has_a_hard_utf8_budget() -> None:
                 "oversized-error",
             )
 
-    error = response.json()["error"]
+    error = _mcp_json(response)["error"]
     assert error["code"] == -32602
     assert error["data"]["error"]["code"] == "mcp_resource_error"
     assert error["data"]["error"]["stage"] == "mcp_resource_read"

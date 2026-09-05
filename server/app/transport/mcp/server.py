@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
@@ -954,6 +955,7 @@ def build_mcp_transport(
         name: str,
         arguments: dict[str, object],
     ) -> mcp_types.CallToolResult:
+        request_started_monotonic = time.monotonic()
         authenticated = _authenticated_context.get()
         if authenticated is None:
             return _error_result(
@@ -1012,6 +1014,8 @@ def build_mcp_transport(
                     anchor_document_id=None,
                     invocation_id=invocation_id,
                     client_ip=_client_ip_context.get(),
+                    request_started_monotonic=request_started_monotonic,
+                    response_reserve_seconds=3.0,
                 ),
                 access=access,
             )
@@ -1187,7 +1191,7 @@ def build_mcp_transport(
 
     manager = StreamableHTTPSessionManager(
         app=server,
-        json_response=True,
+        json_response=False,
         stateless=True,
         security_settings=security_settings,
     )

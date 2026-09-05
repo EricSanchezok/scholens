@@ -1,17 +1,7 @@
-import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css";
 import Link from "next/link";
 import { Toaster } from "@/components/ui/sonner";
-
-const geistSans = Geist({
-    variable: "--font-geist-sans",
-    subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-    variable: "--font-geist-mono",
-    subsets: ["latin"],
-});
+import { fontVariables } from "@/app/fonts";
 
 export default function LegalLayout({
     children,
@@ -39,7 +29,7 @@ export default function LegalLayout({
                     id="theme-script"
                 />
             </head>
-            <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+            <body className={`${fontVariables} antialiased`}>
                 <main className="container mx-auto py-8">
                     <Link href="/" className="flex items-center justify-center mb-8">
                         <span className="text-2xl font-bold">Scholens</span>
