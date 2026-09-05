@@ -55,6 +55,9 @@ describe("documentation content", () => {
     expect(facts.clients.codex.configuration).toContain(
       'bearer_token_env_var = "SCHOLENS_ACCESS_KEY"',
     );
+    expect(facts.clients.codex.configuration).toContain(
+      "tool_timeout_sec = 270",
+    );
     expect(facts.clients.cursor.configuration).toContain(
       "Bearer ${env:SCHOLENS_ACCESS_KEY}",
     );

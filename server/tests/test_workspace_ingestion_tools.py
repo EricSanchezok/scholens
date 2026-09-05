@@ -159,7 +159,7 @@ def test_wait_defaults_and_upper_bound_are_explicit() -> None:
 
     assert IngestPaperInput(source=DoiPaperSource(doi="10.1000/one")).wait_seconds == 30
     assert GetJobInput(job_id=job_id).wait_seconds == 30
-    assert WaitForJobsInput(job_ids=[job_id]).wait_seconds == 120
+    assert WaitForJobsInput(job_ids=[job_id]).wait_seconds == 30
     assert GetJobInput(job_id=job_id, wait_seconds=0).wait_seconds == 0
     with pytest.raises(ValidationError):
         GetJobInput(job_id=job_id, wait_seconds=241)

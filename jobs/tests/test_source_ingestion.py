@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import socket
 
 import httpx
 import pytest
+import requests
 
 from src import tasks
 
@@ -116,3 +118,58 @@ def test_stream_source_enforces_limit_without_content_length(
         )
 
     assert raised.value.error_code == "upload_too_large"
+
+
+def _requests_response(
+    status: int, payload: dict[str, object], *, retry_after: str | None = None
+) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status
+    response.headers["content-type"] = "application/json"
+    if retry_after is not None:
+        response.headers["retry-after"] = retry_after
+    response._content = json.dumps(payload).encode()
+    return response
+
+
+def test_provider_source_resolution_returns_validated_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        tasks,
+        "post_signed_json",
+        lambda *_args, **_kwargs: _requests_response(
+            200, {"resolved_url": "https://repository.example/paper.pdf"}
+        ),
+    )
+
+    assert tasks._resolve_source_url("https://server/internal/source-url") == (
+        "https://repository.example/paper.pdf"
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "retryable"), [(422, False), (429, True), (503, True)]
+)
+def test_provider_source_resolution_preserves_safe_failure_code(
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    retryable: bool,
+) -> None:
+    monkeypatch.setattr(
+        tasks,
+        "post_signed_json",
+        lambda *_args, **_kwargs: _requests_response(
+            status,
+            {"error": {"code": "openalex_credential_invalid"}},
+            retry_after="7",
+        ),
+    )
+
+    with pytest.raises(tasks.SourceDownloadError) as raised:
+        tasks._resolve_source_url("https://server/internal/source-url")
+
+    assert raised.value.error_code == "openalex_credential_invalid"
+    assert raised.value.status == status
+    assert raised.value.retryable is retryable
+    assert raised.value.retry_after == 7

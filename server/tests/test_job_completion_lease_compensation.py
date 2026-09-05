@@ -47,6 +47,7 @@ def _processor(
         operation_factory=MagicMock(),
         pdf_postprocess=MagicMock(),
         zotero_background=MagicMock(),
+        source_resolver=MagicMock(),
     )
     processor._causality = MagicMock(return_value=facts)  # type: ignore[method-assign]
     processor._resume = MagicMock(  # type: ignore[method-assign]
@@ -70,6 +71,52 @@ def test_lease_categories_for_operation() -> None:
     assert _lease_categories_for_operation(JobOperation.DOCUMENT_GC) == ()
     assert _lease_categories_for_operation(JobOperation.STORAGE_DELETE) == ()
     assert _lease_categories_for_operation(JobOperation.DOCUMENT_REFLOW) == ()
+
+
+@pytest.mark.asyncio
+async def test_source_url_resolution_resumes_the_owned_durable_job() -> None:
+    facts = _facts(JobOperation.PDF_PROCESS)
+    source_port = MagicMock()
+    source_port.source_for_resolution.return_value = SimpleNamespace(
+        kind="doi", value="10.1000/example"
+    )
+    executor = MagicMock()
+    executor.query.side_effect = lambda operation: operation(
+        SimpleNamespace(paper_ingestion=source_port)
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(return_value="https://repository.example/paper.pdf")
+    processor = JobCompletionProcessor(
+        session_factory=MagicMock(),
+        executor=executor,
+        operation_factory=MagicMock(),
+        pdf_postprocess=MagicMock(),
+        zotero_background=MagicMock(),
+        source_resolver=resolver,
+    )
+    actor = MagicMock()
+    operation = MagicMock()
+    processor._causality = MagicMock(return_value=facts)  # type: ignore[method-assign]
+    processor._resume = MagicMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(actor=actor, operation=operation)
+    )
+
+    result = await processor.resolve_source_url(
+        job_id=facts.job_id,
+        verified=MagicMock(),
+    )
+
+    assert result.resolved_url == "https://repository.example/paper.pdf"
+    source_port.source_for_resolution.assert_called_once_with(
+        actor=actor,
+        job_id=facts.job_id,
+    )
+    resolver.resolve.assert_awaited_once_with(
+        actor=actor,
+        operation=operation,
+        kind="doi",
+        value="10.1000/example",
+    )
 
 
 @pytest.mark.asyncio

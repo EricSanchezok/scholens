@@ -80,6 +80,7 @@ change what the accepted record decided.
 - [ADR 0046: Agent-native annotation anchors and render isolation](./0046-agent-native-annotation-anchors.md)
 - [ADR 0047: Reader annotation hit testing](./0047-reader-annotation-hit-testing.md)
 - [ADR 0048: Worker-first paper ingestion with staged materialization](./0048-worker-first-paper-ingestion.md)
+- [ADR 0049: Durable MCP job observation over SSE](./0049-durable-mcp-job-observation.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

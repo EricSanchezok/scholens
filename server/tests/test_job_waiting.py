@@ -180,6 +180,44 @@ async def test_wait_for_many_times_out_with_final_snapshot_and_guidance() -> Non
 
 
 @pytest.mark.asyncio
+async def test_wait_uses_shared_request_deadline_and_still_returns_snapshot() -> None:
+    clock = _Clock(now=10.0)
+    job_id = uuid4()
+    jobs = _Jobs(clock, {job_id: None})
+
+    result = await _waiter(clock, jobs).wait_for_one(
+        actor=_actor(),
+        job_id=job_id,
+        wait_seconds=60,
+        deadline=12.0,
+    )
+
+    assert result.status == "running"
+    assert result.wait.requested_seconds == 60
+    assert result.wait.elapsed_ms == 2000
+    assert result.wait.outcome == "timed_out"
+    assert len(jobs.calls) == 4
+
+
+@pytest.mark.asyncio
+async def test_expired_request_deadline_takes_one_durable_snapshot() -> None:
+    clock = _Clock(now=20.0)
+    job_id = uuid4()
+    jobs = _Jobs(clock, {job_id: None})
+
+    result = await _waiter(clock, jobs).wait_for_one(
+        actor=_actor(),
+        job_id=job_id,
+        wait_seconds=30,
+        deadline=19.0,
+    )
+
+    assert result.wait.outcome == "timed_out"
+    assert result.wait.elapsed_ms == 0
+    assert jobs.calls == [(job_id,)]
+
+
+@pytest.mark.asyncio
 async def test_wait_propagates_cancellation_without_extra_query() -> None:
     clock = _Clock()
     job_id = uuid4()

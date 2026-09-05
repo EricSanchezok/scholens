@@ -95,7 +95,9 @@ Public resources use canonical identifiers:
   `documents/{sha256}/source.pdf`, and only then exposes the document to the
   file-backed parser. A nullable reservation digest is populated exactly once;
   digest queries explicitly ignore unmaterialized rows and retry is unavailable
-  until materialization succeeds.
+  until materialization succeeds. DOI provider I/O happens only after that
+  commit through a signed job-scoped URL-resolution callback, while retries
+  stream the canonical S3 source directly in the document worker.
 - `POST /api/v1/search/conversations` is the private lexical history-search
   contract. Its signed cursor is bound to actor, normalized query, and page
   size. Results contain the existing conversation summary plus the highest
@@ -698,14 +700,16 @@ dependency and execution failures.
 
 Durable-job tools use bounded server-side observation instead of model-driven
 busy polling. Single ingestion, retry, exact job lookup, and bounded batch
-ingestion accept `wait_seconds` with a 30-second default, `0` for an immediate
-snapshot, and a 240-second maximum. Terminal jobs return immediately; a timeout
-returns the latest owner-authorized snapshot, elapsed time, a stable outcome,
-and machine-readable next-action guidance. Batch ingestion accepts at most 50
-known sources with four-way concurrency and a 45-second acceptance budget,
-then queries every accepted job together under one deadline. The Conversation
-profile alone exposes `wait_for_jobs`, which observes up to 50 jobs with a
-120-second default and may be repeated after a timeout. The MCP profile uses the
+ingestion accept an Agent-selected `wait_seconds` with a 30-second default, `0`
+for an immediate snapshot, and a 240-second maximum. Terminal jobs return
+immediately; expiry returns the latest owner-authorized active snapshot, job
+UUID, elapsed time, a stable outcome, and machine-readable next-action guidance
+as a successful tool result. A shared request deadline reserves three seconds
+for projection and delivery. Batch ingestion accepts at most 50 known sources
+with four-way concurrency and a five-second acceptance bound, then queries
+every accepted job together under that same deadline. The Conversation
+profile alone exposes `wait_for_jobs`, which observes up to 50 jobs with the
+same 30-second default and may be repeated after a timeout. The MCP profile uses the
 waitable submission and `get_job` contracts but does not expose this internal
 orchestration tool.
 
@@ -771,6 +775,13 @@ and Conversation calls. MCP defaults paper operations to the authenticated
 user's complete accessible paper collection. Protocol code only authenticates,
 builds typed provenance, selects a profile, and delegates to
 `ToolDispatcher`.
+
+MCP POST responses use the Streamable HTTP SSE representation rather than a
+buffered JSON body. Headers are available immediately and the protocol runtime
+emits 15-second keepalives during silent observation, which keeps reverse-proxy
+idle timers separate from the Agent-selected job observation window. Clients
+still own an absolute tool-call deadline and should configure at least 270
+seconds when they intend to use the public 240-second maximum.
 
 Every advertised MCP output schema accepts either the typed success envelope
 or the structured business-error envelope, which the schema keeps so older
@@ -901,9 +912,10 @@ attention. Both list endpoints use signed Previous/Next keyset cursors bound
 to user, collection, filters, and sort; page size is a caller preference and
 never binds the cursor. Paper sources enter through the discriminated
 `POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
-`url`); URL resolution and PDF validation remain server-owned. Failed jobs are
-retried by creating a new durable job from the persisted source, never by
-mutating the failed history row.
+`url`); source policy remains Server-owned and PDF download validation remains
+worker-owned. Failed jobs are retried by creating a new durable job whose worker
+streams the persisted canonical source, never by mutating the failed history
+row or loading the PDF into API memory.
 
 PDF uploads and source imports share one atomic acceptance boundary. A local or
 browser client first creates a 24-hour `PaperUploadSession` using only a plain
@@ -913,9 +925,9 @@ filename, exact byte count, SHA-256, optional Project, and the
 bytes directly to object storage; Server credentials and Scholens Access Keys
 are never attached to that request. Ingestion claims the session for five
 minutes with a generation-specific lease token, rechecks Project access and the
-`add_to_library` intent, verifies stored size and the S3 checksum, downloads
-and hashes the bounded bytes again, and then enters the canonical byte-ingestion
-path. A stale worker cannot
+`add_to_library` intent, and verifies stored size and the S3 checksum by HEAD.
+The document worker then streams and hashes the bounded object before the
+metadata-only materialization callback. A stale worker cannot
 consume or release a newer claim. Success consumes the session and removes its
 staging object; validation failure makes it non-reusable, transient failure
 releases it for retry, bounded request-time cleanup removes expired database

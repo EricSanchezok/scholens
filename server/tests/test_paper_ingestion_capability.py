@@ -23,6 +23,7 @@ from app.modules.papers.application.ingestion import (
     IngestPaper,
     IngestionCancellationPlan,
     IngestionCancellationState,
+    RetrySource,
 )
 from app.modules.papers.application.upload_sessions import PaperUploadRecord
 from app.shared.application import (
@@ -245,6 +246,94 @@ async def test_paper_source_resolver_uses_openalex_pdf_for_doi() -> None:
         actor=actor,
         operation=operation,
         doi="10.1000/example",
+    )
+
+
+@pytest.mark.asyncio
+async def test_doi_acceptance_validates_connection_without_provider_io() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+    actor = _actor()
+
+    prepared = await resolver.prepare(
+        actor=actor,
+        operation=_operation(),
+        kind="doi",
+        value="https://doi.org/10.1000/Example",
+    )
+
+    assert prepared.value == "10.1000/example"
+    assert prepared.resolved_url is None
+    openalex.require_ready.assert_called_once_with(actor=actor)
+    openalex.find_by_doi.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retry_hands_canonical_source_to_worker_without_api_download() -> None:
+    job_id = uuid4()
+    digest = "ab" * 32
+    source = RetrySource(
+        job_id=job_id,
+        content_sha256=digest,
+        filename="paper.pdf",
+        display_name="Paper",
+        source_kind="arxiv",
+        project_id=None,
+        add_to_library=True,
+    )
+    ingestion = MagicMock()
+    ingestion.retry_source.return_value = source
+    executor = MagicMock()
+    executor.query.side_effect = lambda operation: operation(
+        SimpleNamespace(paper_ingestion=ingestion)
+    )
+    workflow = PaperIngestionWorkflow(
+        executor=executor,
+        url_source=MagicMock(),
+        source_resolver=MagicMock(),
+        operation_factory=OperationContextFactory(),
+        jobs=MagicMock(),
+    )
+    accepted = LibraryPaperIngestionResponse(
+        id=uuid4(),
+        display_name="Paper",
+        source_kind="arxiv",
+        state="queued",
+        stage="queued",
+        project_id=None,
+        document_id=None,
+        created_at=datetime.now(UTC),
+    )
+    actor = _actor()
+    operation = _operation()
+
+    with patch.object(
+        workflow, "_start_source", AsyncMock(return_value=accepted)
+    ) as start:
+        result = await workflow.retry(
+            actor=actor,
+            operation=operation,
+            job_id=job_id,
+            idempotency_key="retry-once",
+        )
+
+    assert result == accepted
+    start.assert_awaited_once_with(
+        actor=actor,
+        operation=operation,
+        kind="arxiv",
+        fingerprint=f"retry:{job_id}",
+        source_value=None,
+        resolved_url=None,
+        filename="paper.pdf",
+        display_name="Paper",
+        project_id=None,
+        add_to_library=True,
+        idempotency_key="retry-once",
+        canonical_object_key=f"documents/{digest}/source.pdf",
+        expected_sha256=digest,
+        retry_of=job_id,
     )
 
 

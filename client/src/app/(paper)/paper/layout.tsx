@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "../../globals.css";
+import { fontVariables } from "@/app/fonts";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -15,15 +15,6 @@ import Link from "next/link";
 import { ManageProjectsButton } from "@/components/ManageProjectsButton";
 import { MobilePaperMenu } from "@/components/MobilePaperMenu";
 import { CitePaperButton } from "@/components/CitePaperButton";
-const geistSans = Geist({
-	variable: "--font-geist-sans",
-	subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-	variable: "--font-geist-mono",
-	subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
 	metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:7303"),
@@ -66,7 +57,7 @@ export default function RootLayout({
 				/>
 			</head>
 			<body
-				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+				className={`${fontVariables} antialiased`}
 			>
 				<ThemeProvider>
 					<AuthProvider>

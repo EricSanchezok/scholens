@@ -33,6 +33,12 @@ class FetchedPdf:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedPaperSource:
+    value: str
+    resolved_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class AcceptedIngestion:
     ingestion: LibraryPaperIngestionResponse
     replayed: bool
@@ -66,6 +72,12 @@ class RetrySource:
     source_kind: str
     project_id: UUID | None
     add_to_library: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PendingPaperSource:
+    kind: str
+    value: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,13 +164,20 @@ class PaperIngestionGateway(Protocol):
         display_name: str,
         source_kind: str,
         fingerprint: str,
+        source_value: str | None,
         resolved_url: str | None,
         upload_id: UUID | None,
         upload_object_key: str | None,
+        canonical_object_key: str | None,
         expected_sha256: str | None,
         idempotency_key: str | None,
         job_id: UUID,
+        retry_of: UUID | None,
     ) -> AcceptedIngestion: ...
+
+    def source_for_resolution(
+        self, *, actor: Actor, job_id: UUID
+    ) -> PendingPaperSource: ...
 
     def source_ready(
         self,
@@ -318,12 +337,15 @@ class IngestPaper:
         display_name: str,
         source_kind: str,
         fingerprint: str,
+        source_value: str | None,
         resolved_url: str | None,
         upload_id: UUID | None,
         idempotency_key: str | None,
         job_id: UUID,
         upload_object_key: str | None = None,
+        canonical_object_key: str | None = None,
         expected_sha256: str | None = None,
+        retry_of: UUID | None = None,
     ) -> AcceptedIngestion:
         accepted = self._gateway.accept_source(
             actor=actor,
@@ -335,12 +357,15 @@ class IngestPaper:
             display_name=display_name,
             source_kind=source_kind,
             fingerprint=fingerprint,
+            source_value=source_value,
             resolved_url=resolved_url,
             upload_id=upload_id,
             upload_object_key=upload_object_key,
+            canonical_object_key=canonical_object_key,
             expected_sha256=expected_sha256,
             idempotency_key=normalize_idempotency_key(idempotency_key),
             job_id=job_id,
+            retry_of=retry_of,
         )
         if not accepted.replayed:
             self._journal.append_many(
@@ -354,6 +379,11 @@ class IngestPaper:
                 ),
             )
         return accepted
+
+    def source_for_resolution(
+        self, *, actor: Actor, job_id: UUID
+    ) -> PendingPaperSource:
+        return self._gateway.source_for_resolution(actor=actor, job_id=job_id)
 
     def source_ready(
         self,

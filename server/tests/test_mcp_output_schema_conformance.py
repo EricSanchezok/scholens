@@ -31,6 +31,7 @@ from app.transport.mcp.server import _error_remediation, tool_output_schema
 from httpx import ASGITransport, AsyncClient
 from tests.test_mcp_transport import (
     _initialize,
+    _mcp_json,
     _transport,
 )
 
@@ -199,13 +200,13 @@ async def test_error_response_carries_no_structured_content_end_to_end() -> None
                 },
             )
 
-    tools = listed.json()["result"]["tools"]
+    tools = _mcp_json(listed)["result"]["tools"]
     assert len(tools) == 64
     assert all(tool["outputSchema"].get("type") == "object" for tool in tools)
     schema = next(
         tool["outputSchema"] for tool in tools if tool["name"] == "list_projects"
     )
-    result = called.json()["result"]
+    result = _mcp_json(called)["result"]
     assert result["isError"] is True
     assert "structuredContent" not in result
     error = json.loads(result["content"][0]["text"])["error"]

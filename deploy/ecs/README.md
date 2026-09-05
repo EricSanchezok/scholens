@@ -113,6 +113,11 @@ private Cloud Map `WEBHOOK_BASE_URL`. Server-image job producers validate it at
 process startup and reject a missing or loopback production value. Jobs-image
 workloads independently validate that authority and rebase signed internal
 callback paths onto it, so an accepted task cannot retain a producer-local host.
+The same signed, private authority serves metadata-only `source-ready` and
+job-scoped `source-url` calls. The latter resolves DOI metadata inside Server so
+the user's OpenAlex credential is never granted to a Jobs task. Public `/mcp`
+POST responses use SSE keepalives; operators must not replace them with buffered
+JSON at Cloudflare or the load balancer.
 The API treats a PDF dispatch that remains unclaimed for one hour as lost,
 performs one idempotent replacement while preserving memberships and quota, and
 then exposes a retryable terminal failure rather than creating an unlimited

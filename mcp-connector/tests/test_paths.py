@@ -13,6 +13,7 @@ from scholens_mcp_connector.cli import (
     LocalUploadError,
     _local_upload_error_result,
     _local_upload_tool,
+    _remaining_observation_seconds,
     _remote_ingestion_error_with_retry,
     _remote_tool_timeout,
     local_tool_surface,
@@ -28,6 +29,17 @@ def test_remote_timeout_covers_the_maximum_tool_wait() -> None:
     assert timeout.connect == 10
     assert timeout.read is not None
     assert timeout.read >= MAX_TOOL_WAIT_SECONDS + 30
+
+
+def test_local_upload_spends_one_shared_observation_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "scholens_mcp_connector.cli.time.monotonic",
+        lambda: 14.25,
+    )
+    assert _remaining_observation_seconds(requested=60, started=10.0) == 53
+    assert _remaining_observation_seconds(requested=3, started=10.0) == 0
 
 
 def _pdf(path: Path) -> Path:
@@ -249,7 +261,7 @@ async def test_local_upload_sends_bytes_and_metadata_but_never_the_path(
                 "source": {"kind": "upload", "upload_id": upload_id},
                 "project_id": project_id,
                 "add_to_library": True,
-                "wait_seconds": 30,
+                "wait_seconds": 27,
                 "idempotency_key": "import-private-paper-v1",
             },
         ),
@@ -309,7 +321,7 @@ async def test_uncertain_ingestion_returns_exact_last_step_retry(
             "idempotency_key": "stable-import",
             "project_id": None,
             "add_to_library": True,
-            "wait_seconds": 30,
+            "wait_seconds": 27,
             "source": {"kind": "upload", "upload_id": upload_id},
         },
         "retry_tool": "ingest_paper",

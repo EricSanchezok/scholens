@@ -17,7 +17,11 @@ from app.modules.jobs.infrastructure.client import JobsClient
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
-from app.modules.papers.application.ingestion import PdfUrlSource, PreparedPaperInput
+from app.modules.papers.application.ingestion import (
+    PdfUrlSource,
+    PreparedPaperInput,
+    PreparedPaperSource,
+)
 from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import (
     Actor,
@@ -32,6 +36,15 @@ logger = logging.getLogger(__name__)
 
 
 class PaperSourceResolver(Protocol):
+    async def prepare(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        kind: str,
+        value: str,
+    ) -> PreparedPaperSource: ...
+
     async def resolve(
         self,
         *,
@@ -106,7 +119,7 @@ class PaperIngestionWorkflow:
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
-        url = await self._source_resolver.resolve(
+        source = await self._source_resolver.prepare(
             actor=actor,
             operation=operation,
             kind=kind,
@@ -116,13 +129,14 @@ class PaperIngestionWorkflow:
             lambda capabilities: capabilities.paper_ingestion
         )
         await ingestion.enforce_rate(actor=actor, ip_address=ip_address)
-        fingerprint = self._source_fingerprint(kind, value)
+        fingerprint = self._source_fingerprint(kind, source.value)
         return await self._start_source(
             actor=actor,
             operation=operation,
             kind=kind,
             fingerprint=fingerprint,
-            resolved_url=url,
+            source_value=source.value,
+            resolved_url=source.resolved_url,
             filename=None,
             display_name=self._source_display_name(kind=kind, value=value),
             project_id=project_id,
@@ -294,33 +308,20 @@ class PaperIngestionWorkflow:
                 job_id=job_id,
             )
         )
-        try:
-            content = await asyncio.to_thread(
-                s3_service.download_bytes,
-                document_source_key(retry_source.content_sha256),
-            )
-        except RuntimeError as error:
-            raise AppError(
-                code="paper_source_pdf_unavailable",
-                message="The persisted PDF source is unavailable",
-                kind=FailureKind.UNAVAILABLE,
-            ) from error
-        ingestion = self._executor.query(
-            lambda capabilities: capabilities.paper_ingestion
-        )
-        prepared = ingestion.prepare_persisted(
-            content=content,
-            filename=retry_source.filename,
-            display_name=retry_source.display_name,
-            source_kind=retry_source.source_kind,
-        )
-        return await self._start(
+        return await self._start_source(
             actor=actor,
             operation=operation,
-            prepared=prepared,
+            kind=retry_source.source_kind,
+            fingerprint=f"retry:{job_id}",
+            source_value=None,
+            resolved_url=None,
+            filename=retry_source.filename,
+            display_name=retry_source.display_name,
             project_id=retry_source.project_id,
             add_to_library=retry_source.add_to_library,
             idempotency_key=idempotency_key,
+            canonical_object_key=document_source_key(retry_source.content_sha256),
+            expected_sha256=retry_source.content_sha256,
             retry_of=job_id,
         )
 
@@ -429,6 +430,7 @@ class PaperIngestionWorkflow:
         operation: OperationContext,
         kind: str,
         fingerprint: str,
+        source_value: str | None = None,
         resolved_url: str | None,
         filename: str | None,
         display_name: str,
@@ -437,7 +439,9 @@ class PaperIngestionWorkflow:
         idempotency_key: str | None,
         upload_id: UUID | None = None,
         upload_object_key: str | None = None,
+        canonical_object_key: str | None = None,
         expected_sha256: str | None = None,
+        retry_of: UUID | None = None,
     ) -> LibraryPaperIngestionResponse:
         proposed_job_id = uuid4()
         accepted = self._executor.command(
@@ -450,12 +454,15 @@ class PaperIngestionWorkflow:
                 display_name=display_name,
                 source_kind=kind,
                 fingerprint=fingerprint,
+                source_value=source_value,
                 resolved_url=resolved_url,
                 upload_id=upload_id,
                 upload_object_key=upload_object_key,
+                canonical_object_key=canonical_object_key,
                 expected_sha256=expected_sha256,
                 idempotency_key=idempotency_key,
                 job_id=proposed_job_id,
+                retry_of=retry_of,
             )
         )
         if not accepted.processing_required:

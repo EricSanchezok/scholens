@@ -75,6 +75,16 @@ class UserOpenAlex:
     async def probe(self, *, api_key: str) -> None:
         await self._client.probe(api_key=api_key)
 
+    def require_ready(self, *, actor: Actor) -> None:
+        """Validate local connection state without making a provider request."""
+
+        self._executor.query(
+            lambda capabilities: capabilities.integrations.require_ready(
+                actor=actor,
+                provider=IntegrationProvider.OPENALEX,
+            )
+        )
+
     async def search(
         self,
         *,

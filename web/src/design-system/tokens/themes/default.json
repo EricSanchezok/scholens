@@ -191,7 +191,7 @@
       "interface": {
         "$type": "fontFamily",
         "$value": [
-          "var(--font-geist, Geist)",
+          "var(--font-geist-sans, Geist)",
           "PingFang SC",
           "Microsoft YaHei",
           "sans-serif"

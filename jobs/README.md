@@ -44,6 +44,11 @@ second full download.
    timeouts, 408/425/429, and 5xx responses with bounded backoff and
    `Retry-After`; permanent HTTP, SSRF, size, and PDF validation failures are
    terminal.
+   DOI jobs first request an open-PDF URL from Server's signed, job-scoped
+   `source-url` endpoint. Server owns the user's OpenAlex credential and cache;
+   Jobs receives only the resolved URL and applies the same URL security checks.
+   A retry job streams the immutable canonical `documents/{sha256}/source.pdf`
+   object rather than routing bytes through API memory.
 2. Upload the file to S3 staging and call Server's signed `source_ready`
    endpoint. Repeated delivery reuses the same job/staging key and is idempotent.
 3. Analyze the PDF locally with PyMuPDF: authoritative physical page count,

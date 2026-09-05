@@ -68,6 +68,13 @@ absent. The in-product Conversation Agent also selects 63 definitions: it
 excludes the remote upload-preparation primitive because it does not own a
 filesystem and instead includes the internal-only `wait_for_jobs` tool.
 
+MCP POST results use the Streamable HTTP SSE response form. Response headers
+are committed immediately and the transport emits a 15-second keepalive while
+a tool is observing durable work, so Cloudflare and other intermediaries do
+not mistake an intentional wait for an idle origin. Standards-compliant clients
+must accept `text/event-stream` responses to POST as required by Streamable
+HTTP.
+
 Every tool publishes a title, decision-oriented description, described input
 schema, typed output schema, and truthful MCP behavior annotations. Access Keys
 may grant `read`, `write`, `manage`, and `delete`; the tool permission is only a
@@ -196,15 +203,19 @@ path or the Access Key to object storage. Upload claims carry a unique lease
 token so an expired worker cannot consume or release a newer claim.
 
 `ingest_paper`, `retry_paper_ingestion`, `ingest_papers`, and `get_job` accept
-`wait_seconds` with a 30-second default and a 240-second maximum. They return
+an Agent-selected `wait_seconds` from 0 through 240, with a 30-second default.
+They return
 immediately when every observed job is terminal; otherwise they return the
 latest durable snapshots with machine-readable next-action guidance at the
-deadline. `0` requests an immediate snapshot. Batch ingestion accepts at most
-50 known sources, limits lightweight metadata acceptance to four concurrent
-operations and one 45-second wall-clock budget, then observes all accepted jobs
-under one shared deadline. It never downloads PDF bytes in the API process and
-deduplicates equivalent source fingerprints within a batch. The Conversation-only
-`wait_for_jobs` defaults to 120 seconds and can
+deadline as a normal successful tool result, not an MCP timeout or job failure.
+The transport reserves three seconds from the selected observation window for
+the final snapshot and response delivery; `0` requests an immediate snapshot.
+Batch ingestion accepts at most 50 known sources, limits lightweight acceptance
+to four concurrent operations and a five-second wall-clock bound, then observes
+all accepted jobs under the same request deadline. It never downloads PDF bytes
+in the API process and deduplicates equivalent source fingerprints within a
+batch. The Conversation-only
+`wait_for_jobs` uses the same 30-second default and can
 observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
 with capped backoff and never retains a database transaction between reads.
 When a known-source job fails with `upload_too_large`, its wait guidance directs
@@ -618,11 +629,13 @@ authority, including concurrent requests. `DELETE
 callbacks cannot restore it.
 
 DOI source ingestion validates the identifier before requiring the current
-actor's enabled OpenAlex connection. It accepts only an open PDF location from
-that catalog and returns stable credential, rate-limit, or availability errors
-without substituting an MCP or general web-search result. A catalog `404` or a
-work with no open PDF retains the existing source-unavailable/not-found
-semantics.
+actor's enabled OpenAlex connection, then commits the durable job before making
+provider requests. The document worker obtains the open-PDF URL through a
+signed, job-scoped Server callback; credentials never leave Server. It accepts
+only an open PDF location from that catalog and records stable credential,
+rate-limit, or availability failures on the durable job without substituting an
+MCP or general web-search result. A catalog `404` or a work with no open PDF
+retains the existing source-unavailable/not-found semantics.
 
 Zotero is a separate read-only integration under
 `/api/v1/integrations/zotero`. `POST .../oauth/authorizations` starts a
