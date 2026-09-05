@@ -1156,6 +1156,64 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   expect(accessibility.violations).toEqual([]);
 });
 
+test("keeps the PDF zoom percentage synchronized with the rendered page", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`/reader/${paperDocument.document_id}`);
+
+  const toolbar = page.getByRole("toolbar", { name: "Page" });
+  const zoomLevel = toolbar.getByLabel(/^Zoom level:/);
+  const firstPage = page.locator('[data-pdf-page-number="1"]');
+  await expect(firstPage.locator("> canvas")).toBeVisible();
+
+  const displayedZoom = async () => {
+    const text = (await zoomLevel.textContent())?.trim() ?? "";
+    return text.endsWith("%") ? Number(text.slice(0, -1)) : undefined;
+  };
+  const renderedZoom = () =>
+    firstPage.evaluate((element) =>
+      Math.round((element.getBoundingClientRect().width / 612) * 100),
+    );
+  const expectZoomSynchronized = () =>
+    expect
+      .poll(async () => (await displayedZoom()) === (await renderedZoom()))
+      .toBe(true);
+
+  await expectZoomSynchronized();
+  const initialZoom = await displayedZoom();
+  expect(initialZoom).not.toBe(100);
+
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await expectZoomSynchronized();
+  const expandedZoom = await displayedZoom();
+  expect(expandedZoom).not.toBe(initialZoom);
+
+  await page.getByRole("button", { name: "Open context panel" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Reader context panel" }),
+  ).toBeVisible();
+  await expectZoomSynchronized();
+  const panelZoom = await displayedZoom();
+  expect(panelZoom).not.toBe(expandedZoom);
+
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  const customZoom = Math.min((panelZoom ?? 0) + 10, 300);
+  await expect(zoomLevel).toHaveText(`${customZoom}%`);
+  await expectZoomSynchronized();
+  await expect(
+    page.getByRole("button", { name: "Fit", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Fit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Fit page" }).click();
+  await expect(
+    page.getByRole("button", { name: "Fit: Fit page" }),
+  ).toBeVisible();
+  await expectZoomSynchronized();
+  expect(await displayedZoom()).not.toBe(customZoom);
+});
+
 test("keeps the desktop selection translation anchored while SSE content grows", async ({
   page,
 }) => {

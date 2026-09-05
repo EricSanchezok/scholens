@@ -26,6 +26,7 @@ const labels = {
   search: "Search PDF",
   showOutline: "Show document outline",
   zoomIn: "Zoom in",
+  zoomLevel: "Zoom level",
   zoomOut: "Zoom out",
 };
 
@@ -67,7 +68,7 @@ const meta = {
       status: "idle",
     },
     metadata: "A. Researcher · 10.1000/rag.2026",
-    zoom: 1,
+    zoomPercent: 146,
     view: "pdf",
   },
   parameters: {
@@ -111,6 +112,51 @@ export const LargeMobile: Story = {
 
 export const ContextPanelOpen: Story = {
   args: { panelOpen: true },
+};
+
+export const MeasuringZoom: Story = {
+  args: { zoomPercent: undefined },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByLabelText(`${labels.zoomLevel}: —`),
+    ).toHaveTextContent("—");
+    await expect(
+      canvas.getByRole("button", { name: labels.zoomOut }),
+    ).toBeDisabled();
+    await expect(
+      canvas.getByRole("button", { name: labels.zoomIn }),
+    ).toBeDisabled();
+  },
+};
+
+export const EffectiveZoom: Story = {
+  args: { zoomPercent: 146 },
+  play: async ({ args, canvasElement, userEvent }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByLabelText(`${labels.zoomLevel}: 146%`),
+    ).toHaveTextContent("146%");
+    await userEvent.click(canvas.getByRole("button", { name: labels.zoomOut }));
+    await expect(args.onZoomChange).toHaveBeenCalledWith(136);
+    await userEvent.click(canvas.getByRole("button", { name: labels.zoomIn }));
+    await expect(args.onZoomChange).toHaveBeenCalledWith(156);
+  },
+};
+
+export const CustomZoom: Story = {
+  args: { fitMode: "custom", zoomPercent: 120 },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("button", { name: labels.fit }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole("button", {
+        name: `${labels.fit}: ${labels.fitWidth}`,
+      }),
+    ).not.toBeInTheDocument();
+  },
 };
 
 export const Reflow: Story = {

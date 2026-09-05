@@ -173,6 +173,10 @@ The document surface supports:
   but express the unavailable direction with a muted icon and no filled block;
 - lazy page thumbnails;
 - zoom in/out, fit width, and fit page;
+- the toolbar reports the active page's effective PDF zoom percentage in every
+  mode. Fit width and fit page recompute that value when the document viewport
+  changes; zoom in/out starts from the reported value and switches to custom
+  zoom without jumping through a stale manual default;
 - PDF text search with result count and previous/next traversal;
 - download URL refresh exactly once when a signed URL expires;
 - Canvas, Text, and Annotation layers without mutating the source PDF.

@@ -47,6 +47,11 @@ import { createReaderSelectionPageCoordinator } from "../selection/reader-select
 const EMPTY_SEARCH_MATCHES: ReaderSearchMatch[] = [];
 
 export type ReaderFitMode = "width" | "page" | "custom";
+export type ReaderEffectiveZoom = {
+  fitMode: ReaderFitMode;
+  pageNumber: number;
+  zoomPercent: number;
+};
 export type { ReaderSelection } from "../reader-selection";
 export type ReaderPdfSourceTarget = {
   page_number: number;
@@ -153,6 +158,27 @@ export function readerPdfSourceScrollTop({
   });
 }
 
+export function resolveReaderPdfScale({
+  containerSize,
+  fitMode,
+  pageSize,
+  zoom,
+}: {
+  containerSize: { height: number; width: number };
+  fitMode: ReaderFitMode;
+  pageSize: { height: number; width: number };
+  zoom: number;
+}) {
+  if (fitMode === "custom") return zoom;
+  const widthScale = Math.max((containerSize.width - 32) / pageSize.width, 0.1);
+  if (fitMode === "width") return widthScale;
+  const heightScale = Math.max(
+    (containerSize.height - 32) / pageSize.height,
+    0.1,
+  );
+  return Math.min(widthScale, heightScale);
+}
+
 export function groupReaderAnnotationsByAnchor(
   annotations: ReaderAnnotationSummary[],
 ): ReaderAnnotationSummary[][] {
@@ -192,6 +218,7 @@ function PdfPageSurface({
   fitMode,
   containerSize,
   currentPageNumber,
+  onEffectiveZoomChange,
   onInternalDestination,
   pageNumber,
   searchMatches,
@@ -227,6 +254,7 @@ function PdfPageSurface({
   containerSize: { height: number; width: number };
   currentPageNumber: number;
   fitMode: ReaderFitMode;
+  onEffectiveZoomChange?: (zoom: ReaderEffectiveZoom) => void;
   onInternalDestination: (destination: unknown) => void;
   pageNumber: number;
   searchMatches: ReaderSearchMatch[];
@@ -339,20 +367,36 @@ function PdfPageSurface({
     for (const textItem of textLayer.children) textItem.normalize();
   }, [searchMatches.length]);
 
-  const scale = React.useMemo(() => {
-    if (fitMode === "custom") return zoom;
-    const widthScale = Math.max(
-      (containerSize.width - 32) / pageSize.width,
-      0.1,
-    );
-    if (fitMode === "width") return widthScale;
-    const heightScale = Math.max(
-      (containerSize.height - 32) / pageSize.height,
-      0.1,
-    );
-    return Math.min(widthScale, heightScale);
-  }, [containerSize, fitMode, pageSize, zoom]);
+  const scale = React.useMemo(
+    () => resolveReaderPdfScale({ containerSize, fitMode, pageSize, zoom }),
+    [containerSize, fitMode, pageSize, zoom],
+  );
   const expectedRenderedKey = `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`;
+
+  React.useLayoutEffect(() => {
+    if (
+      !page ||
+      pageNumber !== currentPageNumber ||
+      containerSize.height <= 0 ||
+      containerSize.width <= 0
+    ) {
+      return;
+    }
+    onEffectiveZoomChange?.({
+      fitMode,
+      pageNumber,
+      zoomPercent: Math.round(scale * 100),
+    });
+  }, [
+    containerSize.height,
+    containerSize.width,
+    currentPageNumber,
+    fitMode,
+    onEffectiveZoomChange,
+    page,
+    pageNumber,
+    scale,
+  ]);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -734,6 +778,7 @@ export function PdfPage({
   annotationCommentLabel,
   fitMode,
   canvasLabel,
+  onEffectiveZoomChange,
   onInternalDestination,
   onVisiblePageChange,
   pageCount,
@@ -771,6 +816,7 @@ export function PdfPage({
   annotationCommentLabel: (count: number) => string;
   canvasLabel: string;
   fitMode: ReaderFitMode;
+  onEffectiveZoomChange?: (zoom: ReaderEffectiveZoom) => void;
   onInternalDestination: (destination: unknown) => void;
   onVisiblePageChange: (pageNumber: number) => void;
   pageCount: number;
@@ -1139,6 +1185,7 @@ export function PdfPage({
               fitMode={fitMode}
               key={number}
               loadingLabel={loadingLabel}
+              onEffectiveZoomChange={onEffectiveZoomChange}
               pageErrorDescription={pageErrorDescription}
               pageErrorTitle={pageErrorTitle}
               downloadLabel={downloadLabel}
