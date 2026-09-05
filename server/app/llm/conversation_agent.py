@@ -1203,7 +1203,7 @@ class ScholensConversationAgent:
                 )
                 if exc.code == "tool_arguments_invalid":
                     raise ModelRetry(_tool_argument_retry_message(exc)) from exc
-                return {"error": project_tool_error(exc)}
+                return {"error": project_tool_error(exc, tool_name=name)}
             except Exception:
                 logger.exception("conversation.agent.tool_failed", extra={"tool": name})
                 self._record_tool_failure(

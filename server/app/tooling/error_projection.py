@@ -9,9 +9,29 @@ def tool_error_remediation(
     *,
     kind: FailureKind,
     code: str,
+    details: dict[str, object] | None = None,
     replacement_tool: str | None = None,
+    tool_name: str | None = None,
 ) -> str:
     if code == "tool_arguments_invalid":
+        errors = details.get("errors") if details is not None else None
+        if (
+            tool_name == "prepare_paper_upload"
+            and isinstance(errors, list)
+            and any(
+                isinstance(error, dict)
+                and error.get("type") == "less_than_equal"
+                and error.get("loc") == ["size_bytes"]
+                for error in errors
+            )
+        ):
+            return (
+                "The declared PDF exceeds the 30 MiB upload limit. Preserve the "
+                "original and its readability, compress or optimize a copy to 30 MiB "
+                "or less, then call Scholens:prepare_paper_upload with the copy's "
+                "filename, exact size, and SHA-256. Do not retry unchanged bytes or "
+                "metadata."
+            )
         return (
             "Correct the named arguments using this tool's input schema, then call "
             "the same tool once more. Do not guess UUIDs or opaque cursors."
@@ -76,7 +96,11 @@ def tool_error_remediation(
     return "Review the error code, correct the request, and avoid blind retries."
 
 
-def project_tool_error(error: AppError) -> dict[str, JsonValue]:
+def project_tool_error(
+    error: AppError,
+    *,
+    tool_name: str | None = None,
+) -> dict[str, JsonValue]:
     replacement = None
     if error.details is not None:
         candidate = error.details.get("replacement_tool")
@@ -90,7 +114,9 @@ def project_tool_error(error: AppError) -> dict[str, JsonValue]:
         "remediation": tool_error_remediation(
             kind=error.kind,
             code=error.code,
+            details=error.details,
             replacement_tool=replacement,
+            tool_name=tool_name,
         ),
     }
     if replacement is not None:

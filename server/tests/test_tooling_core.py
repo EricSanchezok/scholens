@@ -1075,3 +1075,27 @@ def test_shared_tool_error_projection_is_actionable_and_bounded() -> None:
     assert projected["retryable"] is False
     assert "immediately preceding response" in str(projected["remediation"])
     assert "details" not in projected
+
+
+def test_shared_tool_error_projection_preserves_oversized_upload_recovery() -> None:
+    projected = project_tool_error(
+        AppError(
+            code="tool_arguments_invalid",
+            message="Tool arguments are invalid",
+            kind=FailureKind.INVALID_ARGUMENT,
+            details={
+                "errors": [
+                    {
+                        "type": "less_than_equal",
+                        "loc": ["size_bytes"],
+                        "msg": "Input should be less than or equal to 31457280",
+                    }
+                ]
+            },
+        ),
+        tool_name="prepare_paper_upload",
+    )
+
+    assert "30 MiB" in str(projected["remediation"])
+    assert "Do not retry unchanged bytes" in str(projected["remediation"])
+    assert "details" not in projected
