@@ -90,8 +90,9 @@ def test_rejects_oversized_pdf_with_actionable_recovery(tmp_path: Path) -> None:
         "message": "The selected PDF exceeds the 30 MiB upload limit",
         "remediation": (
             "Compress or optimize a copy of the PDF to 30 MiB or less, preserve the "
-            "original file and text readability, then call upload_local_paper with the "
-            "compressed copy. Do not retry the unchanged file."
+            "original file and text readability, then call "
+            "Scholens:upload_local_paper with the compressed copy. Do not retry the "
+            "unchanged file."
         ),
     }
 

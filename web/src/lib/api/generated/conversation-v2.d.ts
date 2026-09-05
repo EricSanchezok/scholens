@@ -2823,7 +2823,7 @@ export interface components {
             sha256: string;
             /**
              * Size Bytes
-             * @description Exact local file size in bytes; the maximum is 30 MB.
+             * @description Exact local file size in bytes; the maximum is 30 MiB (31457280 bytes). Compress or optimize a copy before preparing an upload when the original is larger.
              */
             size_bytes: number;
             /**

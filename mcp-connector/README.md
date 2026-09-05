@@ -86,7 +86,8 @@ overhead.
 An oversized local file returns the stable `local_pdf_too_large` code with
 exact `actual_bytes` and `max_bytes` details. Its remediation tells the Agent to
 compress or optimize a copy to 30 MiB or less, preserve the original and text
-readability, upload the compressed copy, and avoid retrying the unchanged file.
+readability, upload the compressed copy with `Scholens:upload_local_paper`, and
+avoid retrying the unchanged file.
 
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The

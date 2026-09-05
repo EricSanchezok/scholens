@@ -73,8 +73,8 @@ def _pdf_too_large_error(actual_bytes: int) -> LocalUploadError:
         remediation=(
             f"Compress or optimize a copy of the PDF to {MAX_PDF_MIB} MiB or less, "
             "preserve the original file and text readability, then call "
-            "upload_local_paper with the compressed copy. Do not retry the unchanged "
-            "file."
+            "Scholens:upload_local_paper with the compressed copy. Do not retry the "
+            "unchanged file."
         ),
     )
 

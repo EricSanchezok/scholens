@@ -221,14 +221,17 @@ terminal state. Progress heartbeats and Server-owned deadlines prevent an
 indefinite processing row. Cancellation is optimistic in the interface and
 cooperative in the worker: a late callback cannot restore a cancelled row.
 
-Add papers accepts multiple PDF files up to 30 MB each and processes at most
-three uploads concurrently. A queued file may be removed before upload, and an
-in-flight file may be cancelled independently. DOI, arXiv, and direct PDF URL
-are discriminated source submissions with inline validation and one visible
-pending state. The dialog closes after canonical acceptance; the row that then
-appears in Library is the durable acknowledgement. Each file owns its status,
-cancel, and retry action, so one failure never clears the other files or the
-source form.
+Add papers accepts multiple PDF files up to 30 MiB each and processes at most
+three uploads concurrently. An oversized local file tells the researcher to
+preserve the original and select a compressed or optimized copy. An oversized
+DOI, arXiv, or direct-URL source instead offers either a smaller source or a
+downloaded copy reduced to the limit, so an unchanged terminal source is never
+presented as retryable. A queued file may be removed before upload, and an
+in-flight file may be cancelled independently. Source submissions retain inline
+validation and one visible pending state. The dialog closes after canonical
+acceptance; the row that then appears in Library is the durable acknowledgement.
+Each file owns its status, cancel, and retry action, so one failure never clears
+the other files or the source form.
 
 DOI import requires the current user's OpenAlex Connection after the DOI passes
 local validation. Missing or invalid credentials preserve the field and expose
@@ -341,6 +344,7 @@ lives in section `1172:1885` and maps to
 | mobile queued / cancelling   | `1002:1919`, `1002:1970`           | `Mobile390Queued`, `Mobile390Cancelling`                          |
 | Add papers desktop / mobile  | `979:1831`, `979:1938`             | `AddPapers`, mobile viewport review                               |
 | duplicate PDF selection      | `1007:2`                           | `AddPapersDuplicateSelection`                                     |
+| oversized local/source PDF   | responsive runtime acceptance      | `AddPapersOversizedFile`, `AddPapersOversizedSource`              |
 | OpenAlex required / narrow   | responsive runtime acceptance      | `AddPapersOpenAlexRequired`, `Mobile320AddPapersOpenAlexRequired` |
 | OpenAlex required dark zh-CN | responsive runtime acceptance      | `DarkChineseAddPapersOpenAlexRequired`                            |
 | Zotero populated chooser     | Add papers integration intent      | `Features/Zotero/Library/Populated`                               |
@@ -353,6 +357,7 @@ lives in section `1172:1885` and maps to
 | Zotero Dark Chinese          | localized appearance acceptance    | `DarkChinese`                                                     |
 | tag assignment / management  | shared Library interaction state   | `Tag manager dialog` lifecycle stories                            |
 | lifecycle behavior contract  | `1002:2021`                        | ingestion-row state stories                                       |
+| oversized source recovery    | responsive runtime acceptance      | `UploadTooLarge`, `DarkChineseUploadTooLarge`                     |
 
 Figma owns visual intent; Storybook owns executable runtime states. Differences
 required for responsive composition and accessibility are implemented in code,

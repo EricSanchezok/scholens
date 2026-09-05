@@ -37,7 +37,11 @@ class PreparePaperUploadRequest(BaseModel):
     size_bytes: int = Field(
         gt=0,
         le=MAX_PDF_BYTES,
-        description=f"Exact local file size in bytes; the maximum is {MAX_PDF_SIZE_MB} MB.",
+        description=(
+            f"Exact local file size in bytes; the maximum is {MAX_PDF_SIZE_MB} MiB "
+            f"({MAX_PDF_BYTES} bytes). Compress or optimize a copy before preparing "
+            "an upload when the original is larger."
+        ),
     )
     sha256: str = Field(
         min_length=64,

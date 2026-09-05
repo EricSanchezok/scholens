@@ -184,6 +184,9 @@ and signed upload URLs are never persisted in the invocation replay ledger.
 The remote upload primitive accepts only a plain filename, byte count, SHA-256,
 and optional Project UUID. It returns a short-lived checksummed object-storage
 PUT URL; the client uploads bytes directly and then calls `ingest_paper`.
+Its 30 MiB input contract tells an Agent to preserve the original, compress or
+optimize a readable copy, and call `Scholens:prepare_paper_upload` again with
+the copy's exact size and checksum instead of retrying unchanged bytes.
 Server acceptance creates a byte-free source reservation; the document worker
 streams the staged object, verifies its checksum, and promotes it through the
 signed `source_ready` callback before parsing. For a local path, use the
@@ -204,6 +207,10 @@ deduplicates equivalent source fingerprints within a batch. The Conversation-onl
 `wait_for_jobs` defaults to 120 seconds and can
 observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
 with capped backoff and never retains a database transaction between reads.
+When a known-source job fails with `upload_too_large`, its wait guidance directs
+the Agent to choose a smaller accessible source or upload a compressed local
+copy with `Scholens:upload_local_paper`; it never recommends retrying the
+unchanged source.
 
 Project collection tools preserve their established inputs and item fields but
 return MCP-specific bounded summaries. `list_projects` and

@@ -162,6 +162,24 @@ export const Failed: Story = {
   },
 };
 
+export const UploadTooLarge: Story = {
+  args: {
+    attentionCount: 1,
+    ingestions: [row("failed", "downloading", "upload_too_large")],
+  },
+  play: expectedCopy(
+    "This PDF exceeds 30 MiB. Use a smaller source, or compress or optimize a copy to 30 MiB or less and upload that copy.",
+  ),
+};
+
+export const DarkChineseUploadTooLarge: Story = {
+  args: UploadTooLarge.args,
+  globals: { appearance: "dark", locale: "zh-CN" },
+  play: expectedCopy(
+    "此 PDF 超过 30 MiB。请选择更小的来源，或将副本压缩或优化至 30 MiB 以内后上传。",
+  ),
+};
+
 export const SecureUploadUnavailable: Story = {
   args: {
     attentionCount: 1,

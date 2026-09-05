@@ -145,6 +145,19 @@ const populatedHandlers = [
 
 export const libraryHandlers = {
   populated: populatedHandlers,
+  sourceTooLarge: [
+    http.post(`${api}/paper-ingestions/sources`, () =>
+      HttpResponse.json(
+        {
+          code: "upload_too_large",
+          message: "The source PDF exceeds the upload limit",
+          retryable: false,
+        },
+        { status: 413 },
+      ),
+    ),
+    ...populatedHandlers,
+  ],
   openAlexRequired: [
     http.post(`${api}/paper-ingestions/sources`, () =>
       HttpResponse.json(

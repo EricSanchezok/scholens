@@ -24,10 +24,23 @@ class _Clock:
 
 
 class _Jobs:
-    def __init__(self, clock: _Clock, transitions: dict[UUID, float | None]) -> None:
+    def __init__(
+        self,
+        clock: _Clock,
+        transitions: dict[UUID, float | None],
+        *,
+        failures: dict[UUID, str] | None = None,
+    ) -> None:
         self._clock = clock
         self._transitions = transitions
+        self._failures = failures or {}
         self.calls: list[tuple[UUID, ...]] = []
+
+    def _status(self, job_id: UUID) -> str:
+        transition = self._transitions[job_id]
+        if transition is None or self._clock.now < transition:
+            return "running"
+        return "failed" if job_id in self._failures else "completed"
 
     def get_many_statuses(
         self, *, actor: Actor, job_ids: tuple[UUID, ...]
@@ -37,12 +50,8 @@ class _Jobs:
         return [
             _job(
                 job_id,
-                status=(
-                    "completed"
-                    if (transition := self._transitions[job_id]) is not None
-                    and self._clock.now >= transition
-                    else "running"
-                ),
+                status=self._status(job_id),
+                error_code=self._failures.get(job_id),
             )
             for job_id in job_ids
         ]
@@ -56,7 +65,7 @@ class _Executor:
         return operation(self.capabilities)
 
 
-def _job(job_id: UUID, *, status: str) -> JobResponse:
+def _job(job_id: UUID, *, status: str, error_code: str | None = None) -> JobResponse:
     now = datetime.now(UTC)
     return JobResponse(
         id=job_id,
@@ -65,7 +74,7 @@ def _job(job_id: UUID, *, status: str) -> JobResponse:
         project_id=None,
         status=status,
         progress_code="parsing" if status == "running" else None,
-        error_code=None,
+        error_code=error_code,
         result={"document_id": str(uuid4())} if status == "completed" else None,
         created_at=now,
         started_at=now,
@@ -107,6 +116,28 @@ async def test_wait_for_one_returns_immediately_when_terminal() -> None:
     assert result.wait.elapsed_ms == 0
     assert result.result is None
     assert jobs.calls == [(job_id,)]
+
+
+@pytest.mark.asyncio
+async def test_wait_for_oversized_pdf_explains_how_to_recover() -> None:
+    clock = _Clock(now=5.0)
+    job_id = uuid4()
+    jobs = _Jobs(
+        clock,
+        {job_id: 0.0},
+        failures={job_id: "upload_too_large"},
+    )
+
+    result = await _waiter(clock, jobs).wait_for_one(
+        actor=_actor(), job_id=job_id, wait_seconds=30
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "upload_too_large"
+    assert result.wait.next_action == "inspect_failure"
+    assert "30 MiB" in result.wait.guidance
+    assert "Scholens:upload_local_paper" in result.wait.guidance
+    assert "Do not retry the unchanged source" in result.wait.guidance
 
 
 @pytest.mark.asyncio

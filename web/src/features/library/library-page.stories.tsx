@@ -380,6 +380,58 @@ export const AddPapersDuplicateSelection: Story = {
   },
 };
 
+export const AddPapersOversizedFile: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "Add papers" }),
+    );
+    const body = within(document.body);
+    const input = await body.findByLabelText("Choose PDFs");
+    const oversized = new File(["%PDF-1.7"], "oversized-paper.pdf", {
+      type: "application/pdf",
+    });
+    Object.defineProperty(oversized, "size", {
+      value: 30 * 1024 * 1024 + 1,
+    });
+
+    await userEvent.upload(input, oversized);
+
+    await expect(
+      await body.findByText(
+        "Compress or optimize a copy of this PDF to 30 MiB or less, then choose that copy. Keep the original file.",
+      ),
+    ).toBeVisible();
+    await expect(body.getByText("oversized-paper.pdf")).toBeVisible();
+  },
+};
+
+export const AddPapersOversizedSource: Story = {
+  parameters: {
+    msw: {
+      handlers: [...authHandlers.success, ...libraryHandlers.sourceTooLarge],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "Add papers" }),
+    );
+    const body = within(document.body);
+    await userEvent.click(body.getByRole("combobox", { name: "Source type" }));
+    await userEvent.click(await body.findByRole("option", { name: "PDF URL" }));
+    await userEvent.type(
+      body.getByPlaceholderText("https://example.org/paper.pdf"),
+      "https://papers.example.test/oversized.pdf",
+    );
+    await userEvent.click(body.getByRole("button", { name: "Add source" }));
+
+    await expect(
+      await body.findByText(
+        "This source PDF exceeds 30 MiB. Use a smaller source, or download and compress or optimize a copy to 30 MiB or less, then upload that copy.",
+      ),
+    ).toBeVisible();
+  },
+};
+
 export const AddPapersOpenAlexRequired: Story = {
   parameters: {
     msw: {

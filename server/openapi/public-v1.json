@@ -7689,7 +7689,7 @@
             "type": "string"
           },
           "size_bytes": {
-            "description": "Exact local file size in bytes; the maximum is 30 MB.",
+            "description": "Exact local file size in bytes; the maximum is 30 MiB (31457280 bytes). Compress or optimize a copy before preparing an upload when the original is larger.",
             "exclusiveMinimum": 0.0,
             "maximum": 31457280.0,
             "title": "Size Bytes",

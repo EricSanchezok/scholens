@@ -71,7 +71,7 @@ def validate_pdf_content(pdf_bytes: bytes, source: str = "upload") -> tuple[bool
     try:
         # Check file size
         if len(pdf_bytes) > MAX_PDF_SIZE_MB * 1024 * 1024:
-            return False, f"File too large (max {MAX_PDF_SIZE_MB}MB)"
+            return False, f"File too large (max {MAX_PDF_SIZE_MB} MiB)"
 
         # Check minimum file size (at least 1KB)
         if len(pdf_bytes) < 1024:
@@ -210,7 +210,7 @@ def validate_url_and_fetch_pdf(url: str) -> tuple[bool, bytes, str]:
                             return (
                                 False,
                                 b"",
-                                f"File too large (max {MAX_PDF_SIZE_MB}MB)",
+                                f"File too large (max {MAX_PDF_SIZE_MB} MiB)",
                             )
                         if declared_size < 1024:
                             return False, b"", "File too small to be a valid PDF"
@@ -225,7 +225,7 @@ def validate_url_and_fetch_pdf(url: str) -> tuple[bool, bytes, str]:
                             return (
                                 False,
                                 b"",
-                                f"File too large (max {MAX_PDF_SIZE_MB}MB)",
+                                f"File too large (max {MAX_PDF_SIZE_MB} MiB)",
                             )
                         chunks.append(chunk)
                     pdf_bytes = b"".join(chunks)
