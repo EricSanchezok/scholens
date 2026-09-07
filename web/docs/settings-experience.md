@@ -113,7 +113,7 @@ service without spending menu width on the license label.
   management and creation no longer sits in a separate orphan row.
 - Connections owns built-in and user-configured provider status. Scholight is
   built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the
-  shared integration inventory and public `/me/integrations` contract. Zotero
+  shared integration inventory and public `/me/connections` contract. Zotero
   appears in that same inventory as a `reference_manager` connection, but its
   credential is established only through the dedicated read-only OAuth flow.
 - Translation uses the same translation-preference feature as Reader. It does

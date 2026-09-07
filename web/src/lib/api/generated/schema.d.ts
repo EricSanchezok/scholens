@@ -1061,7 +1061,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/me/integrations": {
+    "/api/v1/me/connections": {
         parameters: {
             query?: never;
             header?: never;
@@ -1069,6 +1069,45 @@ export interface paths {
             cookie?: never;
         };
         /** List Integrations */
+        get: operations["list_integrations_api_v1_me_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/connections/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Connect Integration */
+        put: operations["connect_integration_api_v1_me_connections__provider__put"];
+        post?: never;
+        /** Disconnect Integration */
+        delete: operations["disconnect_integration_api_v1_me_connections__provider__delete"];
+        options?: never;
+        head?: never;
+        /** Update Integration */
+        patch: operations["update_integration_api_v1_me_connections__provider__patch"];
+        trace?: never;
+    };
+    "/api/v1/me/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Integrations
+         * @deprecated
+         */
         get: operations["list_integrations_api_v1_me_integrations_get"];
         put?: never;
         post?: never;
@@ -1086,14 +1125,23 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Connect Integration */
+        /**
+         * Connect Integration
+         * @deprecated
+         */
         put: operations["connect_integration_api_v1_me_integrations__provider__put"];
         post?: never;
-        /** Disconnect Integration */
+        /**
+         * Disconnect Integration
+         * @deprecated
+         */
         delete: operations["disconnect_integration_api_v1_me_integrations__provider__delete"];
         options?: never;
         head?: never;
-        /** Update Integration */
+        /**
+         * Update Integration
+         * @deprecated
+         */
         patch: operations["update_integration_api_v1_me_integrations__provider__patch"];
         trace?: never;
     };
@@ -4087,6 +4135,46 @@ export interface components {
             id: string;
             /** Score */
             score?: number | null;
+        };
+        /** LegacyIntegrationConnectionResponse */
+        LegacyIntegrationConnectionResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "built_in" | "parsing" | "search" | "reference_manager";
+            /**
+             * Connection Method
+             * @enum {string}
+             */
+            connection_method: "built_in" | "credential" | "oauth";
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Managed */
+            managed: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "disconnected" | "connected_unverified" | "connected" | "disabled" | "invalid";
+            /** Updated At */
+            updated_at?: string | null;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** LegacyIntegrationListResponse */
+        LegacyIntegrationListResponse: {
+            /** Items */
+            items: components["schemas"]["LegacyIntegrationConnectionResponse"][];
         };
         /** LibraryOutputListResponse */
         LibraryOutputListResponse: {
@@ -9191,7 +9279,7 @@ export interface operations {
             };
         };
     };
-    list_integrations_api_v1_me_integrations_get: {
+    list_integrations_api_v1_me_connections_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -9207,6 +9295,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationListResponse"];
+                };
+            };
+        };
+    };
+    connect_integration_api_v1_me_connections__provider__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationConnectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_integration_api_v1_me_connections__provider__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_integration_api_v1_me_connections__provider__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_integrations_api_v1_me_integrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyIntegrationListResponse"];
                 };
             };
         };
@@ -9232,7 +9439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
+                    "application/json": components["schemas"]["LegacyIntegrationConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9296,7 +9503,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
+                    "application/json": components["schemas"]["LegacyIntegrationConnectionResponse"];
                 };
             };
             /** @description Validation Error */

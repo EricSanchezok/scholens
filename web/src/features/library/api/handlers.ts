@@ -170,7 +170,7 @@ export const libraryHandlers = {
         { status: 409 },
       ),
     ),
-    http.get(`${api}/me/integrations`, () =>
+    http.get(`${api}/me/connections`, () =>
       HttpResponse.json({
         items: [
           {

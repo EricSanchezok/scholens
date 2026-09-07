@@ -204,6 +204,14 @@
     "/api/v1/me/avatar": [
       "get"
     ],
+    "/api/v1/me/connections": [
+      "get"
+    ],
+    "/api/v1/me/connections/{provider}": [
+      "delete",
+      "patch",
+      "put"
+    ],
     "/api/v1/me/integrations": [
       "get"
     ],

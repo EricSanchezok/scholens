@@ -422,7 +422,7 @@ def test_first_release_boots_without_payment_or_product_analytics_config() -> No
         "STRIPE_YEARLY_PRICE_ID",
     ):
         environment.pop(name, None)
-    environment["SCHOLENS_AI_DEEPSEEK_API_KEY"] = "test-key"
+    environment.pop("SCHOLENS_AI_DEEPSEEK_API_KEY", None)
     result = subprocess.run(
         [
             sys.executable,
@@ -431,6 +431,7 @@ def test_first_release_boots_without_payment_or_product_analytics_config() -> No
                 "from app.main import app; "
                 "paths=set(app.openapi()['paths']); "
                 "assert '/api/v1/billing/usage' in paths; "
+                "assert '/api/v1/billing/capacity' in paths; "
                 "assert not any('stripe' in path for path in paths)"
             ),
         ],

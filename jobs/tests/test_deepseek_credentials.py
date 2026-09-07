@@ -28,6 +28,7 @@ def test_job_credential_is_scoped_and_never_uses_environment(monkeypatch):
 
 def test_missing_job_key_returns_safe_error(monkeypatch):
     response = MagicMock(status_code=409)
+    response.json.return_value = {"code": "deepseek_credential_required"}
     monkeypatch.setattr(
         credentials, "post_signed_json", MagicMock(return_value=response)
     )
@@ -36,4 +37,19 @@ def test_missing_job_key_returns_safe_error(monkeypatch):
     ):
         with pytest.raises(credentials.DeepSeekCredentialRequired):
             asyncio.run(credentials.current_deepseek_key())
+    response.close.assert_called_once()
+
+
+def test_unclaimed_job_is_not_treated_as_optional_missing_key(monkeypatch):
+    response = MagicMock(status_code=409)
+    response.json.return_value = {"code": "job_not_running"}
+    monkeypatch.setattr(
+        credentials, "post_signed_json", MagicMock(return_value=response)
+    )
+    with credentials.deepseek_job_context(
+        "https://server/internal/v1/jobs/job-1/complete"
+    ):
+        with pytest.raises(RuntimeError) as error:
+            asyncio.run(credentials.current_deepseek_key())
+    assert not isinstance(error.value, credentials.DeepSeekCredentialRequired)
     response.close.assert_called_once()

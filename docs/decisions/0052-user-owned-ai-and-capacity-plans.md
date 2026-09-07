@@ -25,14 +25,21 @@ Public payments remain disabled and audited internal Researcher grants remain.
 
 ## Consequences
 
-Connections owns encrypted credentials in `scholens.integration_connections`.
-The additive migration widens the provider check without altering existing
-rows or any Identity-owned schema. Server resolves keys in the authenticated
+Connections owns encrypted model credentials in the new
+`scholens.model_connections` table. Existing external integrations remain in
+`scholens.integration_connections` with their original constraint and rows.
+The additive migration does not alter existing tables or Identity-owned schema. Server resolves keys in the authenticated
 workload context; Jobs fetches them over a signed job-scoped route after claim,
 using the durable job requester's identity. Queue envelopes contain no keys.
 Missing/disabled connections produce actionable errors. PDF ingestion skips
 optional AI metadata when the owner has no connection and retains deterministic
 PDF processing. There is no fallback to a deployment key.
+
+`/api/v1/me/connections` exposes the current catalog, including DeepSeek.
+The deprecated `/api/v1/me/integrations` adapter retains its original response
+enums and rejects providers outside that original catalog. Its DTOs live only
+at the HTTP boundary, with retirement tracked in the deprecation registry;
+application and Web use a single canonical connection model.
 
 `GET /api/v1/billing/capacity` is the current capacity-only contract. The old
 `GET /api/v1/billing/usage` remains deprecated at its HTTP adapter with retired

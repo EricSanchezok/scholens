@@ -5629,6 +5629,135 @@
         "title": "Keyword",
         "type": "object"
       },
+      "LegacyIntegrationConnectionResponse": {
+        "properties": {
+          "category": {
+            "enum": [
+              "built_in",
+              "parsing",
+              "search",
+              "reference_manager"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "connection_method": {
+            "enum": [
+              "built_in",
+              "credential",
+              "oauth"
+            ],
+            "title": "Connection Method",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "managed": {
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "scholight",
+              "mineru",
+              "anysearch",
+              "tavily",
+              "exa",
+              "firecrawl",
+              "openalex",
+              "zotero"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "disconnected",
+              "connected_unverified",
+              "connected",
+              "disabled",
+              "invalid"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "provider",
+          "category",
+          "connection_method",
+          "managed",
+          "state",
+          "enabled"
+        ],
+        "title": "LegacyIntegrationConnectionResponse",
+        "type": "object"
+      },
+      "LegacyIntegrationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyIntegrationConnectionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LegacyIntegrationListResponse",
+        "type": "object"
+      },
       "LibraryOutputListResponse": {
         "properties": {
           "items": {
@@ -16623,9 +16752,9 @@
         "summary": "Get My Avatar"
       }
     },
-    "/api/v1/me/integrations": {
+    "/api/v1/me/connections": {
       "get": {
-        "operationId": "list_integrations_api_v1_me_integrations_get",
+        "operationId": "list_integrations_api_v1_me_connections_get",
         "responses": {
           "200": {
             "content": {
@@ -16649,9 +16778,9 @@
         ]
       }
     },
-    "/api/v1/me/integrations/{provider}": {
+    "/api/v1/me/connections/{provider}": {
       "delete": {
-        "operationId": "disconnect_integration_api_v1_me_integrations__provider__delete",
+        "operationId": "disconnect_integration_api_v1_me_connections__provider__delete",
         "parameters": [
           {
             "in": "path",
@@ -16689,7 +16818,7 @@
         ]
       },
       "patch": {
-        "operationId": "update_integration_api_v1_me_integrations__provider__patch",
+        "operationId": "update_integration_api_v1_me_connections__provider__patch",
         "parameters": [
           {
             "in": "path",
@@ -16744,7 +16873,7 @@
         ]
       },
       "put": {
-        "operationId": "connect_integration_api_v1_me_integrations__provider__put",
+        "operationId": "connect_integration_api_v1_me_connections__provider__put",
         "parameters": [
           {
             "in": "path",
@@ -16772,6 +16901,186 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IntegrationConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Connect Integration",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/v1/me/integrations": {
+      "get": {
+        "deprecated": true,
+        "operationId": "list_integrations_api_v1_me_integrations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyIntegrationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Integrations",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/v1/me/integrations/{provider}": {
+      "delete": {
+        "deprecated": true,
+        "operationId": "disconnect_integration_api_v1_me_integrations__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Disconnect Integration",
+        "tags": [
+          "integrations"
+        ]
+      },
+      "patch": {
+        "deprecated": true,
+        "operationId": "update_integration_api_v1_me_integrations__provider__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyIntegrationConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Integration",
+        "tags": [
+          "integrations"
+        ]
+      },
+      "put": {
+        "deprecated": true,
+        "operationId": "connect_integration_api_v1_me_integrations__provider__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyIntegrationConnectionResponse"
                 }
               }
             },

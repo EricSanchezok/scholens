@@ -24,8 +24,12 @@ def _backend(monkeypatch: pytest.MonkeyPatch) -> ProfiledChatBackend:
     monkeypatch.setenv("SCHOLENS_AI_DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setenv("SCHOLENS_AI_STANDARD_MODEL", "deepseek:standard-model")
     monkeypatch.setenv("SCHOLENS_AI_DEEP_MODEL", "deepseek:deep-model")
-    with patch("app.llm.backend.openai.OpenAI"):
-        return ProfiledChatBackend()
+    backend = ProfiledChatBackend()
+    clients = {
+        level: MagicMock() for level in (ReasoningLevel.STANDARD, ReasoningLevel.DEEP)
+    }
+    monkeypatch.setattr(backend, "_client", lambda level: clients[level])
+    return backend
 
 
 def test_profile_default_output_limit_matches_provider_maximum(

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 from abc import ABC, abstractmethod
+from contextlib import closing
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -15,6 +15,7 @@ import openai
 from app.database.models import ReasoningLevel
 from app.llm.pydantic_models import profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
+from app.llm.user_credentials import current_deepseek_key
 from app.modules.papers.application.contracts.extraction import (
     FileContent,
     SupplementaryContent,
@@ -183,34 +184,17 @@ class ProfiledChatBackend(LLMBackend):
             level: profile_for_reasoning(level)
             for level in (ReasoningLevel.STANDARD, ReasoningLevel.DEEP)
         }
-        self._clients = {
-            level: self._new_client(profile)
-            for level, profile in self._profiles.items()
-        }
         self._max_output_tokens = self._profiles[
             ReasoningLevel.STANDARD
         ].max_output_tokens
 
     @staticmethod
     def _new_client(profile: AIProfile) -> openai.OpenAI:
-        if profile.provider not in {"deepseek", "moonshotai"}:
-            raise ValueError(
-                f"Profile {profile.name.value} selects {profile.provider}, which "
-                "does not expose the synchronous chat-compatible interface"
-            )
-        prefix = f"SCHOLENS_AI_{profile.provider.upper()}"
-        api_key = os.getenv(f"{prefix}_API_KEY")
-        if not api_key:
-            raise ValueError(f"{prefix}_API_KEY is required")
-        default_base_urls = {
-            "deepseek": "https://api.deepseek.com",
-            "moonshotai": "https://api.moonshot.ai/v1",
-        }
+        if profile.provider != "deepseek":
+            raise ValueError("User-owned model connections require a DeepSeek profile")
         return openai.OpenAI(
-            api_key=api_key,
-            base_url=os.getenv(
-                f"{prefix}_BASE_URL", default_base_urls.get(profile.provider)
-            ),
+            api_key=current_deepseek_key(),
+            base_url="https://api.deepseek.com",
             timeout=profile.request_timeout_seconds,
             max_retries=profile.max_retries,
         )
@@ -222,7 +206,7 @@ class ProfiledChatBackend(LLMBackend):
         return self._profile(reasoning_level).model_id
 
     def _client(self, reasoning_level: ReasoningLevel) -> openai.OpenAI:
-        return self._clients[reasoning_level]
+        return self._new_client(self._profile(reasoning_level))
 
     def model_revision(
         self,
@@ -355,16 +339,19 @@ class ProfiledChatBackend(LLMBackend):
         started = time.monotonic()
         status = "success"
         try:
-            with instrumented_span(
-                "llm.generate",
-                attributes={
-                    "gen_ai.system": profile.provider,
-                    "gen_ai.request.model": model,
-                    "scholens.reasoning_level": reasoning_level.value,
-                    "scholens.llm.streaming": False,
-                },
+            with (
+                instrumented_span(
+                    "llm.generate",
+                    attributes={
+                        "gen_ai.system": profile.provider,
+                        "gen_ai.request.model": model,
+                        "scholens.reasoning_level": reasoning_level.value,
+                        "scholens.llm.streaming": False,
+                    },
+                ),
+                closing(self._client(reasoning_level)) as client,
             ):
-                response = self._client(reasoning_level).chat.completions.create(
+                response = client.chat.completions.create(
                     model=model,
                     messages=messages,
                     extra_body=self._thinking_body(reasoning_level),
@@ -466,16 +453,19 @@ class ProfiledChatBackend(LLMBackend):
             usage_received = False
             stream_failed = False
             try:
-                with instrumented_span(
-                    "llm.stream",
-                    attributes={
-                        "gen_ai.system": profile.provider,
-                        "gen_ai.request.model": model,
-                        "scholens.reasoning_level": reasoning_level.value,
-                        "scholens.llm.streaming": True,
-                    },
+                with (
+                    instrumented_span(
+                        "llm.stream",
+                        attributes={
+                            "gen_ai.system": profile.provider,
+                            "gen_ai.request.model": model,
+                            "scholens.reasoning_level": reasoning_level.value,
+                            "scholens.llm.streaming": True,
+                        },
+                    ),
+                    closing(self._client(reasoning_level)) as client,
                 ):
-                    stream = self._client(reasoning_level).chat.completions.create(
+                    stream = client.chat.completions.create(
                         model=model,
                         messages=messages,
                         stream=True,
@@ -681,7 +671,7 @@ class ProfiledChatBackend(LLMBackend):
 
 @lru_cache(maxsize=1)
 def get_llm_backend() -> LLMBackend:
-    """Return the process-wide backend and its reusable HTTP connection pool."""
+    """Return shared profile configuration; HTTP clients and keys are request-scoped."""
     return ProfiledChatBackend()
 
 

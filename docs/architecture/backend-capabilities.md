@@ -206,9 +206,9 @@ retaining a session for the life of a conversation.
 
 ## User-owned integrations
 
-`GET /api/v1/me/integrations` is the unified connection inventory. Credential
+`GET /api/v1/me/connections` is the unified connection inventory. Credential
 providers, including MinerU, OpenAlex, and optional MCP providers, use
-`PUT|DELETE /api/v1/me/integrations/{provider}`. Zotero is an OAuth
+`PUT|DELETE /api/v1/me/connections/{provider}`. Zotero is an OAuth
 `reference_manager` and deliberately uses its dedicated authorization and
 disconnect endpoints. Responses expose status, revision, verification
 information, and non-secret metadata, never the credential. Scholight remains
@@ -1194,3 +1194,8 @@ Journal safe projection plus explicit confirmation where a write occurs.
 This boundary also applies when identity, Zotero, billing, or a future product
 area is reorganized; `/api/v1` is a platform version, not a paper-only
 namespace.
+
+The current connection catalog is `/api/v1/me/connections`, including user-owned
+DeepSeek keys. `/api/v1/me/integrations` remains a deprecated HTTP adapter with
+its original provider/category enums until the registered retirement conditions
+are met. Both adapters delegate to the same connection application capability.

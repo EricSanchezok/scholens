@@ -2494,6 +2494,8 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "PATCH /api/v1/library/tags/{tag_id}",
         "POST /api/v1/me/access-keys",
         "PATCH /api/v1/me/access-keys/{access_key_id}",
+        "PATCH /api/v1/me/connections/{provider}",
+        "PUT /api/v1/me/connections/{provider}",
         "PATCH /api/v1/me/integrations/{provider}",
         "PUT /api/v1/me/integrations/{provider}",
         "PATCH /api/v1/me/profile",

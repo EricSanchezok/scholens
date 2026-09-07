@@ -2092,6 +2092,46 @@ export interface components {
             /** Score */
             score?: number | null;
         };
+        /** LegacyIntegrationConnectionResponse */
+        LegacyIntegrationConnectionResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "built_in" | "parsing" | "search" | "reference_manager";
+            /**
+             * Connection Method
+             * @enum {string}
+             */
+            connection_method: "built_in" | "credential" | "oauth";
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Managed */
+            managed: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "disconnected" | "connected_unverified" | "connected" | "disabled" | "invalid";
+            /** Updated At */
+            updated_at?: string | null;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** LegacyIntegrationListResponse */
+        LegacyIntegrationListResponse: {
+            /** Items */
+            items: components["schemas"]["LegacyIntegrationConnectionResponse"][];
+        };
         /** LibraryOutputListResponse */
         LibraryOutputListResponse: {
             /** Items */

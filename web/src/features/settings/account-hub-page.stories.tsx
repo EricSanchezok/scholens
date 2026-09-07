@@ -82,7 +82,7 @@ const accountHubHandlers = [
   http.get(`${api}/me/access-keys`, () =>
     HttpResponse.json({ items: [], next_cursor: null, previous_cursor: null }),
   ),
-  http.get(`${api}/me/integrations`, () =>
+  http.get(`${api}/me/connections`, () =>
     HttpResponse.json({ items: integrations }),
   ),
   http.get(`${api}/me/translation-preferences`, () =>

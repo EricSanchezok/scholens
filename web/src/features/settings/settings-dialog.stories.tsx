@@ -109,7 +109,7 @@ const settingsHandlers = [
       previous_cursor: null,
     }),
   ),
-  http.get(`${api}/me/integrations`, () =>
+  http.get(`${api}/me/connections`, () =>
     HttpResponse.json({ items: integrations }),
   ),
   http.get(`${api}/me/translation-preferences`, () =>
@@ -369,7 +369,7 @@ export const ConnectedOpenAlexConnection: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "openalex"
@@ -409,7 +409,7 @@ export const DisabledOpenAlexConnection: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "openalex"
@@ -449,7 +449,7 @@ export const InvalidOpenAlexConnection: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "openalex"
@@ -489,7 +489,7 @@ export const InvalidConnection: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "mineru"
@@ -529,7 +529,7 @@ export const ZoteroConnected: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "zotero"
@@ -630,7 +630,7 @@ export const ZoteroActiveSyncRecovered: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "zotero"
@@ -700,7 +700,7 @@ export const ZoteroFailedSync: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "zotero"
@@ -766,7 +766,7 @@ export const ZoteroInvalidConnection: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "zotero"
@@ -826,7 +826,7 @@ export const MinerUDeferredVerification: Story = {
     msw: {
       handlers: [
         ...authHandlers.success,
-        http.get(`${api}/me/integrations`, () =>
+        http.get(`${api}/me/connections`, () =>
           HttpResponse.json({
             items: integrations.map((integration) =>
               integration.provider === "mineru"

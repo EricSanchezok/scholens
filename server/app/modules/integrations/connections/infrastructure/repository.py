@@ -9,6 +9,8 @@ from app.modules.integrations.connections.application.ports import IntegrationRe
 from app.modules.integrations.connections.domain import IntegrationProvider
 from app.modules.integrations.connections.infrastructure.models import (
     IntegrationConnection,
+    IntegrationCredentialRow,
+    ModelConnection,
 )
 from app.shared.domain import JsonValue
 from sqlalchemy import delete, select
@@ -21,12 +23,13 @@ class SqlAlchemyIntegrationGateway:
         self._db = db
 
     def list_owned(self, *, user_id: int) -> tuple[IntegrationRecord, ...]:
-        rows = self._db.scalars(
-            select(IntegrationConnection)
-            .where(IntegrationConnection.user_id == user_id)
-            .order_by(IntegrationConnection.provider)
-        ).all()
-        return tuple(_record(row) for row in rows)
+        records: list[IntegrationRecord] = []
+        for model in (IntegrationConnection, ModelConnection):
+            rows = self._db.scalars(
+                select(model).where(model.user_id == user_id).order_by(model.provider)
+            ).all()
+            records.extend(_record(row) for row in rows)
+        return tuple(records)
 
     def get_owned(
         self,
@@ -35,9 +38,10 @@ class SqlAlchemyIntegrationGateway:
         provider: IntegrationProvider,
         lock: bool = False,
     ) -> IntegrationRecord | None:
-        statement = select(IntegrationConnection).where(
-            IntegrationConnection.user_id == user_id,
-            IntegrationConnection.provider == provider.value,
+        model = _connection_model(provider)
+        statement = select(model).where(
+            model.user_id == user_id,
+            model.provider == provider.value,
         )
         if lock:
             statement = statement.with_for_update()
@@ -55,8 +59,9 @@ class SqlAlchemyIntegrationGateway:
         verified_at: datetime | None,
         now: datetime,
     ) -> IntegrationRecord:
+        model = _connection_model(provider)
         statement = (
-            insert(IntegrationConnection)
+            insert(model)
             .values(
                 user_id=user_id,
                 provider=provider.value,
@@ -72,8 +77,8 @@ class SqlAlchemyIntegrationGateway:
             )
             .on_conflict_do_update(
                 index_elements=[
-                    IntegrationConnection.user_id,
-                    IntegrationConnection.provider,
+                    model.user_id,
+                    model.provider,
                 ],
                 set_={
                     "credential_ciphertext": credential_ciphertext,
@@ -86,7 +91,7 @@ class SqlAlchemyIntegrationGateway:
                     "updated_at": now,
                 },
             )
-            .returning(IntegrationConnection)
+            .returning(model)
         )
         row = self._db.scalar(statement)
         assert row is not None
@@ -101,10 +106,11 @@ class SqlAlchemyIntegrationGateway:
         verified_at: datetime | None,
         now: datetime,
     ) -> IntegrationRecord:
+        model = _connection_model(provider)
         row = self._db.scalar(
-            select(IntegrationConnection).where(
-                IntegrationConnection.user_id == user_id,
-                IntegrationConnection.provider == provider.value,
+            select(model).where(
+                model.user_id == user_id,
+                model.provider == provider.value,
             )
         )
         assert row is not None
@@ -125,12 +131,13 @@ class SqlAlchemyIntegrationGateway:
         last_used_at: datetime,
         last_error_code: str | None,
     ) -> IntegrationRecord | None:
+        model = _connection_model(provider)
         row = self._db.scalar(
-            select(IntegrationConnection)
+            select(model)
             .where(
-                IntegrationConnection.user_id == user_id,
-                IntegrationConnection.provider == provider.value,
-                IntegrationConnection.credential_revision == credential_revision,
+                model.user_id == user_id,
+                model.provider == provider.value,
+                model.credential_revision == credential_revision,
             )
             .with_for_update()
         )
@@ -151,11 +158,12 @@ class SqlAlchemyIntegrationGateway:
         configuration: dict[str, JsonValue],
         now: datetime,
     ) -> IntegrationRecord:
+        model = _connection_model(provider)
         row = self._db.scalar(
-            select(IntegrationConnection)
+            select(model)
             .where(
-                IntegrationConnection.user_id == user_id,
-                IntegrationConnection.provider == provider.value,
+                model.user_id == user_id,
+                model.provider == provider.value,
             )
             .with_for_update()
         )
@@ -167,15 +175,16 @@ class SqlAlchemyIntegrationGateway:
         return _record(row)
 
     def delete(self, *, user_id: int, provider: IntegrationProvider) -> None:
+        model = _connection_model(provider)
         self._db.execute(
-            delete(IntegrationConnection).where(
-                IntegrationConnection.user_id == user_id,
-                IntegrationConnection.provider == provider.value,
+            delete(model).where(
+                model.user_id == user_id,
+                model.provider == provider.value,
             )
         )
 
 
-def _record(row: IntegrationConnection) -> IntegrationRecord:
+def _record(row: IntegrationCredentialRow) -> IntegrationRecord:
     return IntegrationRecord(
         user_id=row.user_id,
         provider=IntegrationProvider(row.provider),
@@ -188,4 +197,12 @@ def _record(row: IntegrationConnection) -> IntegrationRecord:
         last_error_code=row.last_error_code,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _connection_model(provider: IntegrationProvider) -> type[IntegrationCredentialRow]:
+    return (
+        ModelConnection
+        if provider is IntegrationProvider.DEEPSEEK
+        else IntegrationConnection
     )

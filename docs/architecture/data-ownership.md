@@ -400,7 +400,8 @@ Cancellation is a terminal Server decision. Storage cleanup is scheduled after
 the transaction, and any callback arriving after cancellation is an idempotent
 no-op rather than a second state authority.
 
-DeepSeek credentials are product-owned encrypted integration connections, never
+DeepSeek credentials are product-owned encrypted connections in the additive
+`scholens.model_connections` table, never
 Identity state. Plans now meter unique papers, storage and Projects only.
 Historical token tables remain readable for compatibility and are not updated
 by current BYOK processing. No per-Project paper cap is enforced.

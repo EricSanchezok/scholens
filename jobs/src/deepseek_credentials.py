@@ -33,9 +33,14 @@ def _fetch_key(url: str) -> str:
     response = post_signed_json(url, {}, timeout=30)
     try:
         if response.status_code in {409, 422}:
-            raise DeepSeekCredentialRequired(
-                "Connect your DeepSeek API key in Settings"
-            )
+            error = response.json()
+            if isinstance(error, dict) and error.get("code") in {
+                "deepseek_credential_required",
+                "deepseek_credential_invalid",
+            }:
+                raise DeepSeekCredentialRequired(
+                    "Connect your DeepSeek API key in Settings"
+                )
         if response.status_code >= 400:
             raise RuntimeError("Job-scoped DeepSeek credentials are unavailable")
         payload = response.json()

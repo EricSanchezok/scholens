@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.bootstrap.settings import AppSettings
 from app.modules.integrations.connections.domain import IntegrationProvider
 from app.modules.integrations.connections.infrastructure.models import (
-    IntegrationConnection,
+    ModelConnection,
 )
 from app.modules.integrations.connections.infrastructure.secrets import (
     AesGcmIntegrationCredentialCipher,
@@ -15,9 +15,7 @@ from sqlalchemy.orm import Session
 
 
 def require_deepseek_key(db: Session, *, user_id: int) -> str:
-    record = db.get(
-        IntegrationConnection, (user_id, IntegrationProvider.DEEPSEEK.value)
-    )
+    record = db.get(ModelConnection, (user_id, IntegrationProvider.DEEPSEEK.value))
     if record is None or not record.enabled:
         raise AppError(
             code="deepseek_credential_required",

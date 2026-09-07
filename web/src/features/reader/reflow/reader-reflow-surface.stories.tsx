@@ -179,7 +179,7 @@ const handlers = [
       { status: 202 },
     );
   }),
-  http.get("http://127.0.0.1:7301/api/v1/me/integrations", () =>
+  http.get("http://127.0.0.1:7301/api/v1/me/connections", () =>
     HttpResponse.json({
       items: [
         {
