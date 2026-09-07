@@ -10,9 +10,7 @@ from uuid import UUID
 from app.modules.billing.domain import (
     KB_SIZE_KEY,
     PAPER_UPLOAD_KEY,
-    PROJECT_PAPERS_KEY,
     PROJECTS_KEY,
-    TOKEN_CREDITS_KEY,
 )
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import OperationAction, ResourceRef
@@ -27,9 +25,7 @@ QUOTA_KEYS = frozenset(
     {
         PAPER_UPLOAD_KEY,
         KB_SIZE_KEY,
-        TOKEN_CREDITS_KEY,
         PROJECTS_KEY,
-        PROJECT_PAPERS_KEY,
     }
 )
 OPERATOR_RETRY_TOLERANCE = timedelta(minutes=5)

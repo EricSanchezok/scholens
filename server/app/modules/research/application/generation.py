@@ -41,7 +41,7 @@ RESEARCH_DATA_TABLE_CREATED = OperationAction("research.data_table_created")
 
 
 class GenerationEntitlements(Protocol):
-    def require_tokens(self, *, actor: Actor) -> None: ...
+    def require_ai_connection(self, *, actor: Actor) -> None: ...
 
 
 class GenerationCapacity(Protocol):
@@ -220,7 +220,7 @@ class ResearchGeneration:
             additional_instructions=request.additional_instructions,
         )
         payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
-        self._entitlements.require_tokens(actor=actor)
+        self._entitlements.require_ai_connection(actor=actor)
         return PreparedGeneration(
             command=EnqueueJobCommand(
                 job_id=operation_id,
@@ -280,7 +280,7 @@ class ResearchGeneration:
             ),
         )
         payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
-        self._entitlements.require_tokens(actor=actor)
+        self._entitlements.require_ai_connection(actor=actor)
         return PreparedGeneration(
             command=EnqueueJobCommand(
                 job_id=operation_id,

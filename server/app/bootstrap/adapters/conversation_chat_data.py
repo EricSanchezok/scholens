@@ -13,7 +13,9 @@ from app.bootstrap.adapters.conversation_access import conversation_policy
 from app.bootstrap.adapters.conversation_repository import conversation_repository
 from app.bootstrap.adapters.research_repository import research_repository
 from app.database.models import Conversation, Document, Project, ProjectPaper
-from app.llm.token_credits import has_token_credits
+from app.modules.integrations.connections.infrastructure.deepseek import (
+    require_deepseek_key,
+)
 from app.modules.conversations.application.chat import (
     ChatHistoryMessage,
     ChatPaperSnapshot,
@@ -72,12 +74,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         conversation_id: uuid.UUID,
         paper_context_snapshot: PaperCollection | None = None,
     ) -> ConversationChatScope:
-        if not has_token_credits(self._session, user=actor):
-            raise AppError(
-                code="token_quota_exceeded",
-                message="Your weekly Token Credits are exhausted",
-                kind=FailureKind.RATE_LIMITED,
-            )
+        require_deepseek_key(self._session, user_id=actor.id)
         conversation = self._conversation(actor=actor, conversation_id=conversation_id)
         conversation_policy.require_can_continue(
             self._session,

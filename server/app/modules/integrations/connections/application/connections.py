@@ -453,7 +453,9 @@ def _require_credential_managed(provider: IntegrationProvider) -> None:
 
 def _category(
     provider: IntegrationProvider,
-) -> Literal["parsing", "search", "reference_manager"]:
+) -> Literal["ai", "parsing", "search", "reference_manager"]:
+    if provider is IntegrationProvider.DEEPSEEK:
+        return "ai"
     if provider is IntegrationProvider.MINERU:
         return "parsing"
     if provider is IntegrationProvider.ZOTERO:

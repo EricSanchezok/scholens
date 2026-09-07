@@ -7,7 +7,7 @@ from typing import Any
 
 import stripe
 from app.database.product_analytics import track_event
-from app.modules.billing.application.contracts import UsagePeriod, UsageResponse
+from app.modules.billing.application.contracts import UsagePeriod, CapacityResponse
 from app.modules.billing.application.ports import (
     BillingEvent,
     BillingEvents,
@@ -329,8 +329,8 @@ class SqlAlchemyUsageReader(UsageReader):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def read(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
-        return UsageResponse.model_validate(
+    def read(self, actor: Actor, period: UsagePeriod) -> CapacityResponse:
+        return CapacityResponse.model_validate(
             get_user_usage_info(self._db, actor, period)
         )
 

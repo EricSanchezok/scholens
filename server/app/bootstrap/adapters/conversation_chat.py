@@ -295,7 +295,8 @@ async def _generate_turn_suggestions(
     conversation_id: uuid.UUID,
 ) -> tuple[str, str, str] | None:
     try:
-        suggestions = _validated_suggestions(await generator.generate(seed))
+        with llm_usage_context(user_id=actor.id, feature="follow_up_suggestions"):
+            suggestions = _validated_suggestions(await generator.generate(seed))
         saved = await asyncio.to_thread(
             executor.command,
             lambda capabilities: (

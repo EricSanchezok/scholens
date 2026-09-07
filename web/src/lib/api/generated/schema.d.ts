@@ -245,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Capacity */
+        get: operations["get_user_capacity_api_v1_billing_capacity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/usage": {
         parameters: {
             query?: never;
@@ -252,7 +269,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get User Usage */
+        /**
+         * Get User Usage
+         * @deprecated
+         */
         get: operations["get_user_usage_api_v1_billing_usage_get"];
         put?: never;
         post?: never;
@@ -2572,6 +2592,37 @@ export interface components {
             /** Volume */
             volume?: string | null;
         };
+        /** CapacityLimits */
+        CapacityLimits: {
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
+            /** Paper Uploads */
+            paper_uploads: number;
+            /** Projects */
+            projects: number;
+        };
+        /** CapacityResponse */
+        CapacityResponse: {
+            limits: components["schemas"]["CapacityLimits"];
+            /** Plan */
+            plan: string;
+            usage: components["schemas"]["CapacityUsage"];
+        };
+        /** CapacityUsage */
+        CapacityUsage: {
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
+            /** Knowledge Base Size Remaining Kb */
+            knowledge_base_size_remaining_kb: number;
+            /** Paper Uploads */
+            paper_uploads: number;
+            /** Paper Uploads Remaining */
+            paper_uploads_remaining: number;
+            /** Projects */
+            projects: number;
+            /** Projects Remaining */
+            projects_remaining: number;
+        };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
             /** Current Password */
@@ -3939,7 +3990,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "built_in" | "parsing" | "search" | "reference_manager";
+            category: "ai" | "built_in" | "parsing" | "search" | "reference_manager";
             /**
              * Connection Method
              * @enum {string}
@@ -3973,7 +4024,7 @@ export interface components {
          * IntegrationProvider
          * @enum {string}
          */
-        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
+        IntegrationProvider: "scholight" | "deepseek" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
         /** IntegrationUpdateRequest */
         IntegrationUpdateRequest: {
             /** Enabled */
@@ -7157,6 +7208,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    get_user_capacity_api_v1_billing_capacity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapacityResponse"];
                 };
             };
         };

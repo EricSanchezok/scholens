@@ -63,7 +63,7 @@ async function mockWorkspace(page: Page) {
       body: JSON.stringify({ items: [], next_cursor: null }),
     }),
   );
-  await page.route(`${apiPattern}/billing/usage**`, (route) =>
+  await page.route(`${apiPattern}/billing/capacity**`, (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({

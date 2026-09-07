@@ -317,6 +317,24 @@ class ApplicationCapabilities:
             integrations=self.integrations,
         )
 
+    def job_deepseek_credential(
+        self, *, job_id: UUID
+    ) -> JobIntegrationCredentialResponse:
+        from app.modules.integrations.connections.infrastructure.deepseek import (
+            require_deepseek_key,
+        )
+
+        scope = self.job_callbacks.integration_credential_scope(
+            job_id=job_id, for_ai=True
+        )
+        key = require_deepseek_key(self._session, user_id=scope.requested_by_id)
+        credential = self.integrations.credential_for_user(
+            user_id=scope.requested_by_id, provider=IntegrationProvider.DEEPSEEK
+        )
+        return JobIntegrationCredentialResponse(
+            credential=SecretStr(key), credential_revision=credential.revision
+        )
+
     def job_mineru_credential(
         self,
         *,

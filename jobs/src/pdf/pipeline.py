@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Literal
 
+from src.deepseek_credentials import DeepSeekCredentialRequired
 from src.llm_client import llm_client
 from src.pdf.local import (
     analyze_pdf_path,
@@ -363,12 +364,15 @@ async def process_pdf_file(
 
         metadata: PaperMetadataExtraction | None = None
         if not skip_metadata_extraction:
-            metadata = await llm_client.extract_paper_metadata(
-                document.markdown,
-                job_id=job_id,
-                status_callback=status_callback,
-            )
-            if not metadata.title:
+            try:
+                metadata = await llm_client.extract_paper_metadata(
+                    document.markdown,
+                    job_id=job_id,
+                    status_callback=status_callback,
+                )
+            except DeepSeekCredentialRequired:
+                metadata = None
+            if metadata is not None and not metadata.title:
                 raise ValueError("AI metadata extraction returned no title")
 
         status_callback("Finalizing PDF result")

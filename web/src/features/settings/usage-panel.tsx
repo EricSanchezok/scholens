@@ -2,18 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
-import * as React from "react";
 
 import { AsyncBoundary } from "@/components/feedback";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui";
-import { settingsQueries, type UsagePeriod } from "./api";
-import { formatDateOnly, formatStorageKilobytes } from "./formatters";
+import { settingsQueries } from "./api";
+import { formatStorageKilobytes } from "./formatters";
 import { SettingsPanelHeader, SettingsStatus } from "./settings-layout";
 
 function UsageMeter({
@@ -57,8 +49,7 @@ function UsageMeter({
 export function UsagePanel({ showHeader = true }: { showHeader?: boolean }) {
   const t = useTranslations("Settings");
   const format = useFormatter();
-  const [period, setPeriod] = React.useState<UsagePeriod>("current_week");
-  const usage = useQuery(settingsQueries.usage(period));
+  const usage = useQuery(settingsQueries.usage());
 
   return (
     <div>
@@ -93,35 +84,6 @@ export function UsagePanel({ showHeader = true }: { showHeader?: boolean }) {
                   </div>
                   <SettingsStatus tone="success">{planLabel}</SettingsStatus>
                 </div>
-                <div className="border-line-subtle mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                  <p className="text-secondary text-sm">
-                    {formatDateOnly(data.period_start, format.dateTime)}
-                    {" – "}
-                    {formatDateOnly(data.period_end, format.dateTime)}
-                  </p>
-                  <Select
-                    onValueChange={(value) => setPeriod(value as UsagePeriod)}
-                    value={period}
-                  >
-                    <SelectTrigger
-                      aria-label={t("usage.periodLabel")}
-                      className="bg-surface w-44"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current_week">
-                        {t("usage.period.currentWeek")}
-                      </SelectItem>
-                      <SelectItem value="four_weeks">
-                        {t("usage.period.fourWeeks")}
-                      </SelectItem>
-                      <SelectItem value="twelve_weeks">
-                        {t("usage.period.twelveWeeks")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </section>
 
               <section aria-labelledby="usage-resources-title">
@@ -132,12 +94,6 @@ export function UsagePanel({ showHeader = true }: { showHeader?: boolean }) {
                   {t("usage.resources")}
                 </h3>
                 <div className="divide-line-subtle mt-2 divide-y">
-                  <UsageMeter
-                    format={(value) => format.number(value, "compact")}
-                    label={t("usage.tokenCredits")}
-                    limit={data.usage.token_credits_limit}
-                    used={data.usage.token_credits_used}
-                  />
                   <UsageMeter
                     format={(value) => format.number(value)}
                     label={t("usage.papers")}
@@ -150,21 +106,6 @@ export function UsagePanel({ showHeader = true }: { showHeader?: boolean }) {
                     limit={data.limits.projects}
                     used={data.usage.projects}
                   />
-                  <div className="grid gap-1 py-3 text-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-medium">
-                        {t("usage.projectPapers")}
-                      </span>
-                      <span className="text-secondary tabular-nums">
-                        {t("usage.projectPapersLimit", {
-                          value: data.limits.project_papers,
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-secondary text-xs leading-5">
-                      {t("usage.projectPapersDescription")}
-                    </p>
-                  </div>
                   <UsageMeter
                     format={(value) =>
                       formatStorageKilobytes(value, format.number)

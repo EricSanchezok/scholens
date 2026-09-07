@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.llm.user_credentials import current_deepseek_key
 from app.shared.domain.enums import ReasoningLevel
 from pydantic_ai.models import Model
 from scholens_ai import AIProfile, AIProfileName, build_model, resolve_profile
@@ -24,6 +25,7 @@ def build_chat_model(
     return build_model(
         profile_for_reasoning(reasoning_level),
         max_output_tokens=max_output_tokens,
+        api_key=current_deepseek_key(),
     )
 
 

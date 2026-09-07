@@ -102,11 +102,11 @@ export const CompletedAndCached: Story = {
   },
 };
 
-export const QuotaExceeded: Story = {
+export const DeepSeekRequired: Story = {
   args: {
     state: {
       cacheHit: false,
-      errorCode: "token_quota_exceeded",
+      errorCode: "deepseek_credential_required",
       retryable: false,
       selection,
       status: "error",

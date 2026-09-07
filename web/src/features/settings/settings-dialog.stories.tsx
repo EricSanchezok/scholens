@@ -48,6 +48,14 @@ const integrations = [
     updated_at: null,
     verified_at: null,
   },
+  {
+    provider: "deepseek",
+    category: "ai",
+    connection_method: "credential",
+    managed: false,
+    state: "disconnected",
+    enabled: false,
+  },
   ...(["anysearch", "tavily", "exa", "firecrawl", "openalex"] as const).map(
     (provider) => ({
       category: "search",
@@ -285,23 +293,13 @@ export const Usage: Story = {
     await expect(
       await body.findByRole("heading", { name: "Usage" }),
     ).toBeVisible();
-    await expect(await body.findByText("Token Credits")).toBeVisible();
-    await expect(await body.findByText("Papers per project")).toBeVisible();
-    await expect(await body.findByText("Up to 120")).toBeVisible();
-    await expect(await body.findByText("768 MiB / 3 GiB")).toBeVisible();
-    const period = body.getByRole("combobox", { name: "Usage period" });
-    await userEvent.click(period);
-    await userEvent.click(
-      await body.findByRole("option", { name: "Last 4 weeks" }),
-    );
+    await expect(body.queryByText("Token Credits")).not.toBeInTheDocument();
     await expect(
-      await body.findByRole("combobox", { name: "Usage period" }),
-    ).toHaveTextContent("Last 4 weeks");
-    await expect(
-      body.queryByRole("button", { name: "Upgrade" }),
+      body.queryByText("Papers per project"),
     ).not.toBeInTheDocument();
+    await expect(await body.findByText("768 MiB / 3 GiB")).toBeVisible();
     await expect(
-      body.queryByRole("button", { name: "Manage billing" }),
+      body.queryByRole("combobox", { name: "Usage period" }),
     ).not.toBeInTheDocument();
   },
 };
@@ -913,6 +911,22 @@ export const UsageDarkChinese: Story = {
       await body.findByRole("heading", { name: "用量" }),
     ).toBeVisible();
     await expect(await body.findByText("768 MiB / 3 GiB")).toBeVisible();
-    await expect(await body.findByText("最多 120 篇")).toBeVisible();
+    await expect(body.queryByText("最多 120 篇")).not.toBeInTheDocument();
+  },
+};
+
+export const DeepSeekConnection: Story = {
+  parameters: { nextjs: navigation("connections") },
+  play: async () => {
+    const body = within(document.body);
+    const row = (await body.findByText("DeepSeek")).closest("article")!;
+    await userEvent.click(within(row).getByRole("button", { name: "Connect" }));
+    const dialog = (await body.findAllByRole("dialog")).at(-1)!;
+    await expect(
+      within(dialog).getByRole("link", { name: "Open provider dashboard" }),
+    ).toHaveAttribute("href", "https://platform.deepseek.com/api_keys");
+    await expect(
+      within(dialog).getByLabelText("API key", { exact: true }),
+    ).toHaveAttribute("type", "password");
   },
 };

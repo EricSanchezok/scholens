@@ -82,7 +82,6 @@ class ProjectQuotaTransferState(BaseModel):
     new_owner_project_limit: int = Field(ge=0)
     project_document_count: int = Field(ge=0)
     pending_project_slot_count: int = Field(ge=0)
-    project_paper_limit: int = Field(ge=0)
     active_reservation_count: int = Field(ge=0)
     owners: tuple[ProjectQuotaOwnerState, ...]
     reservation_assignment_digest: str = Field(pattern=r"^[0-9a-f]{64}$")

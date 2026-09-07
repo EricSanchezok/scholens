@@ -81,6 +81,11 @@ function worklogSummary(
   const operations = activities(entries);
   if (phase === "cancelled") return t("activity.stopped");
   if (phase === "error") {
+    if (
+      failure?.code === "deepseek_credential_required" ||
+      failure?.code === "deepseek_credential_invalid"
+    )
+      return t("failure.deepseek");
     if (failure?.code === "llm_stream_timeout") return t("failure.timeout");
     if (failure?.code === "llm_provider_response_invalid") {
       return t("failure.invalidResponse");

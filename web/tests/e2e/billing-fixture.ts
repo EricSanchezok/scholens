@@ -29,7 +29,7 @@ export const billingUsageFixture = {
 };
 
 export async function mockBillingUsage(page: Page) {
-  await page.route(`${apiPattern}/billing/usage**`, (route) =>
+  await page.route(`${apiPattern}/billing/capacity**`, (route) =>
     route.fulfill({
       body: JSON.stringify(billingUsageFixture),
       contentType: "application/json",

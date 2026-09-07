@@ -364,3 +364,10 @@ The smoke test uses real provider quota and is intentionally excluded from CI.
 It prints the `submit`, `upload`, `poll`, `download`, and `archive` stages
 independently, plus safe IDs, timings, output size, and classified diagnostics.
 It never prints credentials or the signed upload URL.
+
+AI jobs fetch the requester's DeepSeek key from the signed
+`/internal/v1/jobs/{job_id}/integration-credentials/deepseek` endpoint only after
+claim. Keys never enter queue payloads. Optional PDF metadata skips absent
+connections; explicit AI generation is gated before enqueue. No platform model
+key or token billing is used. Server must support this route before workers
+roll forward; existing queue envelopes need no migration.

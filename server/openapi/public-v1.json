@@ -1293,6 +1293,88 @@
         "title": "Biblio",
         "type": "object"
       },
+      "CapacityLimits": {
+        "properties": {
+          "knowledge_base_size_kb": {
+            "title": "Knowledge Base Size Kb",
+            "type": "integer"
+          },
+          "paper_uploads": {
+            "title": "Paper Uploads",
+            "type": "integer"
+          },
+          "projects": {
+            "title": "Projects",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paper_uploads",
+          "knowledge_base_size_kb",
+          "projects"
+        ],
+        "title": "CapacityLimits",
+        "type": "object"
+      },
+      "CapacityResponse": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/CapacityLimits"
+          },
+          "plan": {
+            "title": "Plan",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/CapacityUsage"
+          }
+        },
+        "required": [
+          "plan",
+          "limits",
+          "usage"
+        ],
+        "title": "CapacityResponse",
+        "type": "object"
+      },
+      "CapacityUsage": {
+        "properties": {
+          "knowledge_base_size_kb": {
+            "title": "Knowledge Base Size Kb",
+            "type": "integer"
+          },
+          "knowledge_base_size_remaining_kb": {
+            "title": "Knowledge Base Size Remaining Kb",
+            "type": "integer"
+          },
+          "paper_uploads": {
+            "title": "Paper Uploads",
+            "type": "integer"
+          },
+          "paper_uploads_remaining": {
+            "title": "Paper Uploads Remaining",
+            "type": "integer"
+          },
+          "projects": {
+            "title": "Projects",
+            "type": "integer"
+          },
+          "projects_remaining": {
+            "title": "Projects Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paper_uploads",
+          "paper_uploads_remaining",
+          "knowledge_base_size_kb",
+          "knowledge_base_size_remaining_kb",
+          "projects",
+          "projects_remaining"
+        ],
+        "title": "CapacityUsage",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "properties": {
           "current_password": {
@@ -5172,6 +5254,7 @@
         "properties": {
           "category": {
             "enum": [
+              "ai",
               "built_in",
               "parsing",
               "search",
@@ -5289,6 +5372,7 @@
       "IntegrationProvider": {
         "enum": [
           "scholight",
+          "deepseek",
           "mineru",
           "anysearch",
           "tavily",
@@ -10949,8 +11033,8 @@
         "required": [
           "paper_uploads",
           "knowledge_base_size_kb",
-          "token_credits_weekly",
           "projects",
+          "token_credits_weekly",
           "project_papers"
         ],
         "title": "SubscriptionLimits",
@@ -11004,12 +11088,12 @@
           "paper_uploads_remaining",
           "knowledge_base_size_kb",
           "knowledge_base_size_remaining_kb",
+          "projects",
+          "projects_remaining",
           "token_credits_limit",
           "token_credits_used",
           "token_credits_remaining",
-          "token_credits_overage",
-          "projects",
-          "projects_remaining"
+          "token_credits_overage"
         ],
         "title": "SubscriptionUsage",
         "type": "object"
@@ -13123,8 +13207,32 @@
         ]
       }
     },
+    "/api/v1/billing/capacity": {
+      "get": {
+        "operationId": "get_user_capacity_api_v1_billing_capacity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapacityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get User Capacity"
+      }
+    },
     "/api/v1/billing/usage": {
       "get": {
+        "deprecated": true,
         "operationId": "get_user_usage_api_v1_billing_usage_get",
         "parameters": [
           {

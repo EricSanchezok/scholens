@@ -716,3 +716,8 @@ Local verification is side-effect free:
 That lane lints all three templates, rejects YAML aliases unsupported by CloudFormation, and
 runs the deployment, manifest, and runtime-entrypoint contract tests. AWS API validation
 is performed separately with an authenticated operator session.
+
+The next BYOK release removes deployment DeepSeek key injection. Apply the
+DeepSeek connection expansion migration before deploying Server, then workers.
+Do not remove shared Scholight/Identity resources as part of this change.
+Release remains manually authorized; branch CI does not deploy this change.

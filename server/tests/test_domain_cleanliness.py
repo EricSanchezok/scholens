@@ -12,6 +12,7 @@ BUSINESS_ROOTS = (
 )
 HTTP_ROOT = ROOT / "server" / "app" / "transport" / "http"
 HTTP_BOUNDARY_FILES = {
+    "legacy_usage.py",  # Registered v1 DTO adapter, never a domain model.
     "auth_dependencies.py",
     "error_boundary.py",
     "errors.py",

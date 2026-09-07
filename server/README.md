@@ -480,7 +480,7 @@ accept no client source body. Translation emits
 standard Server-Sent Events named `start`, `delta`, `complete`, and `error`.
 The server re-authorizes the paper before durable-result lookup, persists only
 the source hash and translated result, and uses Redis only for capacity and
-single-flight coordination. A durable result hit does not consume Token Credits
+single-flight coordination. A durable result hit makes no model request; the user must still have a DeepSeek connection
 or provider capacity. The provider receives the paper title as non-translated
 domain context and the exact source in an untrusted data envelope. Its
 revisioned academic prompt prioritizes claim fidelity and established
@@ -832,3 +832,8 @@ flowchart LR
     C --> R["Sanitized activity and response events"]
     R --> U
 ```
+
+Model-backed features require user-owned DeepSeek Connections. The Server reads
+keys only for the authenticated actor; no deployment key is used. Capacity is
+reported by `/api/v1/billing/capacity`; token billing is retired. See
+[ADR 0052](../docs/decisions/0052-user-owned-ai-and-capacity-plans.md).

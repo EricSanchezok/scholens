@@ -44,7 +44,7 @@ import {
 } from "./account-hub-routes";
 import { ConnectionsPanel } from "./connections-panel";
 import { useCurrentBillingUsage } from "./current-billing-usage";
-import { formatDateOnly } from "./formatters";
+import { formatStorageKilobytes } from "./formatters";
 import { GeneralPanel } from "./general-panel";
 import { TranslationPanel } from "./translation-panel";
 import { UsagePanel } from "./usage-panel";
@@ -175,17 +175,12 @@ function BillingSummary() {
             </span>
           </span>
           <span className="mt-1 flex items-center justify-between gap-3 text-xs">
-            <span className="text-secondary">{t("usage.tokenCredits")}</span>
+            <span className="text-secondary">{t("usage.storage")}</span>
             <span className="tabular-nums">
-              {format.number(usage.tokenCreditsUsed, "compact")}
+              {formatStorageKilobytes(usage.storageUsedKb, format.number)}
               {" / "}
-              {format.number(usage.tokenCreditsLimit, "compact")}
+              {formatStorageKilobytes(usage.storageLimitKb, format.number)}
             </span>
-          </span>
-          <span className="text-secondary mt-1 block text-xs leading-4">
-            {t("usage.reset", {
-              date: formatDateOnly(usage.resetDate, format.dateTime),
-            })}
           </span>
         </span>
       )}

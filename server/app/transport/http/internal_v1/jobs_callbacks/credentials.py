@@ -49,3 +49,19 @@ def get_zotero_credential(
     return executor.query(
         lambda capabilities: capabilities.job_zotero_credential(job_id=job_id)
     )
+
+
+@credentials_router.post(
+    "/jobs/{job_id}/integration-credentials/deepseek",
+    response_model=JobIntegrationCredentialResponse,
+)
+def get_deepseek_credential(
+    job_id: UUID,
+    _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> JobIntegrationCredentialResponse:
+    return executor.query(
+        lambda capabilities: capabilities.job_deepseek_credential(job_id=job_id)
+    )

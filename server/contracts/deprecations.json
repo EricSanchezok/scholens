@@ -84,6 +84,20 @@
       "state": "deprecated",
       "removed_on": null,
       "removal_evidence": null
+    },
+    {
+      "id": "http-billing-usage-v1",
+      "boundary": "http",
+      "target": "GET /api/v1/billing/usage",
+      "owner": "scholens-platform",
+      "replacement": "GET /api/v1/billing/capacity",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.billing-usage",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
     }
   ]
 }

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -62,23 +62,17 @@ class IntervalChangeResponse(BaseModel):
     new_interval: SubscriptionInterval | None = None
 
 
-class SubscriptionLimits(BaseModel):
+class CapacityLimits(BaseModel):
     paper_uploads: int
     knowledge_base_size_kb: int
-    token_credits_weekly: int
     projects: int
-    project_papers: int
 
 
-class SubscriptionUsage(BaseModel):
+class CapacityUsage(BaseModel):
     paper_uploads: int
     paper_uploads_remaining: int
     knowledge_base_size_kb: int
     knowledge_base_size_remaining_kb: int
-    token_credits_limit: int
-    token_credits_used: int
-    token_credits_remaining: int
-    token_credits_overage: int
     projects: int
     projects_remaining: int
 
@@ -97,10 +91,7 @@ class UsagePeriod(StrEnum):
         }[self]
 
 
-class UsageResponse(BaseModel):
+class CapacityResponse(BaseModel):
     plan: str
-    period: UsagePeriod
-    period_start: date
-    period_end: date
-    limits: SubscriptionLimits
-    usage: SubscriptionUsage
+    limits: CapacityLimits
+    usage: CapacityUsage

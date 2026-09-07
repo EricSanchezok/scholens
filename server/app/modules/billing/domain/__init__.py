@@ -3,9 +3,7 @@
 from .entitlements import (
     KB_SIZE_KEY,
     PAPER_UPLOAD_KEY,
-    PROJECT_PAPERS_KEY,
     PROJECTS_KEY,
-    TOKEN_CREDITS_KEY,
     AccountCapacityFacts,
     EntitlementResolution,
     PlanGrantFacts,
@@ -18,15 +16,12 @@ from .entitlements import (
     remaining,
     resolve_entitlements,
     require_account_document_capacity,
-    require_project_paper_capacity,
 )
 
 __all__ = [
     "KB_SIZE_KEY",
     "PAPER_UPLOAD_KEY",
-    "PROJECT_PAPERS_KEY",
     "PROJECTS_KEY",
-    "TOKEN_CREDITS_KEY",
     "AccountCapacityFacts",
     "EntitlementResolution",
     "PlanGrantFacts",
@@ -39,5 +34,4 @@ __all__ = [
     "remaining",
     "resolve_entitlements",
     "require_account_document_capacity",
-    "require_project_paper_capacity",
 ]

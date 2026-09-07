@@ -229,8 +229,12 @@ def _http_client(profile: AIProfile) -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=profile.request_timeout_seconds)
 
 
-def _provider(profile: AIProfile) -> Any:
-    base_url = os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
+def _provider(profile: AIProfile, *, api_key: str | None = None) -> Any:
+    base_url = (
+        "https://api.deepseek.com"
+        if api_key is not None
+        else os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
+    )
     if profile.provider == "bedrock":
         from pydantic_ai.providers.bedrock import BedrockProvider
 
@@ -247,7 +251,7 @@ def _provider(profile: AIProfile) -> Any:
             region_name=os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1"),
             aws_read_timeout=profile.request_timeout_seconds,
         )
-    api_key = _require_api_key(profile)
+    api_key = api_key if api_key is not None else _require_api_key(profile)
     if profile.provider == "deepseek":
         from pydantic_ai.providers.deepseek import DeepSeekProvider
 
@@ -298,8 +302,15 @@ def build_model(
     profile: AIProfile,
     *,
     max_output_tokens: int | None = None,
+    api_key: str | None = None,
 ) -> Model:
-    model = infer_model(profile.model, provider_factory=lambda _: _provider(profile))
+    if api_key is not None and (not api_key.strip() or profile.provider != "deepseek"):
+        raise ProviderConfigurationError(
+            "User credentials require a DeepSeek model and a nonempty key"
+        )
+    model = infer_model(
+        profile.model, provider_factory=lambda _: _provider(profile, api_key=api_key)
+    )
     Model.__init__(
         model,
         settings=profile_model_settings(

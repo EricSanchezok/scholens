@@ -117,3 +117,5 @@ What becomes easier, harder, or newly required?
 
 How will we know the decision works, and when should it be revisited?
 ```
+
+- [ADR 0052: User-owned AI and capacity-only plans](./0052-user-owned-ai-and-capacity-plans.md)

@@ -56,7 +56,7 @@ import {
   useInstallExperience,
 } from "@/features/install-experience";
 import {
-  formatDateOnly,
+  formatStorageKilobytes,
   SettingsDialog,
   useCurrentBillingUsage,
   useSettingsLauncher,
@@ -512,20 +512,19 @@ function AccountMenu({
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="text-secondary">
-                {t("account.tokenCredits")}
-              </span>
+              <span className="text-secondary">{t("account.storage")}</span>
               <span className="tabular-nums">
-                {format.number(billingUsage.tokenCreditsUsed, "compact")}
+                {formatStorageKilobytes(
+                  billingUsage.storageUsedKb,
+                  format.number,
+                )}
                 {" / "}
-                {format.number(billingUsage.tokenCreditsLimit, "compact")}
+                {formatStorageKilobytes(
+                  billingUsage.storageLimitKb,
+                  format.number,
+                )}
               </span>
             </div>
-            <p className="text-caption text-secondary leading-4">
-              {t("account.creditsReset", {
-                date: formatDateOnly(billingUsage.resetDate, format.dateTime),
-              })}
-            </p>
           </DropdownMenuLabel>
         ) : billingUsage.status === "loading" ? (
           <DropdownMenuLabel className="text-secondary mx-1 mb-1 px-2.5 py-2 text-xs">

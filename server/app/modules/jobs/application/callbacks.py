@@ -188,14 +188,25 @@ class JobCallbacks:
             )
         )
 
-    def integration_credential_scope(self, *, job_id: UUID) -> JobCredentialScope:
+    def integration_credential_scope(
+        self, *, job_id: UUID, for_ai: bool = False
+    ) -> JobCredentialScope:
         scope = self._lifecycle.credential_scope(job_id=job_id)
-        if scope.operation not in {
-            JobOperation.PDF_PROCESS,
-            JobOperation.DOCUMENT_REFLOW,
-            JobOperation.ZOTERO_IMPORT,
-            JobOperation.ZOTERO_SYNC,
-        }:
+        permitted = (
+            {
+                JobOperation.PDF_PROCESS,
+                JobOperation.DATA_TABLE_GENERATE,
+                JobOperation.AUDIO_GENERATE,
+            }
+            if for_ai
+            else {
+                JobOperation.PDF_PROCESS,
+                JobOperation.DOCUMENT_REFLOW,
+                JobOperation.ZOTERO_IMPORT,
+                JobOperation.ZOTERO_SYNC,
+            }
+        )
+        if scope.operation not in permitted:
             raise AppError(
                 code="job_integration_credential_forbidden",
                 message="This job cannot access integration credentials",

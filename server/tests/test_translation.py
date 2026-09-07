@@ -104,7 +104,7 @@ class _Entitlements:
     def __init__(self) -> None:
         self.has_credits = True
 
-    def has_token_credits(self, *, actor: Actor) -> bool:
+    def has_ai_connection(self, *, actor: Actor) -> bool:
         assert actor.id == 42
         return self.has_credits
 
@@ -430,7 +430,7 @@ class _Translations:
             custom_instructions=None,
         )
 
-    def require_token_credits(self, *, actor: Actor) -> None:
+    def require_ai_connection(self, *, actor: Actor) -> None:
         self.token_checks += 1
 
     def prepare_reflow_block(
@@ -517,7 +517,9 @@ async def _events(
 
 
 @pytest.mark.asyncio
-async def test_cached_translation_skips_provider_quota_and_concurrency() -> None:
+async def test_cached_translation_requires_connection_but_skips_provider_and_concurrency() -> (
+    None
+):
     capabilities = _Capabilities()
     cache = _Cache(
         TranslationResultValue(
@@ -547,7 +549,7 @@ async def test_cached_translation_skips_provider_quota_and_concurrency() -> None
     assert [event.event for event in events] == ["start", "delta", "complete"]
     assert events[0].data["cache_hit"] is True
     assert provider.calls == []
-    assert capabilities.translations.token_checks == 0
+    assert capabilities.translations.token_checks == 1
     assert capacity.rate_checks == 0
     assert capacity.acquisitions == 0
 

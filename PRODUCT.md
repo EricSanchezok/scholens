@@ -189,25 +189,32 @@ customer-portal, subscription-mutation, or payment-webhook routes; operators
 grant expiring Researcher access through the audited private CLI. Current
 product limits are:
 
-| Plan       | Papers | Storage | Projects | Papers per Project | Weekly Token Credits | Zotero auto-sync |
-| ---------- | -----: | ------: | -------: | -----------------: | -------------------: | ---------------- |
-| Basic      |    300 |   5 GiB |       10 |                300 |           30,000,000 | No               |
-| Researcher |  5,000 | 100 GiB |      100 |              5,000 |          300,000,000 | Yes              |
+| Plan       | Papers | Storage | Projects | Zotero auto-sync |
+| ---------- | -----: | ------: | -------: | ---------------- |
+| Basic      |    200 |   1 GiB |       10 | No               |
+| Researcher |  2,000 |  10 GiB |       50 | Yes              |
+
+Neither plan has a per-Project paper cap or Token Credits. Model-backed chat,
+translation and research generation require the user's own encrypted DeepSeek
+connection in Settings. DeepSeek charges that user's provider account directly;
+Scholens never falls back to a platform key. Missing or disabled connections
+prompt configuration at the requested feature. Reading, organization and local
+PDF processing remain available; missing keys skip optional AI metadata.
 
 Paper count and storage are account-level unique-document quantities. A paper
 in a personal Library and any number of Projects owned by the same person is
 charged once to that account. Uploads default to the uploader's personal
 Library even when they target a Project; `add_to_library=false` keeps a
-paper Project-only. Each Project still counts its own memberships, and its
-owner—not a collaborator who adds a paper—carries the Project and account
-quota responsibility. A collaborator uploading with `add_to_library=true`
+paper Project-only. A Project owner—not a collaborator who adds a paper—carries its account
+quota responsibility. Projects have no independent paper allowance. A
+collaborator uploading with `add_to_library=true`
 also reserves one personal Library slot on their own account, matching the
 accounting of an upload followed by an explicit collect.
 
 An expired entitlement never removes existing research. An over-limit account
 remains readable and may remove resources, but cannot add another paper or
-Project or begin AI work beyond its current Token Credit limit. Token windows
-reset on Monday UTC and continue to use provider-reported raw total tokens.
+Project beyond its current account capacity. AI access depends on the user
+connection, independently of account storage usage.
 
 The entitlement resolver keeps paid subscriptions and explicitly expiring
 product grants independent so future charging does not require a schema or

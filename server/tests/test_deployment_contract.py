@@ -2124,7 +2124,6 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_URL",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
-        "SCHOLENS_AI_DEEPSEEK_API_KEY",
         "SCHOLENS_AI_STANDARD_MODEL",
         "SCHOLENS_AI_TRANSLATION_MODEL",
         "MOSS_API_KEY",
@@ -2142,7 +2141,6 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS",
         "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
-        "SCHOLENS_AI_DEEPSEEK_API_KEY",
         "MOSS_API_KEY",
         "MOSS_MAX_AUDIO_BYTES",
         "JOBS_WEBHOOK_SIGNING_SECRET",
@@ -2282,6 +2280,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_25_1100_failed_ingestion_dismissal.py",
         "2026_08_26_1200_source_reservation_nullable_digest.py",
         "2026_09_05_1400_passage_embeddings.py",
+        "2026_09_08_1000_deepseek_connection.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

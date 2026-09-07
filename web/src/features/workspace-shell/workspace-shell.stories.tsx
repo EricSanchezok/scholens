@@ -683,10 +683,10 @@ export const AccountMenuUsage: Story = {
     await userEvent.click(trigger);
     const menu = await body.findByRole("menu");
     await expect(await within(menu).findByText("Researcher")).toBeVisible();
-    await expect(await within(menu).findByText("24M / 100M")).toBeVisible();
+    await expect(await within(menu).findByText("Storage")).toBeVisible();
     await expect(
-      await within(menu).findByText("Credits reset on Aug 17, 2026"),
-    ).toBeVisible();
+      within(menu).queryByText("Token Credits"),
+    ).not.toBeInTheDocument();
     await expect(
       within(menu).getByRole("menuitem", { name: "Repository" }),
     ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
@@ -748,7 +748,7 @@ export const AccountMenuLoading: Story = {
       within(canvasElement).getByRole("button", { name: "Open account menu" }),
     );
     await expect(
-      await within(document.body).findByText("Loading plan and Token Credits…"),
+      await within(document.body).findByText("Loading plan and storage…"),
     ).toBeVisible();
   },
 };
@@ -921,9 +921,7 @@ export const AccountMenuDarkChinese: Story = {
     );
     const menu = await within(document.body).findByRole("menu");
     await expect(await within(menu).findByText("研究者版")).toBeVisible();
-    await expect(
-      await within(menu).findByText("额度于 2026年8月17日 重置"),
-    ).toBeVisible();
+    await expect(await within(menu).findByText("存储空间")).toBeVisible();
     await expect(
       within(menu).getByRole("menuitem", { name: "设置" }),
     ).toBeVisible();

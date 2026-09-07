@@ -50,3 +50,9 @@ client against the fixed default `https://api.deepseek.com` endpoint.
 The package is typed and ships `py.typed`. Its direct tests live in `tests/`
 and run through the shared package workspace documented in
 [`../README.md`](../README.md).
+
+`build_model(..., api_key=...)` accepts an explicit nonempty user key only for
+DeepSeek profiles and pins the official DeepSeek endpoint. Server and Jobs own
+credential lookup and supply this argument for product workloads. Omitting it
+retains the package's environment-provider API for non-product tools/tests; it
+is never the product fallback path.

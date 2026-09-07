@@ -109,7 +109,7 @@ class FakeEntitlements:
     def __init__(self) -> None:
         self.required_tokens = 0
 
-    def require_tokens(self, **_kwargs: object) -> None:
+    def require_ai_connection(self, **_kwargs: object) -> None:
         self.required_tokens += 1
 
 

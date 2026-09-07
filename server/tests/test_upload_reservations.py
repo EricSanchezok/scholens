@@ -295,7 +295,7 @@ def test_same_document_cannot_be_reserved_twice_for_one_library() -> None:
     db.commit.assert_not_called()
 
 
-def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
+def test_existing_account_document_has_no_per_project_quota() -> None:
     project_id = uuid4()
     document_id = uuid4()
     project = Project(id=project_id, title="Full project", owner_id=91)
@@ -323,7 +323,6 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
         patches[5],
         patches[6],
         patches[7],
-        pytest.raises(AppError) as error,
     ):
         reserve_upload(
             db,
@@ -338,7 +337,7 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
             content_sha256="f" * 64,
         )
 
-    assert error.value.code == "project_paper_quota_exceeded"
+    db.add.assert_called_once()
 
 
 def test_empty_upload_is_rejected_before_any_reservation() -> None:

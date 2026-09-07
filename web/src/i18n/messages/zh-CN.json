@@ -313,8 +313,6 @@
       "plan": "套餐",
       "planBasic": "基础版",
       "planResearcher": "研究者版",
-      "tokenCredits": "Token Credits",
-      "creditsReset": "额度于 {date} 重置",
       "usageLoading": "正在加载套餐与 Token Credits…",
       "usageUnavailable": "用量暂不可用 · 重试",
       "settings": "设置",
@@ -323,7 +321,8 @@
       "documentation": "文档",
       "repository": "仓库",
       "signOut": "退出登录",
-      "signingOut": "正在退出…"
+      "signingOut": "正在退出…",
+      "storage": "存储空间"
     }
   },
   "AccountHub": {
@@ -335,10 +334,9 @@
     "usage": {
       "title": "用量",
       "open": "查看套餐与用量",
-      "tokenCredits": "Token Credits",
-      "reset": "额度于 {date} 重置",
       "loading": "正在加载套餐与用量…",
-      "unavailable": "暂时无法加载套餐与用量。"
+      "unavailable": "暂时无法加载套餐与用量。",
+      "storage": "存储空间"
     },
     "settings": {
       "title": "设置",
@@ -509,7 +507,8 @@
         "configuration": "模型服务配置异常，请将诊断编号提供给支持人员。",
         "stopFailed": "暂时无法停止 · 仍在后台继续",
         "generic": "回答意外中断。你的消息已保存，可以重新发送。",
-        "diagnostic": "诊断编号：{id}"
+        "diagnostic": "诊断编号：{id}",
+        "deepseek": "请前往设置 → 连接，配置或更新你的 DeepSeek API Key 后使用此功能。"
       },
       "readOnly": "你可以阅读此对话，但已没有权限继续发送消息。",
       "readOnlyReason": "此对话的研究上下文已不可用，因此当前为只读状态。",
@@ -899,7 +898,8 @@
       "repaired": "AI 辅助修复",
       "translated": "译文",
       "translationFailed": "此段暂时无法翻译。",
-      "translationMarker": "译文"
+      "translationMarker": "译文",
+      "translationConnectionRequired": "请前往设置 → 连接，配置你的 DeepSeek API Key。"
     },
     "fullTranslation": {
       "close": "关闭全文翻译设置",
@@ -1026,13 +1026,13 @@
       },
       "errors": {
         "title": "翻译未完成",
-        "quota": "Token Credits 已用完；已缓存的译文仍可继续查看。",
         "busy": "当前翻译请求较多，请稍后重试。",
         "inProgress": "相同选区正在翻译，请稍后重试。",
         "provider": "翻译服务暂时不可用。",
         "access": "这篇论文已不在你的文库中。",
         "edgeBlocked": "请求被网络边缘拦截，通常是选中文本包含类似代码或文件路径的内容，请尝试翻译其他片段。",
-        "generic": "翻译被意外中断，请重试。"
+        "generic": "翻译被意外中断，请重试。",
+        "deepseek": "请前往设置 → 连接，配置或更新你的 DeepSeek API Key 后使用此功能。"
       },
       "preferencesError": "翻译偏好保存失败，之前的设置仍然有效。",
       "instructions": {
@@ -1766,20 +1766,10 @@
       "title": "用量",
       "description": "查看当前套餐及资源使用情况。",
       "plan": "当前套餐",
-      "planDescription": "额度与 Token Credits 按所选周期统计。",
-      "periodLabel": "用量统计周期",
-      "period": {
-        "currentWeek": "本周",
-        "fourWeeks": "最近 4 周",
-        "twelveWeeks": "最近 12 周"
-      },
+      "planDescription": "当前账户容量。AI 功能使用你自己的 DeepSeek API Key。",
       "resources": "资源",
-      "tokenCredits": "Token Credits",
       "papers": "论文",
       "projects": "项目",
-      "projectPapers": "每个项目的论文数",
-      "projectPapersLimit": "最多 {value, number} 篇",
-      "projectPapersDescription": "每个独立项目中允许添加的论文数量上限。",
       "storage": "存储空间"
     },
     "accessKeys": {
@@ -1835,7 +1825,8 @@
         "exa": "Exa",
         "firecrawl": "Firecrawl",
         "openalex": "OpenAlex",
-        "zotero": "Zotero"
+        "zotero": "Zotero",
+        "deepseek": "DeepSeek"
       },
       "providerDescription": {
         "scholight": "内置学术发现服务。",
@@ -1845,7 +1836,8 @@
         "exa": "语义网页搜索。",
         "firecrawl": "研究来源的网页内容提取。",
         "openalex": "DOI 解析、外部论文搜索、作者作品与引用图谱。",
-        "zotero": "以只读方式导入个人 Zotero 文库并同步标注。"
+        "zotero": "以只读方式导入个人 Zotero 文库并同步标注。",
+        "deepseek": "对话、翻译与 AI 任务使用你自己的 API Key，调用费用由 DeepSeek 向你的账户收取。"
       },
       "state": {
         "connected": "已连接",
@@ -1877,7 +1869,8 @@
       "verifyError": "无法保存此连接，请检查凭据后重试。",
       "disconnectTitle": "断开服务连接？",
       "disconnectDescription": "新任务将无法使用 {provider}。运行中的任务会继续使用其已绑定的凭据版本。",
-      "zoteroDisconnectDescription": "Scholens 将停止访问 Zotero 并取消后续同步；已经导入 Scholens 的论文和标注会保留。"
+      "zoteroDisconnectDescription": "Scholens 将停止访问 Zotero 并取消后续同步；已经导入 Scholens 的论文和标注会保留。",
+      "deepseekSaved": "Key 已保存"
     },
     "translation": {
       "title": "翻译",

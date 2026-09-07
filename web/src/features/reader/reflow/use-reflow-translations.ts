@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ApiError } from "@/lib/api";
 
 import {
   streamReflowBlockTranslation,
@@ -137,7 +138,7 @@ export class ReflowTranslationScheduler {
           this.update(blockId, (current) => ({
             ...current,
             errorCode:
-              error instanceof Error ? error.message : "translation_failed",
+              error instanceof ApiError ? error.code : "translation_failed",
             retryable: true,
             status: "error",
           }));

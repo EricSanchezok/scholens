@@ -295,3 +295,44 @@ async def test_late_completion_after_cancellation_is_a_noop() -> None:
     assert result.value == {"accepted": False}
     assert handler.called is False
     assert store.entries == []
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        JobOperation.PDF_PROCESS,
+        JobOperation.DATA_TABLE_GENERATE,
+        JobOperation.AUDIO_GENERATE,
+    ],
+)
+@pytest.mark.parametrize(
+    "status", [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.COMPLETED]
+)
+def test_deepseek_scope_requires_claim_and_uses_durable_requester(operation, status):
+    callbacks = JobCallbacks(
+        lifecycle=_Lifecycle(status=status, operation=operation),
+        handlers={},
+        schedules=_Schedules(),
+        journal=OperationJournal(store=_Store(), clock=_Clock()),
+    )
+    if status is JobStatus.RUNNING:
+        scope = callbacks.integration_credential_scope(job_id=uuid4(), for_ai=True)
+        assert scope.requested_by_id == 7
+    else:
+        with pytest.raises(AppError) as error:
+            callbacks.integration_credential_scope(job_id=uuid4(), for_ai=True)
+        assert error.value.code == "job_not_running"
+
+
+def test_non_ai_job_cannot_fetch_deepseek_key():
+    callbacks = JobCallbacks(
+        lifecycle=_Lifecycle(
+            status=JobStatus.RUNNING, operation=JobOperation.ZOTERO_SYNC
+        ),
+        handlers={},
+        schedules=_Schedules(),
+        journal=OperationJournal(store=_Store(), clock=_Clock()),
+    )
+    with pytest.raises(AppError) as error:
+        callbacks.integration_credential_scope(job_id=uuid4(), for_ai=True)
+    assert error.value.code == "job_integration_credential_forbidden"

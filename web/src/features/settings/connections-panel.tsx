@@ -63,6 +63,7 @@ const credentialSchema = z.object({
 type CredentialValues = z.infer<typeof credentialSchema>;
 
 const providerLinks: Partial<Record<IntegrationProvider, string>> = {
+  deepseek: "https://platform.deepseek.com/api_keys",
   mineru: "https://mineru.net/apiManage/token",
   anysearch: "https://www.anysearch.com/",
   tavily: "https://app.tavily.com/home",
@@ -131,7 +132,8 @@ function CredentialDialog({
           <DialogBody className="grid gap-4">
             <Field invalid={Boolean(form.formState.errors.credential)}>
               <FieldLabel>
-                {integration.provider === "openalex"
+                {integration.provider === "openalex" ||
+                integration.provider === "deepseek"
                   ? t("connections.apiKey")
                   : t("connections.accessToken")}
               </FieldLabel>
@@ -141,7 +143,8 @@ function CredentialDialog({
                   autoFocus
                   hidePasswordLabel={t("connections.hideToken")}
                   placeholder={
-                    integration.provider === "openalex"
+                    integration.provider === "openalex" ||
+                    integration.provider === "deepseek"
                       ? t("connections.apiKeyPlaceholder")
                       : t("connections.tokenPlaceholder")
                   }
@@ -151,7 +154,8 @@ function CredentialDialog({
               </FieldControl>
               <FieldMessage>
                 {form.formState.errors.credential
-                  ? integration.provider === "openalex"
+                  ? integration.provider === "openalex" ||
+                    integration.provider === "deepseek"
                     ? t("connections.apiKeyError")
                     : t("connections.tokenError")
                   : undefined}
@@ -278,7 +282,10 @@ export function ConnectionsPanel({
                           <SettingsStatus
                             tone={toneForState(integration.state)}
                           >
-                            {t(`connections.state.${integration.state}`)}
+                            {integration.provider === "deepseek" &&
+                            integration.state === "connected_unverified"
+                              ? t("connections.deepseekSaved")
+                              : t(`connections.state.${integration.state}`)}
                           </SettingsStatus>
                         </div>
                         <p
