@@ -34,7 +34,10 @@ feedback, committed route, and primary product content. The targets are:
 `WebPerformanceReporter` sends Core Web Vitals, the three navigation
 milestones, Conversation interaction milestones, and low-cardinality Reader
 annotation/render health metrics to the same-origin
-`POST /__telemetry/web-performance` Web route. Conversation measurements cover
+`POST /__telemetry/web-performance` Web route. Its App Router directory is
+`src/app/%5F_telemetry`: escaping the first underscore keeps Next.js from treating
+it as a private, unroutable folder. A production-build browser test verifies the
+public POST endpoint, in addition to the handler unit tests. Conversation measurements cover
 painted submit feedback, durable acceptance, first SSE event, first visible
 answer content, ready, and the longest event stall. A tracker reports each
 milestone at most once for one submission.
