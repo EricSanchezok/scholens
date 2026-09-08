@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Queue delay and dead-letter alarms for one isolated Scholens worker.
+Parameters:
+  QueueName: {Type: String, AllowedPattern: '^scholens-preview-[a-z-]+$'}
+  DeadLetterQueueName: {Type: String, AllowedPattern: '^scholens-preview-[a-z-]+$'}
+  AlertTopicArn: {Type: String, AllowedPattern: '^arn:aws:sns:ap-south-2:669409472143:[A-Za-z0-9_-]+$'}
+  MaximumWaitSeconds: {Type: Number, Default: 1800, MinValue: 60, MaxValue: 7200}
+Rules:
+  Destination:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::AccountId', '669409472143']
+        AssertDescription: Only the approved personal account is supported.
+      - Assert: !Equals [!Ref 'AWS::Region', ap-south-2]
+        AssertDescription: Only the approved personal region is supported.
+Resources:
+  QueueDelay:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A visible job has waited beyond the reviewed single-worker queue budget.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions: [{Name: QueueName, Value: !Ref QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: !Ref MaximumWaitSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopicArn]
+  DeadLetter:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A failed job reached the dead-letter queue and needs operator investigation.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !Ref DeadLetterQueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopicArn]

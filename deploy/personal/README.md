@@ -136,3 +136,13 @@ Configure role variables from bootstrap outputs in their matching personal GitHu
 environments, including `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN` and
 `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`. Set `AWS_REGION` to the reviewed destination;
 credentials and database passwords never appear in workflow inputs or artifacts.
+
+### Queue alerts
+
+Deploy `queue-monitoring.yml` once for each conversation, document, research, and
+maintenance queue, supplying its queue/DLQ names from the destination foundation and
+the confirmed shared alert topic from Platform. Each pair adds two standard alarms:
+a visible message older than the configured waiting budget for three minutes, and any
+visible dead-letter message. Missing idle SQS metrics are non-breaching. The default
+waiting budget is 30 minutes for serial background work; use 60 seconds for conversation.
+These alerts report delay/failure and never scale instances or replay failed work.
