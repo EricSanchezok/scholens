@@ -105,3 +105,34 @@ expired existing material. Install `start.sh` and `valkey.conf` in
 `/srv/sanchezcloud/valkey-config`, then inspect the cache change set before enabling it.
 The TLS/NOAUTH health check confirms that the private listener requires authentication;
 acceptance must additionally verify both role credentials and their cross-prefix denial.
+
+## Manual personal control plane
+
+`personal-infrastructure.yml` plans or applies updates to the existing personal
+foundation. `personal-preview.yml` does the same for application tasks. Planning
+retains existing parameters, renders the personal topology, and creates a persistent
+CloudFormation change set. Review the artifact and its resource list, then dispatch
+`apply` with that exact ARN and the same immutable control-plane revision. Apply
+rejects a foreign account/region, mismatched source, resource removal, durable-resource
+replacement, and managed load balancer/NAT/cache additions. Task-definition replacement
+is expected. Initial IAM bootstrap and new required parameters remain administrator
+operations rather than expanding the GitHub role's own authority.
+
+The runtime accepts only merged ARM64 manifests containing the worker-heartbeat helper;
+rollback candidates must meet that compatibility floor. Starting services additionally
+requires a matching migration attestation and current database-contract verification.
+Use the personal database workflow before planning an enabled deployment. Neither
+workflow creates a GitHub Release or changes the old production environment.
+
+`personal-database.yml` uses OIDC to run a one-off EC2 ECS migration task in the private
+cluster. It exposes no PostgreSQL endpoint to a GitHub runner and grants the host no
+migration secret permissions. It preserves append-only transition checks, runtime
+convergence proof, immutable attestations, and retirement of the candidate task revision.
+The task owns only Scholens migrations; Identity compatibility is verified independently.
+All three operations share one concurrency group. The first restored database's current
+attestation must be established from its successful migration proof by the operator.
+
+Configure role variables from bootstrap outputs in their matching personal GitHub
+environments, including `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN` and
+`AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`. Set `AWS_REGION` to the reviewed destination;
+credentials and database passwords never appear in workflow inputs or artifacts.

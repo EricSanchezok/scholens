@@ -156,3 +156,91 @@ def test_private_cache_enforces_tls_separate_acls_and_no_aws_runtime_role() -> N
     assert "~scholens:conversation-events:*" in bootstrap
     assert "unset CACHE_API_PASSWORD CACHE_JOBS_PASSWORD" in bootstrap
     assert "--requirepass" not in bootstrap
+
+
+def test_control_plane_rejects_foreign_destinations(monkeypatch) -> None:
+    import importlib
+    import pytest
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+    for account, region in (
+        ("919651863140", "ap-south-2"),
+        ("669409472143", "ap-southeast-1"),
+    ):
+        with pytest.raises(ValueError):
+            control.guard_destination(account, region)
+
+
+def test_control_plane_rejects_destructive_changes_and_stale_reviews(
+    monkeypatch,
+) -> None:
+    import importlib
+    import pytest
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+    base = {
+        "StackName": control.STACKS["runtime"],
+        "Status": "CREATE_COMPLETE",
+        "Description": "personal:runtime:reviewed",
+    }
+    for action, replacement, kind in (
+        ("Remove", "False", "AWS::ECS::Service"),
+        ("Modify", "True", "AWS::S3::Bucket"),
+        ("Modify", "Conditional", "AWS::IAM::Role"),
+        ("Add", "False", "AWS::EC2::NatGateway"),
+    ):
+        change = dict(
+            base,
+            Changes=[
+                {
+                    "ResourceChange": {
+                        "Action": action,
+                        "Replacement": replacement,
+                        "ResourceType": kind,
+                    }
+                }
+            ],
+        )
+        with pytest.raises(ValueError):
+            control.guard_change(change, "runtime", "reviewed")
+    with pytest.raises(ValueError):
+        control.guard_change(base, "runtime", "different")
+    with pytest.raises(ValueError):
+        control.guard_change(
+            dict(base, StackName="old-production"), "runtime", "reviewed"
+        )
+    control.guard_change(
+        dict(
+            base,
+            Changes=[
+                {
+                    "ResourceChange": {
+                        "Action": "Modify",
+                        "Replacement": "True",
+                        "ResourceType": "AWS::ECS::TaskDefinition",
+                    }
+                }
+            ],
+        ),
+        "runtime",
+        "reviewed",
+    )
+
+
+def test_personal_manual_workflows_preserve_isolation_and_migration_proofs() -> None:
+    database = (ROOT / ".github/workflows/personal-database.yml").read_text()
+    assert "environment: personal-database" in database
+    assert "--launch-type EC2" in database
+    assert "--network-configuration" not in database
+    assert "--cluster sanchezcloud-production" not in database
+    assert "--expected-platform linux/arm64" in database
+    assert "SCHOLENS_MIGRATION_PROOF=" in database
+    assert "create-migration-attestation" in database
+    for name in ("personal-infrastructure", "personal-preview"):
+        workflow = (ROOT / f".github/workflows/{name}.yml").read_text()
+        assert f"environment: {name}" in workflow
+        assert "options: [plan, apply]" in workflow
+        assert "scholens-personal-control-plane" in workflow
+        assert 'allowed-account-ids: "669409472143"' in workflow
