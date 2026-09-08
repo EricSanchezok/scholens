@@ -538,3 +538,16 @@ def test_migration_candidate_task_requires_one_named_migration_container(
             {"family": "migration", "containerDefinitions": containers},
             candidate_image,
         )
+
+
+def test_arm64_manifest_requires_matching_deployment_platform(tmp_path: Path) -> None:
+    args = _arguments(tmp_path)
+    for scan in args.image_scans_contract.values():
+        scan["platform"] = "linux/arm64"
+    manifest = release_manifest.create_manifest(args)
+    release_manifest.verify_manifest(manifest, expected_platform="linux/arm64")
+    with pytest.raises(ValueError, match="platform"):
+        release_manifest.verify_manifest(manifest, expected_platform="linux/amd64")
+    args.image_scans_contract["web"]["platform"] = "linux/amd64"
+    with pytest.raises(ValueError, match="platform"):
+        release_manifest.create_manifest(args)

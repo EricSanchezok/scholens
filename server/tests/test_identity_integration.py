@@ -423,3 +423,26 @@ def test_admin_session_secret_fails_closed_in_production(
 
     with pytest.raises(RuntimeError, match="at least 32"):
         admin_auth.admin_session_secret()
+
+
+def test_explicit_rehearsal_email_disable_never_constructs_real_sender() -> None:
+    from app.modules.identity.infrastructure.sanchezcloud_identity import (
+        build_auth_email_sender,
+    )
+    from app.shared.infrastructure.email_settings import ScholensEmailSettings
+
+    settings = ScholensEmailSettings(
+        _env_file=None,
+        scholens_email_delivery_enabled=False,
+        scholens_aliyun_dm_access_key_id="unused-id",
+        scholens_aliyun_dm_access_key_secret="unused-secret",
+        scholens_aliyun_dm_account_name="unused@example.invalid",
+    )
+    settings.validate_configuration(required=True)
+    assert not settings.configured
+    assert (
+        build_auth_email_sender(
+            settings, client_domain="https://preview.example.invalid"
+        )
+        is None
+    )

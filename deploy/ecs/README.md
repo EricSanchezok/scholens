@@ -1,8 +1,8 @@
 # Scholens ECS production operations
 
-This directory is the only production deployment package for Scholens. Production runs
-in `ap-southeast-1` on the shared SanchezCloud VPC and ECS cluster. There is no EC2,
-Docker Compose, RabbitMQ, Redis, Celery result-backend, or legacy-client production path.
+This directory owns the existing managed production deployment for Scholens. Production runs
+in `ap-southeast-1` on the shared SanchezCloud VPC and ECS cluster. It does not use Docker Compose, RabbitMQ, Redis, Celery result-backend, or the legacy client.
+The isolated EC2 migration package is documented in [personal deployment](../personal/README.md).
 
 The personal-account migration adds an opt-in runtime endpoint mode described in
 [ADR 0053](../../docs/decisions/0053-explicit-single-host-runtime.md). Its provisioned

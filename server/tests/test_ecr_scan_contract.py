@@ -150,3 +150,50 @@ def test_oci_index_scan_is_bound_to_exact_linux_amd64_child() -> None:
         )
         == runtime_digest
     )
+
+
+def test_arm64_scan_resolves_only_requested_architecture() -> None:
+    digest = f"sha256:{'a' * 64}"
+    arm = f"sha256:{'b' * 64}"
+    x86 = f"sha256:{'c' * 64}"
+    response = {
+        "imageId": {"imageDigest": digest},
+        "imageManifestMediaType": "application/vnd.oci.image.index.v1+json",
+        "imageManifest": json.dumps(
+            {
+                "manifests": [
+                    {
+                        "digest": arm,
+                        "platform": {"os": "linux", "architecture": "arm64"},
+                    },
+                    {
+                        "digest": x86,
+                        "platform": {"os": "linux", "architecture": "amd64"},
+                    },
+                ]
+            }
+        ),
+    }
+    selected = ecr_scan_contract.linux_scan_digest(
+        "sanchezcloud-scholens-api",
+        digest,
+        platform="linux/arm64",
+        fetch=lambda *_: response,
+    )
+    assert selected == arm
+    result = ecr_scan_contract.wait_for_scan(
+        component="api",
+        repository="sanchezcloud-scholens-api",
+        digest=digest,
+        scan_digest=selected,
+        platform="linux/arm64",
+        describe=lambda *_: _response(arm, "COMPLETE"),
+    )
+    assert result["platform"] == "linux/arm64"
+    with pytest.raises(ValueError, match="platform"):
+        ecr_scan_contract.linux_scan_digest(
+            "sanchezcloud-scholens-api",
+            digest,
+            platform="linux/386",
+            fetch=lambda *_: response,
+        )

@@ -195,8 +195,16 @@ run_deployment() {
       exit 1
     fi
     "$server_environment/python" scripts/release_manifest.py --help >/dev/null
+    local personal_templates
+    personal_templates=$(mktemp -d)
+    trap 'rm -rf "$personal_templates"' EXIT
+    for stage in foundation bootstrap runtime; do
+      "$server_environment/python" scripts/personal_deployment.py "$stage" --output "$personal_templates/$stage.json"
+      cfn-lint --non-zero-exit-code error "$personal_templates/$stage.json"
+    done
     "$server_environment/pytest" -q \
       server/tests/test_deployment_contract.py \
+      server/tests/test_personal_deployment.py \
       server/tests/test_ecr_scan_contract.py \
       server/tests/test_release_manifest.py \
       server/tests/test_runtime_entrypoint.py

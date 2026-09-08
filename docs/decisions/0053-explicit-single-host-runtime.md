@@ -33,3 +33,12 @@ Existing deployed consumers remain compatible because the new argument defaults 
 `managed`. There are no HTTP, schema, queue-envelope, or user-facing behavior changes.
 The single-host path can be activated only by explicitly configured new infrastructure.
 The migration does not change production DNS or existing database connections.
+
+## Deployment adoption
+
+The isolated [personal deployment adapter](../../deploy/personal/README.md) derives
+retained product resources and independent EC2 task roles from the canonical managed
+contracts. Fixed host ports and stop-before-replace deployments trade brief outages for
+predictable single-host capacity. Scheduled producers remain absent during initial
+recovery; application services default to disabled. The shared entrypoint and database
+process remain with their Platform and Account Center owners.
