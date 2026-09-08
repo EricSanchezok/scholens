@@ -3,9 +3,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from billiard.exceptions import WorkerLostError
+from celery import signals
+from celery.utils.dispatch import Signal
 
 from src.cache_config import CacheConfigurationError, cache_url
-from src.task_protection import set_task_protection
+from src.task_protection import register_task_protection_signals, set_task_protection
 
 
 def test_managed_cache_url_escapes_credentials(
@@ -70,3 +73,28 @@ def test_ecs_task_protection_uses_agent_endpoint(
         timeout=3,
     )
     response.raise_for_status.assert_called_once_with()
+
+
+@pytest.mark.parametrize("terminal_signal", ["task_failure", "task_revoked"])
+def test_lost_or_revoked_worker_releases_protection_without_postrun(
+    monkeypatch: pytest.MonkeyPatch, terminal_signal: str
+) -> None:
+    for name in ("task_prerun", "task_postrun", "task_failure", "task_revoked"):
+        monkeypatch.setattr(signals, name, Signal())
+    monkeypatch.setenv("ECS_AGENT_URI", "http://169.254.170.2/api")
+    register_task_protection_signals()
+
+    with patch("src.task_protection.requests.put", return_value=MagicMock()) as put:
+        signals.task_prerun.send(sender=None, task_id="lost-job")
+        getattr(signals, terminal_signal).send(
+            sender=None,
+            task_id="lost-job",
+            exception=WorkerLostError("Child process was killed"),
+        )
+
+    assert [
+        call.kwargs["json"]["ProtectionEnabled"] for call in put.call_args_list
+    ] == [
+        True,
+        False,
+    ]

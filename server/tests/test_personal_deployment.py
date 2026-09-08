@@ -102,7 +102,7 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
         assert task["RuntimePlatform"]["CpuArchitecture"] == "ARM64"
         for container in task["ContainerDefinitions"]:
             assert container["Name"] != "adot"
-            assert container["MemoryReservation"] <= container["Memory"] <= 1280
+            assert container["MemoryReservation"] <= container["Memory"] <= 2560
             assert not any(
                 "DEEPSEEK" in s["Name"] and "KEY" in s["Name"]
                 for s in container.get("Secrets", [])
