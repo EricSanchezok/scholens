@@ -13,7 +13,7 @@ from typing import Any, Literal, cast
 
 import boto3
 from botocore.config import Config
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sanchezcloud_identity.avatar_manager import AvatarManager
 from sanchezcloud_identity.avatar_s3 import S3AvatarStorage
@@ -64,6 +64,9 @@ class SharedAvatarSettings(BaseSettings):
     )
 
     bucket: str = ""
+    region: str | None = Field(
+        default=None, validation_alias=AliasChoices("AWS_REGION", "AWS_DEFAULT_REGION")
+    )
     url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     max_concurrency: int = Field(default=8, ge=1, le=32)
     cache_max_entries: int = Field(default=2048, ge=1, le=10_000)
@@ -201,6 +204,7 @@ def _build_reader(settings: SharedAvatarSettings) -> SanchezCloudSharedAvatarRea
     if settings.configured:
         client = boto3.client(
             "s3",
+            region_name=settings.region,
             config=Config(signature_version="s3v4"),
         )
         manager = AvatarManager(

@@ -15,6 +15,7 @@ from app.modules.identity.application import (
 from app.modules.identity.infrastructure.shared_avatars import (
     SanchezCloudSharedAvatarReader,
     SharedAvatarSettings,
+    _build_reader,
 )
 from app.modules.projects.application.contracts import (
     ProjectCollaboratorListResponse,
@@ -102,6 +103,32 @@ def test_shared_avatar_settings_are_optional_outside_production() -> None:
     assert settings.cache_max_entries == 2048
     assert settings.cache_refresh_skew_seconds == 60
     assert settings.missing_cache_ttl_seconds == 60
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        ({"AWS_REGION": "ap-south-2"}, "ap-south-2"),
+        ({"AWS_DEFAULT_REGION": "ap-southeast-1"}, "ap-southeast-1"),
+        ({"AWS_REGION": "ap-south-2", "AWS_DEFAULT_REGION": "us-east-1"}, "ap-south-2"),
+    ],
+)
+def test_avatar_presigning_uses_runtime_region(
+    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str], expected: str
+) -> None:
+    for name in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("SHARED_AVATAR_BUCKET", "private-avatar-fixture")
+    client = MagicMock()
+    monkeypatch.setattr(
+        "app.modules.identity.infrastructure.shared_avatars.boto3.client", client
+    )
+
+    _build_reader(SharedAvatarSettings(_env_file=None))
+
+    assert client.call_args.kwargs["region_name"] == expected
 
 
 @pytest.mark.asyncio

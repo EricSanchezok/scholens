@@ -1837,7 +1837,7 @@
         "firecrawl": "研究来源的网页内容提取。",
         "openalex": "DOI 解析、外部论文搜索、作者作品与引用图谱。",
         "zotero": "以只读方式导入个人 Zotero 文库并同步标注。",
-        "deepseek": "对话、翻译与 AI 任务使用你自己的 API Key，调用费用由 DeepSeek 向你的账户收取。"
+        "deepseek": "连接 DeepSeek，使用对话、翻译和 AI 任务。"
       },
       "state": {
         "connected": "已连接",
