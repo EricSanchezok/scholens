@@ -425,7 +425,7 @@ def _validate_image_scans(value: object, *, images: dict[str, str]) -> dict[str,
             or CHECKSUM_PATTERN.fullmatch(scan_digest.removeprefix("sha256:")) is None
         ):
             raise ValueError(f"{component} image scan digest is invalid")
-        if item.get("platform") != "linux/amd64":
+        if item.get("platform") not in {"linux/amd64", "linux/arm64"}:
             raise ValueError(f"{component} image scan platform is invalid")
         try:
             completed_at = datetime.fromisoformat(
@@ -443,11 +443,13 @@ def _validate_image_scans(value: object, *, images: dict[str, str]) -> dict[str,
         scans[component] = {
             "digest": digest,
             "scan_digest": scan_digest,
-            "platform": "linux/amd64",
+            "platform": item["platform"],
             "status": "COMPLETE",
             "completed_at": completed_at.isoformat().replace("+00:00", "Z"),
             "findings": {severity: 0 for severity in SCAN_SEVERITIES},
         }
+    if len({item["platform"] for item in scans.values()}) != 1:
+        raise ValueError("image scan platforms must match across components")
     return scans
 
 
@@ -593,7 +595,16 @@ def verify_manifest(
     *,
     expected_account_id: str | None = None,
     expected_region: str | None = None,
+    expected_platform: str | None = None,
 ) -> None:
+    if expected_platform is not None:
+        if expected_platform not in {"linux/amd64", "linux/arm64"}:
+            raise ValueError("unsupported expected platform")
+        if any(
+            item.get("platform") != expected_platform
+            for item in manifest.get("image_scans", {}).values()
+        ):
+            raise ValueError("release image platform does not match the deployment")
     contract_version = manifest.get("contract_version")
     if contract_version not in {2, 3}:
         raise ValueError("unsupported release manifest contract")
@@ -915,6 +926,11 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--expected-release-sha")
     verify.add_argument("--expected-account-id", required=True)
     verify.add_argument("--expected-region", required=True)
+    verify.add_argument(
+        "--expected-platform",
+        choices=["linux/amd64", "linux/arm64"],
+        default="linux/amd64",
+    )
     verify.add_argument("--source-root", type=Path)
     create_attestation = subparsers.add_parser("create-migration-attestation")
     create_attestation.add_argument("--manifest", type=Path, required=True)
@@ -969,6 +985,7 @@ def main() -> int:
                 args.expected_release_sha,
                 expected_account_id=args.expected_account_id,
                 expected_region=args.expected_region,
+                expected_platform=args.expected_platform,
             )
         elif args.command == "identity-revision":
             print(_identity_resolution()[1])

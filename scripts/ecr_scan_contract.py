@@ -71,13 +71,16 @@ def _aws_manifest(repository: str, digest: str) -> dict[str, Any]:
     return images[0]
 
 
-def linux_amd64_scan_digest(
+def linux_scan_digest(
     repository: str,
     digest: str,
     *,
+    platform: str = "linux/amd64",
     fetch: Callable[[str, str], dict[str, Any]] = _aws_manifest,
 ) -> str:
-    """Resolve the deployable OCI index to the exact scanned linux/amd64 image."""
+    """Resolve the deployable OCI index to the exact requested runtime image."""
+    if platform not in {"linux/amd64", "linux/arm64"}:
+        raise ValueError("unsupported scan platform")
     image = fetch(repository, digest)
     if image.get("imageId", {}).get("imageDigest") != digest:
         raise ValueError("ECR manifest result is for a different deployment digest")
@@ -97,13 +100,23 @@ def linux_amd64_scan_digest(
         item.get("digest")
         for item in manifest.get("manifests", [])
         if item.get("platform", {}).get("os") == "linux"
-        and item.get("platform", {}).get("architecture") == "amd64"
+        and item.get("platform", {}).get("architecture") == platform.split("/")[1]
         and item.get("annotations", {}).get("vnd.docker.reference.type")
         != "attestation-manifest"
     ]
     if len(candidates) != 1 or DIGEST.fullmatch(str(candidates[0])) is None:
-        raise ValueError("image index must contain exactly one linux/amd64 runtime")
+        raise ValueError(f"image index must contain exactly one {platform} runtime")
     return str(candidates[0])
+
+
+def linux_amd64_scan_digest(
+    repository: str,
+    digest: str,
+    *,
+    fetch: Callable[[str, str], dict[str, Any]] = _aws_manifest,
+) -> str:
+    """Preserve the existing managed deployment caller contract."""
+    return linux_scan_digest(repository, digest, fetch=fetch)
 
 
 def wait_for_scan(
@@ -112,11 +125,14 @@ def wait_for_scan(
     repository: str,
     digest: str,
     scan_digest: str | None = None,
+    platform: str = "linux/amd64",
     describe: Callable[[str, str], dict[str, Any]] = _aws_scan,
     sleep: Callable[[float], None] = time.sleep,
     attempts: int = 60,
     interval_seconds: float = 10,
 ) -> dict[str, Any]:
+    if platform not in {"linux/amd64", "linux/arm64"}:
+        raise ValueError("unsupported scan platform")
     selected_scan_digest = scan_digest or digest
     for attempt in range(attempts):
         try:
@@ -150,7 +166,7 @@ def wait_for_scan(
             return {
                 "digest": digest,
                 "scan_digest": selected_scan_digest,
-                "platform": "linux/amd64",
+                "platform": platform,
                 "status": "COMPLETE",
                 "completed_at": parsed.isoformat().replace("+00:00", "Z"),
                 "findings": blocked,
@@ -164,6 +180,9 @@ def wait_for_scan(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--platform", choices=["linux/amd64", "linux/arm64"], default="linux/amd64"
+    )
     parser.add_argument("--image", action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     return parser
@@ -190,7 +209,10 @@ def main() -> int:
                 component=component,
                 repository=repository,
                 digest=digest,
-                scan_digest=linux_amd64_scan_digest(repository, digest),
+                scan_digest=linux_scan_digest(
+                    repository, digest, platform=args.platform
+                ),
+                platform=args.platform,
             )
             for component, (repository, digest) in images.items()
         }

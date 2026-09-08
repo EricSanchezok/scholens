@@ -64,3 +64,17 @@ These templates prepare infrastructure; they are not evidence of a completed res
 ARM64 image smoke test, application rollout or load rehearsal. Those execution results
 belong in the migration record. The adapter is owned by Scholens maintainers and can be
 folded into the sole deployment package after old-account cutover and decommissioning.
+
+## Manual ARM64 image publication
+
+`personal-publish.yml` accepts only a revision already merged into main, runs the shared
+CI workflow, and uses the `personal-image-publish` environment. Configure its AWS account,
+region, publishing role, preview API URL and Account Center URL from the reviewed stack
+outputs. The existing repository Identity reader key is passed as a BuildKit secret.
+
+The job runs on native ARM64, overrides both Web bake targets to ARM64, imports native
+Python dependencies in the resulting images, and scans the ARM64 child digest of each
+OCI index. The existing release manifest format records `linux/arm64` in each image scan;
+all components must agree. CLI manifest verification defaults to `linux/amd64` for the
+managed production path and requires explicit `--expected-platform linux/arm64` here.
+Publishing creates no GitHub Release, version tag, runtime deployment or database write.
