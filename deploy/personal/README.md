@@ -82,3 +82,20 @@ Publishing creates no GitHub Release, version tag, runtime deployment or databas
 The personal renderer disables all Scholens email delivery explicitly. This suppresses
 both identity email senders and the project-invitation delivery supervisor, even if
 credentials are accidentally present. Managed deployments retain the enabled default.
+
+
+## Private Valkey runtime
+
+`valkey/runtime.yml` runs the pinned ARM64 Valkey image with TLS only on private host
+port 6380, a 192 MiB no-eviction cache limit, 128 MiB soft/384 MiB hard container memory, AOF
+and the same API/Jobs key-prefix ACLs as the managed cache. The default user is disabled.
+The ECS execution role injects two Secrets Manager passwords; the process receives no
+AWS role. Bootstrap hashes passwords into a private tmpfs ACL file and removes plaintext
+password variables before starting Valkey. No credential appears in command arguments.
+
+Run `valkey/prepare-host.sh` through SSM after Account Center provisions the shared CA.
+It creates only the Valkey leaf certificate and data directory, and refuses partial or
+expired existing material. Install `start.sh` and `valkey.conf` in
+`/srv/sanchezcloud/valkey-config`, then inspect the cache change set before enabling it.
+The TLS/NOAUTH health check confirms that the private listener requires authentication;
+acceptance must additionally verify both role credentials and their cross-prefix denial.

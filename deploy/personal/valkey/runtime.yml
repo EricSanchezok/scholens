@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private TLS Valkey for isolated Scholens EC2 workloads.
+Parameters:
+  ExpectedAccountId: {Type: String, AllowedPattern: '[0-9]{12}'}
+  ClusterArn: {Type: String}
+  CacheEnabled: {Type: String, Default: 'false', AllowedValues: ['false', 'true']}
+  CacheImage:
+    Type: String
+    Default: valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+    AllowedPattern: '^valkey/valkey@sha256:[0-9a-f]{64}$'
+Rules:
+  ExpectedAccount:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::AccountId', !Ref ExpectedAccountId]
+        AssertDescription: Only the reviewed destination account is allowed.
+Conditions:
+  RunCache: !Equals [!Ref CacheEnabled, 'true']
+Resources:
+  CacheLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: /sanchezcloud/scholens/preview/valkey, RetentionInDays: 7}
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - {Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}, Action: 'sts:AssumeRole'}
+      Policies:
+        - PolicyName: InjectCacheCredentials
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: ['logs:CreateLogStream', 'logs:PutLogEvents'], Resource: !GetAtt CacheLogs.Arn}
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !ImportValue sanchezcloud-scholens-api-cache-secret-arn
+                  - !ImportValue sanchezcloud-scholens-jobs-cache-secret-arn
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !ImportValue sanchezcloud-scholens-configuration-key-arn
+                Condition: {StringEquals: {kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'}}
+  CacheTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-personal-valkey
+      NetworkMode: bridge
+      RequiresCompatibilities: [EC2]
+      RuntimePlatform: {CpuArchitecture: ARM64, OperatingSystemFamily: LINUX}
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      Volumes:
+        - {Name: data, Host: {SourcePath: /srv/sanchezcloud/valkey}}
+        - {Name: tls, Host: {SourcePath: /srv/sanchezcloud/valkey-tls}}
+        - {Name: trust, Host: {SourcePath: /srv/sanchezcloud/trust}}
+        - {Name: config, Host: {SourcePath: /srv/sanchezcloud/valkey-config}}
+      ContainerDefinitions:
+        - Name: valkey
+          Essential: true
+          Image: !Ref CacheImage
+          User: '999:999'
+          Cpu: 64
+          MemoryReservation: 128
+          Memory: 384
+          ReadonlyRootFilesystem: true
+          LinuxParameters:
+            Capabilities: {Drop: [ALL]}
+            Tmpfs: [{ContainerPath: /tmp, Size: 8, MountOptions: [rw, noexec, nosuid, 'mode=1777']}]
+          Secrets:
+            - Name: CACHE_API_PASSWORD
+              ValueFrom: !Sub
+                - '${Secret}:password::'
+                - Secret: !ImportValue sanchezcloud-scholens-api-cache-secret-arn
+            - Name: CACHE_JOBS_PASSWORD
+              ValueFrom: !Sub
+                - '${Secret}:password::'
+                - Secret: !ImportValue sanchezcloud-scholens-jobs-cache-secret-arn
+          EntryPoint: [/bin/sh, /etc/valkey/start.sh]
+          PortMappings: [{ContainerPort: 6380, HostPort: 6380, Protocol: tcp}]
+          MountPoints:
+            - {SourceVolume: data, ContainerPath: /data, ReadOnly: false}
+            - {SourceVolume: tls, ContainerPath: /run/valkey-tls, ReadOnly: true}
+            - {SourceVolume: trust, ContainerPath: /run/trust, ReadOnly: true}
+            - {SourceVolume: config, ContainerPath: /etc/valkey, ReadOnly: true}
+          HealthCheck:
+            Command: [CMD-SHELL, "valkey-cli --tls --cacert /run/trust/private-ca.pem -h cache.personal.svc.sanchezcloud -p 6380 ping 2>&1 | grep -q NOAUTH"]
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 30
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-group: !Ref CacheLogs
+              awslogs-stream-prefix: cache
+  CacheService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: sanchezcloud-personal-valkey
+      Cluster: !Ref ClusterArn
+      LaunchType: EC2
+      DesiredCount: !If [RunCache, 1, 0]
+      TaskDefinition: !Ref CacheTask
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: {Enable: true, Rollback: true}
+Outputs:
+  CacheTaskDefinitionArn: {Value: !Ref CacheTask}

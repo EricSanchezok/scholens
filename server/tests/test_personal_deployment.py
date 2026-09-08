@@ -118,3 +118,30 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
             )
             assert env["ENVIRONMENT"] == "production"
     assert len(roles) == len(set(roles))
+
+
+def test_private_cache_enforces_tls_separate_acls_and_no_aws_runtime_role() -> None:
+    import yaml
+
+    root = ROOT / "deploy/personal/valkey"
+    template = yaml.load(
+        (root / "runtime.yml").read_text(), Loader=renderer.CloudFormationLoader
+    )
+    task = template["Resources"]["CacheTask"]["Properties"]
+    assert "TaskRoleArn" not in task
+    assert task["NetworkMode"] == "bridge"
+    assert template["Parameters"]["CacheEnabled"]["Default"] == "false"
+    container = task["ContainerDefinitions"][0]
+    assert container["ReadonlyRootFilesystem"]
+    assert container["User"] == "999:999"
+    assert container["Memory"] == 384
+    config = (root / "valkey.conf").read_text()
+    assert "\nport 0\n" in config
+    assert "tls-port 6380" in config
+    assert "maxmemory-policy noeviction" in config
+    bootstrap = (root / "start.sh").read_text()
+    assert "user default off" in bootstrap
+    assert "~scholens:pdf-parse:*" in bootstrap
+    assert "~scholens:conversation-events:*" in bootstrap
+    assert "unset CACHE_API_PASSWORD CACHE_JOBS_PASSWORD" in bootstrap
+    assert "--requirepass" not in bootstrap
