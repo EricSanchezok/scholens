@@ -500,9 +500,11 @@ exactly `s3:GetObject` below the retained Account Center bucket's
 encryption context. Workers, schedulers, migration tasks, and the browser receive no
 avatar bucket or key permission. `SHARED_AVATAR_BUCKET` is derived from the retained
 account bucket name and the API signs 15-minute GET views using `AWS_REGION`
-(with `AWS_DEFAULT_REGION` as the local SDK fallback). Signing and endpoint selection
-must use the bucket region, including opt-in regions; a global S3 URL is not a valid
-substitute. CloudFormation never creates,
+(with `AWS_DEFAULT_REGION` as the local SDK fallback). The S3 client explicitly uses
+virtual-hosted addressing so presigned URLs retain that regional endpoint instead
+of the SDK's legacy global endpoint. Regression tests generate actual signed URLs
+and verify both their host and signing region, including opt-in regions.
+CloudFormation never creates,
 writes, deletes, or deploys that shared resource from Scholens.
 
 ## GitHub environments

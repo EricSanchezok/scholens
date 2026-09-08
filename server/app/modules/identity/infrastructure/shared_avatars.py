@@ -205,7 +205,7 @@ def _build_reader(settings: SharedAvatarSettings) -> SanchezCloudSharedAvatarRea
         client = boto3.client(
             "s3",
             region_name=settings.region,
-            config=Config(signature_version="s3v4"),
+            config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
         )
         manager = AvatarManager(
             database=AsyncpgAvatarDatabase(pool_factory=get_auth_pool),

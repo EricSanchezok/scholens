@@ -5,8 +5,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
+import boto3
 import pytest
 from app.modules.identity.application import (
     SharedAvatarNotFoundError,
@@ -121,7 +123,10 @@ def test_avatar_presigning_uses_runtime_region(
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setenv("SHARED_AVATAR_BUCKET", "private-avatar-fixture")
-    client = MagicMock()
+    session = boto3.Session(
+        aws_access_key_id="testing", aws_secret_access_key="testing"
+    )
+    client = MagicMock(wraps=session.client)
     monkeypatch.setattr(
         "app.modules.identity.infrastructure.shared_avatars.boto3.client", client
     )
@@ -129,6 +134,16 @@ def test_avatar_presigning_uses_runtime_region(
     _build_reader(SharedAvatarSettings(_env_file=None))
 
     assert client.call_args.kwargs["region_name"] == expected
+
+    signer = session.client(*client.call_args.args, **client.call_args.kwargs)
+    url = urlparse(
+        signer.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": "private-avatar-fixture", "Key": "avatar.webp"},
+        )
+    )
+    assert url.hostname == f"private-avatar-fixture.s3.{expected}.amazonaws.com"
+    assert parse_qs(url.query)["X-Amz-Credential"][0].split("/")[2] == expected
 
 
 @pytest.mark.asyncio
