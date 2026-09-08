@@ -10,6 +10,7 @@ ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/san
 ARG SCHOLENS_EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
 
 RUN apk add --no-cache build-base ca-certificates curl curl-dev \
+        "libuuid>=2.41.6-r1" \
         "sqlite-libs>=3.53.2-r0" \
     && python -m pip install --no-cache-dir uv==0.9.2
 
@@ -49,6 +50,7 @@ RUN uv pip install --no-deps /app
 FROM ${PYTHON_IMAGE} AS runtime
 
 RUN apk add --no-cache ca-certificates libcurl py3-onnxruntime \
+        "libuuid>=2.41.6-r1" \
         "openssl>=3.5.8-r0" \
         "sqlite-libs>=3.53.2-r0" \
     && adduser -D -u 1000 scholens
