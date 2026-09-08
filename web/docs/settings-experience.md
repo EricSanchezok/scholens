@@ -56,9 +56,8 @@ Reader and collection sorting; only dense desktop toolbars opt into its compact
 height. Hover and open state never strengthen the resting border.
 
 The user menu is the sole shell entry point on desktop. It uses the same
-current-week billing query as Usage to show the live localized plan, Token
-Credits used/limit, and the next UTC calendar day after the inclusive
-`period_end` as the credit reset date. Loading and provider failure remain
+capacity query as Usage to show the live localized plan and storage used/limit.
+Loading and provider failure remain
 compact, explicit states. Settings, Account, and Usage are separate actions:
 Settings writes `?settings=general`, while Account and Usage write their named
 sections. Appearance is not duplicated in the menu. The phone navigation hub
@@ -104,6 +103,12 @@ service without spending menu width on the license label.
   current storage and plan. DeepSeek is a user-owned Connection with a provider
   dashboard link and encrypted key entry, replacement and disconnection. Its
   description names the available chat, translation, and AI capabilities concisely.
+  Connection rows use their available container width: below 36rem, actions
+  sit on a separate row and descriptions wrap instead of truncating. Connected
+  credentials keep their toggle, replacement and disconnection actions without
+  squeezing the provider name or status into a narrow column. The
+  `ConnectedNarrow` and `ConnectedNarrowDarkChinese` stories cover the 320px
+  composition with actual connected states.
   Billing controls are omitted until real upgrade and portal workflows are
   connected; the interface does not present inert actions.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
