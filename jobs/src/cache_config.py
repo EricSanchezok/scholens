@@ -22,6 +22,7 @@ def cache_url() -> str:
             tls=os.getenv("CACHE_TLS", "false"),
             environment=os.getenv("ENVIRONMENT", "development"),
             fallback_url="redis://127.0.0.1:56379/0",
+            deployment_mode=os.getenv("RUNTIME_DEPLOYMENT_MODE", "managed"),
         )
     except EndpointConfigurationError as exc:
         raise CacheConfigurationError(str(exc)) from exc

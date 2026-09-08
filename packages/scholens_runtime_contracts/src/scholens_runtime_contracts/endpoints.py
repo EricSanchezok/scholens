@@ -12,6 +12,7 @@ _DNS_NAME = re.compile(
 )
 _ELASTICACHE_SUFFIX = re.compile(r"(?:^|\.)cache\.amazonaws\.com(?:\.cn)?\Z")
 _RDS_SUFFIX = re.compile(r"(?:^|\.)rds\.amazonaws\.com(?:\.cn)?\Z")
+_SINGLE_HOST_SUFFIX = re.compile(r"\.personal\.svc\.sanchezcloud\Z")
 _STRUCTURAL_CHARACTERS = frozenset("@/?#\\\r\n")
 
 
@@ -21,6 +22,16 @@ class EndpointConfigurationError(ValueError):
 
 def _production(environment: str | None) -> bool:
     return (environment or "development").casefold() == "production"
+
+
+def _runtime_suffix(
+    *, production: bool, deployment_mode: str, managed: re.Pattern[str]
+) -> re.Pattern[str] | None:
+    if deployment_mode not in {"managed", "single-host"}:
+        raise EndpointConfigurationError("unknown runtime deployment mode")
+    if not production:
+        return None
+    return _SINGLE_HOST_SUFFIX if deployment_mode == "single-host" else managed
 
 
 def _reject_control_or_structure(value: str, *, field: str) -> None:
@@ -91,9 +102,15 @@ def resolve_cache_url(
     tls: bool | str = False,
     environment: str | None = None,
     fallback_url: str | None = None,
+    deployment_mode: str = "managed",
 ) -> str | None:
     """Return one canonical Redis URL after validating direct or split inputs."""
     production = _production(environment)
+    suffix = _runtime_suffix(
+        production=production,
+        deployment_mode=deployment_mode,
+        managed=_ELASTICACHE_SUFFIX,
+    )
     source_url = configured_url or (
         fallback_url if not production and not host else None
     )
@@ -120,7 +137,7 @@ def resolve_cache_url(
         cache_host = _host(
             parsed.hostname,
             field="CACHE_HOST",
-            managed_suffix=_ELASTICACHE_SUFFIX if production else None,
+            managed_suffix=suffix,
         )
         cache_port = _port(parsed_port, field="CACHE_PORT")
         cache_username = _credential(
@@ -140,7 +157,7 @@ def resolve_cache_url(
         cache_host = _host(
             host,
             field="CACHE_HOST",
-            managed_suffix=_ELASTICACHE_SUFFIX if production else None,
+            managed_suffix=suffix,
         )
         cache_port = _port(port, field="CACHE_PORT")
         cache_username = _credential(
@@ -177,6 +194,7 @@ def validate_database_endpoint(
     host: str,
     port: int | str,
     environment: str | None = None,
+    deployment_mode: str = "managed",
 ) -> tuple[str, int]:
     """Validate a PostgreSQL host/port pair before interpolating a URL."""
     production = _production(environment)
@@ -184,7 +202,11 @@ def validate_database_endpoint(
         _host(
             host,
             field="DATABASE_HOST",
-            managed_suffix=_RDS_SUFFIX if production else None,
+            managed_suffix=_runtime_suffix(
+                production=production,
+                deployment_mode=deployment_mode,
+                managed=_RDS_SUFFIX,
+            ),
         ),
         _port(port, field="DATABASE_PORT"),
     )

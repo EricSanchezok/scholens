@@ -16,6 +16,7 @@ def cache_url_from_fields(
     password: str | None,
     tls: bool | str,
     environment: str | None,
+    deployment_mode: str = "managed",
 ) -> str | None:
     """Resolve explicit settings fields using the shared runtime contract."""
     return resolve_cache_url(
@@ -26,6 +27,7 @@ def cache_url_from_fields(
         password=password,
         tls=tls,
         environment=environment,
+        deployment_mode=deployment_mode,
     )
 
 
@@ -43,4 +45,5 @@ def cache_url_from_environment(
         password=os.getenv("CACHE_PASSWORD"),
         tls=os.getenv("CACHE_TLS", "false"),
         environment=environment or os.getenv("ENVIRONMENT", "development"),
+        deployment_mode=os.getenv("RUNTIME_DEPLOYMENT_MODE", "managed"),
     )
