@@ -256,7 +256,7 @@ export function ConnectionsPanel({
         {(data) => (
           <SettingsCard>
             <SettingsCardBody>
-              <div className="divide-line -m-4 divide-y sm:-m-5">
+              <div className="divide-line @container -m-4 divide-y sm:-m-5">
                 {data.items.map((integration) => {
                   const connected = integration.state !== "disconnected";
                   const description = t(
@@ -264,7 +264,7 @@ export function ConnectionsPanel({
                   );
                   return (
                     <article
-                      className="flex flex-wrap items-center gap-4 px-4 py-4 sm:flex-nowrap sm:px-5"
+                      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 px-4 py-4 sm:px-5 @min-[36rem]:grid-cols-[auto_minmax(0,1fr)_auto]"
                       key={integration.provider}
                     >
                       <div className="bg-subtle grid size-10 shrink-0 place-items-center rounded-[var(--radius-lg)]">
@@ -274,7 +274,7 @@ export function ConnectionsPanel({
                           tone="secondary"
                         />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold">
                             {t(`connections.provider.${integration.provider}`)}
@@ -289,62 +289,64 @@ export function ConnectionsPanel({
                           </SettingsStatus>
                         </div>
                         <p
-                          className="text-secondary mt-1 truncate text-sm leading-5"
+                          className="text-secondary mt-1 text-sm leading-5 break-words @min-[36rem]:truncate"
                           title={description}
                         >
                           {description}
                         </p>
                       </div>
-                      {integration.managed ? (
-                        <SettingsStatus
-                          tone={integration.enabled ? "success" : "neutral"}
-                        >
-                          {t("connections.builtIn")}
-                        </SettingsStatus>
-                      ) : integration.provider === "zotero" ? (
-                        <ZoteroConnectionControls
-                          connected={connected}
-                          onDisconnect={() => setDisconnecting(integration)}
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          {connected && integration.state !== "invalid" ? (
-                            <Switch
-                              aria-label={t("connections.toggle", {
-                                provider: t(
-                                  `connections.provider.${integration.provider}`,
-                                ),
-                              })}
-                              checked={integration.enabled}
-                              disabled={enabledMutation.isPending}
-                              onCheckedChange={(enabled) =>
-                                enabledMutation.mutate({
-                                  provider: integration.provider,
-                                  enabled,
-                                })
-                              }
-                            />
-                          ) : null}
-                          <Button
-                            onClick={() => setEditing(integration)}
-                            size="sm"
-                            variant={connected ? "secondary" : "primary"}
+                      <div className="col-span-full flex flex-wrap items-center justify-end gap-2 @min-[36rem]:col-span-1">
+                        {integration.managed ? (
+                          <SettingsStatus
+                            tone={integration.enabled ? "success" : "neutral"}
                           >
-                            {connected
-                              ? t("connections.replace")
-                              : t("connections.connect")}
-                          </Button>
-                          {connected ? (
+                            {t("connections.builtIn")}
+                          </SettingsStatus>
+                        ) : integration.provider === "zotero" ? (
+                          <ZoteroConnectionControls
+                            connected={connected}
+                            onDisconnect={() => setDisconnecting(integration)}
+                          />
+                        ) : (
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {connected && integration.state !== "invalid" ? (
+                              <Switch
+                                aria-label={t("connections.toggle", {
+                                  provider: t(
+                                    `connections.provider.${integration.provider}`,
+                                  ),
+                                })}
+                                checked={integration.enabled}
+                                disabled={enabledMutation.isPending}
+                                onCheckedChange={(enabled) =>
+                                  enabledMutation.mutate({
+                                    provider: integration.provider,
+                                    enabled,
+                                  })
+                                }
+                              />
+                            ) : null}
                             <Button
-                              onClick={() => setDisconnecting(integration)}
+                              onClick={() => setEditing(integration)}
                               size="sm"
-                              variant="ghost"
+                              variant={connected ? "secondary" : "primary"}
                             >
-                              {t("connections.disconnect")}
+                              {connected
+                                ? t("connections.replace")
+                                : t("connections.connect")}
                             </Button>
-                          ) : null}
-                        </div>
-                      )}
+                            {connected ? (
+                              <Button
+                                onClick={() => setDisconnecting(integration)}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                {t("connections.disconnect")}
+                              </Button>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
                     </article>
                   );
                 })}

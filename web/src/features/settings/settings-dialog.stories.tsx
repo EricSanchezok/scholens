@@ -7,6 +7,7 @@ import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { billingHandlers } from "../../../.storybook/msw/billing-handlers";
 import { Providers } from "@/app/providers";
 import { resetRefreshForTests } from "@/lib/api";
+import { ConnectionsPanel } from "./connections-panel";
 import { SettingsDialog, SettingsDialogSurface } from "./settings-dialog";
 
 function ControlledSettingsDialog() {
@@ -929,4 +930,53 @@ export const DeepSeekConnection: Story = {
       within(dialog).getByLabelText("API key", { exact: true }),
     ).toHaveAttribute("type", "password");
   },
+};
+
+export const ConnectedNarrow: Story = {
+  render: () => (
+    <div className="w-80">
+      <ConnectionsPanel showHeader={false} />
+    </div>
+  ),
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/connections`, () =>
+          HttpResponse.json({
+            items: integrations
+              .filter((item) => ["deepseek", "mineru"].includes(item.provider))
+              .map((item) => ({
+                ...item,
+                enabled: true,
+                state:
+                  item.provider === "deepseek"
+                    ? "connected_unverified"
+                    : "connected",
+              })),
+          }),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const row = (await canvas.findByText("DeepSeek")).closest("article")!;
+    const description = row.querySelector("p")!;
+    const buttons = within(row).getAllByRole("button");
+    await expect(description.scrollWidth).toBeLessThanOrEqual(
+      description.clientWidth,
+    );
+    for (const button of buttons) {
+      await expect(button.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        description.getBoundingClientRect().bottom,
+      );
+    }
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+  },
+};
+
+export const ConnectedNarrowDarkChinese: Story = {
+  ...ConnectedNarrow,
+  globals: { appearance: "dark", locale: "zh-CN" },
 };
