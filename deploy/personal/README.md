@@ -53,6 +53,14 @@ soft memory and hard memory limits are explicit. Deployments stop the old task b
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
 short preview outage to avoid static-port conflicts and doubled memory use.
 
+The API and conversation worker have 1,536 MiB hard limits so local semantic
+embedding initialization fits alongside application imports. The document
+worker has a 2,560 MiB hard limit; its original 1,280 MiB limit killed a PDF
+postprocessing child while loading the model. Passage inference uses batches
+of eight to avoid the larger activation peak of a 128-window batch. Soft
+reservations, worker concurrency and the host size remain unchanged; verify
+aggregate host memory under representative simultaneous work after rollout.
+
 The maintenance worker reserves 256 MiB with a 512 MiB hard limit: the shared Jobs
 imports exceed the original 256 MiB limit before it can consume a task. Every
 personal Celery worker reports a local heartbeat and has an explicit ECS health

@@ -6,6 +6,13 @@ for shared limits and resumable parser state, and return signed results to the
 Server webhook API. Celery has no result backend; PostgreSQL-owned jobs and
 signed callbacks are the durable state contract.
 
+ECS scale-in protection covers each active task on a single-concurrency worker.
+Normal completion, terminal failure and revocation all release protection.
+The failure handler also runs in the parent when a child is killed, where
+`task_postrun` cannot run; this prevents a lost child from blocking deployment
+until the protection expires. Releasing protection does not acknowledge a
+message or change the durable job lease, so ordinary recovery remains intact.
+
 Before doing provider or storage work, every task claims its durable Server
 job. Transient claim transport failures use bounded exponential Celery retry
 instead of being acknowledged as terminal worker failures. In production the

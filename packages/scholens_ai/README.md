@@ -40,6 +40,11 @@ content digests, a bounded model revision, at most 10,000 records, and at most
 own artifact storage authorization, checksums, lifecycle, transactions, and
 matching a digest back to current canonical content.
 
+Passage embedding calls are bounded to eight windows per inference batch. This
+limits ONNX activation memory for long, padded passages on the personal host;
+the model revision, passage order, vector dimensions and artifact format stay
+unchanged. The smaller batch trades processing throughput for bounded memory.
+
 The explicit provider adapters currently cover DeepSeek (the production
 default), OpenAI Chat/Responses, Google Gemini, Anthropic, AWS Bedrock, and
 Moonshot. `openai:*` and `bedrock:*` identifiers are no longer rejected or

@@ -41,5 +41,7 @@ def register_task_protection_signals() -> None:
         set_task_protection(enabled=True, task_id=task_id)
 
     @signals.task_postrun.connect(weak=False)
+    @signals.task_failure.connect(weak=False)
+    @signals.task_revoked.connect(weak=False)
     def unprotect_task(*, task_id: str | None = None, **_kwargs: Any) -> None:
         set_task_protection(enabled=False, task_id=task_id)

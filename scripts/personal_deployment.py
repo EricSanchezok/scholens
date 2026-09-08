@@ -167,9 +167,9 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
 
 LIMITS = {
     "web": (64, 256, 512),
-    "api": (128, 768, 1024),
-    "conversation-worker": (128, 512, 768),
-    "document-worker": (256, 768, 1280),
+    "api": (128, 768, 1536),
+    "conversation-worker": (128, 512, 1536),
+    "document-worker": (256, 768, 2560),
     "research-worker": (128, 384, 768),
     "maintenance-worker": (64, 256, 512),
     "migration": (128, 256, 512),

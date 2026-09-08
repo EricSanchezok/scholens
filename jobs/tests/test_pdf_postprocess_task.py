@@ -4,7 +4,11 @@ import json
 from unittest.mock import patch
 
 import requests
-from scholens_ai import EMBEDDING_MODEL_REVISION, decode_passage_embedding_artifact
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    build_document_passages,
+    decode_passage_embedding_artifact,
+)
 from src.tasks import _deliver_pdf_postprocess_webhook, postprocess_pdf_task
 
 
@@ -69,8 +73,12 @@ def test_pdf_postprocess_embedding_failure_does_not_block_indexing() -> None:
 
 
 def test_pdf_postprocess_uploads_bounded_passage_embedding_artifact() -> None:
+    source = "\n".join(f"Unique passage line {index}" for index in range(100))
+    batches: list[int] = []
+
     class _Embedder:
         def embed_passages(self, texts: list[str]) -> list[list[float]]:
+            batches.append(len(texts))
             return [[1.0] + [0.0] * 383 for _text in texts]
 
     with (
@@ -78,7 +86,7 @@ def test_pdf_postprocess_uploads_bounded_passage_embedding_artifact() -> None:
         patch("src.tasks.try_local_embedder", return_value=_Embedder()),
         patch(
             "src.tasks.s3_service.download_file_to_bytes",
-            return_value=b"one\ntwo\nthree\nfour\nfive\nsix",
+            return_value=source.encode(),
         ),
         patch("src.tasks.s3_service.upload_bytes_to_key") as upload,
         patch(
@@ -98,8 +106,12 @@ def test_pdf_postprocess_uploads_bounded_passage_embedding_artifact() -> None:
     decoded = decode_passage_embedding_artifact(artifact)
     metadata = deliver.call_args.args[1]["passage_embedding_artifact"]
     assert decoded.model_revision == EMBEDDING_MODEL_REVISION
-    assert len(decoded.records) == 2
-    assert metadata["passage_count"] == 2
+    assert max(batches) <= 8
+    assert len(batches) > 1
+    assert [record.source_digest for record in decoded.records] == [
+        passage.source_digest for passage in build_document_passages(source)
+    ]
+    assert metadata["passage_count"] == len(decoded.records) == 34
     assert metadata["byte_size"] == len(artifact)
     assert result["status"] == "completed"
 
