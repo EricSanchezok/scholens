@@ -281,6 +281,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 env.update(
                     {
                         "RUNTIME_DEPLOYMENT_MODE": "single-host",
+                        "SCHOLENS_EMAIL_DELIVERY_ENABLED": "false",
                         "WEB_CONCURRENCY": "1",
                         "AUTH_PG_SSL_ROOT_CERT": "/run/trust/private-ca.pem",
                         "SSL_CERT_FILE": "/run/trust/combined-ca.pem",

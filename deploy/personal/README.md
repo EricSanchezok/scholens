@@ -56,7 +56,7 @@ short preview outage to avoid static-port conflicts and doubled memory use.
 `ApplicationEnabled` defaults to false. Restoring a database does not authorize starting
 workers or replaying copied jobs. Before enabling services, provision database/cache
 TLS, restore and reconcile data, inject independent preview authentication secrets,
-disable real email, configure the authenticated edge, and verify all endpoints and
+keep `SCHOLENS_EMAIL_DELIVERY_ENABLED=false`, configure the authenticated edge, and verify all endpoints and
 queue URLs point to the intended environment. `ScholightMcpUrl` explicitly preserves
 the existing external Scholight API; its production database connection is unchanged.
 
@@ -78,3 +78,7 @@ OCI index. The existing release manifest format records `linux/arm64` in each im
 all components must agree. CLI manifest verification defaults to `linux/amd64` for the
 managed production path and requires explicit `--expected-platform linux/arm64` here.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
+
+The personal renderer disables all Scholens email delivery explicitly. This suppresses
+both identity email senders and the project-invitation delivery supervisor, even if
+credentials are accidentally present. Managed deployments retain the enabled default.

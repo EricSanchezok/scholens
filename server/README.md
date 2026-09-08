@@ -837,3 +837,10 @@ Model-backed features require user-owned DeepSeek Connections. The Server reads
 keys only for the authenticated actor; no deployment key is used. Capacity is
 reported by `/api/v1/billing/capacity`; token billing is retired. See
 [ADR 0052](../docs/decisions/0052-user-owned-ai-and-capacity-plans.md).
+
+### Isolated rehearsal email
+
+`SCHOLENS_EMAIL_DELIVERY_ENABLED` defaults to `true`. Set it to `false` only for
+explicitly isolated rehearsals: Identity email senders and project-invitation delivery
+supervision are then absent even if provider credentials are present. The normal
+production path continues to require a complete Aliyun DirectMail configuration.

@@ -9,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ScholensEmailSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    scholens_email_delivery_enabled: bool = True
+
     scholens_aliyun_dm_access_key_id: str = Field(default="", max_length=128)
     scholens_aliyun_dm_access_key_secret: str = Field(default="", max_length=256)
     scholens_aliyun_dm_account_name: str = Field(default="", max_length=320)
@@ -21,7 +23,7 @@ class ScholensEmailSettings(BaseSettings):
 
     @property
     def configured(self) -> bool:
-        return all(self._credential_values)
+        return self.scholens_email_delivery_enabled and all(self._credential_values)
 
     @property
     def _credential_values(self) -> tuple[str, str, str]:
@@ -32,6 +34,8 @@ class ScholensEmailSettings(BaseSettings):
         )
 
     def validate_configuration(self, *, required: bool) -> None:
+        if not self.scholens_email_delivery_enabled:
+            return
         if any(value and value != value.strip() for value in self._credential_values):
             raise RuntimeError(
                 "SCHOLENS_ALIYUN_DM credentials must not contain surrounding whitespace"
