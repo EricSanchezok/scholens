@@ -31,6 +31,7 @@ export type ReaderReflowLabels = {
   retryTranslation: string;
   translated: string;
   translationFailed: string;
+  translationConnectionRequired: string;
   translationMarker: string;
 };
 
@@ -413,7 +414,12 @@ function ReflowBlock({
                 />
               ) : null}
               <div className="text-muted flex flex-wrap items-center gap-3 text-sm">
-                <span>{labels.translationFailed}</span>
+                <span>
+                  {translation.errorCode === "deepseek_credential_required" ||
+                  translation.errorCode === "deepseek_credential_invalid"
+                    ? labels.translationConnectionRequired
+                    : labels.translationFailed}
+                </span>
                 {translation.retryable ? (
                   <Button
                     onClick={() => onRetryTranslation(block.id)}

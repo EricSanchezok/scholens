@@ -35,7 +35,7 @@ class TranslationPreferencesGateway(Protocol):
 
 
 class TranslationEntitlements(Protocol):
-    def has_token_credits(self, *, actor: Actor) -> bool: ...
+    def has_ai_connection(self, *, actor: Actor) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)

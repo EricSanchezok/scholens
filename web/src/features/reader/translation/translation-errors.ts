@@ -1,5 +1,5 @@
 export type TranslationErrorMessageKey =
-  | "errors.quota"
+  | "errors.deepseek"
   | "errors.busy"
   | "errors.inProgress"
   | "errors.provider"
@@ -11,8 +11,9 @@ export function translationErrorMessageKey(
   code: string | undefined,
 ): TranslationErrorMessageKey {
   switch (code) {
-    case "token_quota_exceeded":
-      return "errors.quota";
+    case "deepseek_credential_required":
+    case "deepseek_credential_invalid":
+      return "errors.deepseek";
     case "translation_rate_limited":
     case "translation_concurrency_limited":
       return "errors.busy";

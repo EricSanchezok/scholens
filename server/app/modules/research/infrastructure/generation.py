@@ -12,9 +12,10 @@ from app.helpers.ai_limits import (
     enforce_rate_limit,
     release_concurrency_by_id,
 )
-from app.llm.token_credits import has_token_credits
+from app.modules.integrations.connections.infrastructure.deepseek import (
+    require_deepseek_key,
+)
 from app.shared.application import Actor
-from app.shared.domain import AppError, FailureKind
 from sqlalchemy.orm import Session
 
 
@@ -22,13 +23,8 @@ class SqlGenerationEntitlements:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def require_tokens(self, *, actor: Actor) -> None:
-        if not has_token_credits(self._db, user=actor):
-            raise AppError(
-                code="token_quota_exceeded",
-                message="Token Credits are exhausted",
-                kind=FailureKind.RATE_LIMITED,
-            )
+    def require_ai_connection(self, *, actor: Actor) -> None:
+        require_deepseek_key(self._db, user_id=actor.id)
 
 
 class RedisGenerationCapacity:

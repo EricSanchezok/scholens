@@ -146,32 +146,26 @@ MOSS_TTS_MODEL=moss-tts
 MOSS_VOICE_ID=
 ```
 
-Scholens 调用 `POST /v1/audio/speech` 创建异步语音任务，并轮询任务状态。MOSS 合成本身不计入 Scholens Token Credits；生成音频文稿的 DeepSeek 调用正常计费。
+Scholens 调用 `POST /v1/audio/speech` 创建异步语音任务，并轮询任务状态。MOSS 合成费用仍由部署方承担；生成音频文稿使用任务发起人的 DeepSeek Key，由其 DeepSeek 账户付费。
 
 官方资料：[MOSS Voice 文档](https://platform.mosi.cn/docs/getting-started/overview/)。
 
 ## 5. AI 模型提供商
 
-Scholens 使用 `provider:model` 选择模型，由显式的 Pydantic AI provider adapter 解析到对应提供商；当前默认模型来自 DeepSeek，但业务代码不依赖 DeepSeek。支持 `deepseek`、`openai`、`google`、`anthropic`、`bedrock` 和 `moonshotai`。引用 metadata 会在服务端统一映射回本次请求的 source registry，未知来源会被丢弃而不会隐藏正文。
+Scholens 的对话、翻译和 AI 生成必须使用用户自己的 DeepSeek API Key。在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 Key 后，进入 Scholens「设置 → 连接 → DeepSeek」保存。Key 按用户加密存储，不写入 Server 或 Jobs 的环境文件，也不会回退到平台 Key。未连接时，相应功能提示配置；普通 PDF 处理仍可进行，但跳过可选 AI 元数据提取。
 
-若使用当前默认值，在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 API Key，并写入 `server/.env` 与 `jobs/.env`：
+部署仍通过 `provider:model` 配置模型，产品的用户 Key 目前仅支持 DeepSeek：
 
 ```dotenv
-SCHOLENS_AI_DEEPSEEK_API_KEY=
-SCHOLENS_AI_DEEPSEEK_BASE_URL=https://api.deepseek.com
 SCHOLENS_AI_STANDARD_MODEL=deepseek:deepseek-v4-flash
 SCHOLENS_AI_DEEP_MODEL=deepseek:deepseek-v4-pro
 SCHOLENS_AI_TRANSLATION_MODEL=deepseek:deepseek-v4-flash
 ```
 
-切换到 OpenAI、Gemini 或 Anthropic 时，分别配置对应的
-`SCHOLENS_AI_<PROVIDER>_API_KEY` 和 `provider:model`；切换到 Bedrock 时使用
-任务角色/默认 AWS 凭证链、`AWS_DEFAULT_REGION`，并设置
-`SCHOLENS_AI_STANDARD_MODEL=bedrock:<model-id>`。不要把 provider body、提示词或
-私有引用 marker 写入日志或凭证配置。
+共享模型包保留其他提供商适配器供独立工具与测试使用，但它们不是产品的备用密钥路径。不要把 provider body、提示词或私有引用 marker 写入日志。
 
 AI 重排不使用通用对话模型。它直接消费 MinerU 的稳定
 `content_list.json` 结构化输出，并保留页码、坐标和图片资产；因此只需配置上文的
 MinerU 凭据。DeepSeek 仍用于对话、元数据提取和全文翻译。
 
-API Key 只保存在未提交的 `.env` 或生产密钥服务中，不要粘贴到聊天、Issue、日志或 Git 历史。模型 ID 可能调整，上线前应再次核对 [DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)。
+用户 DeepSeek Key 只通过 Scholens 连接设置提交并加密保存，不要粘贴到聊天、Issue、日志或 Git 历史。模型 ID 可能调整，上线前应再次核对 [DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)。

@@ -40,7 +40,6 @@ _STATUS_DESCRIPTIONS = {
 def _application() -> Any:
     # Contract generation never calls providers. Sentinels allow application
     # composition to validate deterministically without reading real secrets.
-    os.environ.setdefault("SCHOLENS_AI_DEEPSEEK_API_KEY", "openapi-export")
     os.environ.setdefault("STRIPE_API_KEY", "sk_openapi_export")
     os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_openapi_export")
     os.environ.setdefault("STRIPE_MONTHLY_PRICE_ID", "price_openapi_monthly")

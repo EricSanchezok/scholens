@@ -148,12 +148,12 @@ class Translations:
             block_id=block_id,
         )
 
-    def require_token_credits(self, *, actor: Actor) -> None:
-        if not self._entitlements.has_token_credits(actor=actor):
+    def require_ai_connection(self, *, actor: Actor) -> None:
+        if not self._entitlements.has_ai_connection(actor=actor):
             raise AppError(
-                code="token_quota_exceeded",
-                message="Token Credits are exhausted",
-                kind=FailureKind.RATE_LIMITED,
+                code="deepseek_credential_required",
+                message="Connect your DeepSeek API key in Settings",
+                kind=FailureKind.CONFLICT,
             )
 
     @staticmethod

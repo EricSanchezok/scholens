@@ -17,7 +17,7 @@ export const integrationQueries = {
     queryOptions({
       queryKey: integrationKeys.current(),
       queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/me/integrations", {
+        const { data } = await apiClient.GET("/api/v1/me/connections", {
           signal,
         });
         if (!data) throw new Error("Integration response was empty");
@@ -30,7 +30,7 @@ export async function connectIntegration(
   provider: IntegrationProvider,
   credential: string,
 ) {
-  const { data } = await apiClient.PUT("/api/v1/me/integrations/{provider}", {
+  const { data } = await apiClient.PUT("/api/v1/me/connections/{provider}", {
     body: { credential },
     params: { path: { provider } },
   });
@@ -42,7 +42,7 @@ export async function setIntegrationEnabled(
   provider: IntegrationProvider,
   enabled: boolean,
 ) {
-  const { data } = await apiClient.PATCH("/api/v1/me/integrations/{provider}", {
+  const { data } = await apiClient.PATCH("/api/v1/me/connections/{provider}", {
     body: { enabled },
     params: { path: { provider } },
   });
@@ -51,7 +51,7 @@ export async function setIntegrationEnabled(
 }
 
 export async function disconnectIntegration(provider: IntegrationProvider) {
-  await apiClient.DELETE("/api/v1/me/integrations/{provider}", {
+  await apiClient.DELETE("/api/v1/me/connections/{provider}", {
     params: { path: { provider } },
   });
 }

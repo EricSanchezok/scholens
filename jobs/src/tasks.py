@@ -62,6 +62,7 @@ from src.schemas import (
     ResearchDataTableResult,
     ZoteroJobCredentialResponse,
 )
+from src.deepseek_credentials import deepseek_job_context
 from src.token_usage import collect_token_usage
 from src.utils import time_it
 from src.webhook_signing import CallbackPayloadTooLarge, post_signed_json
@@ -942,7 +943,10 @@ def _process_pdf_task(
 
             progress.update("Processing PDF file")
 
-            with collect_token_usage(task_id) as usage:
+            with (
+                deepseek_job_context(webhook_url),
+                collect_token_usage(task_id) as usage,
+            ):
                 usage_events = usage.events
                 result = asyncio.run(
                     process_pdf_file(
@@ -1361,7 +1365,7 @@ def construct_data_table_task(
     try:
         task_request = DataTableTaskRequest.model_validate(request)
         data_table = DataTableSchema.model_validate(task_request.table)
-        with collect_token_usage(task_id) as usage:
+        with deepseek_job_context(webhook_url), collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(
                 construct_data_table(
@@ -1427,7 +1431,7 @@ def generate_audio_overview_task(
     usage_events: list[dict[str, Any]] = []
     try:
         parsed_request = AudioOverviewRequest.model_validate(request)
-        with collect_token_usage(task_id) as usage:
+        with deepseek_job_context(webhook_url), collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(generate_audio(parsed_request))
         payload = {
@@ -1490,7 +1494,7 @@ def generate_document_reflow_task(
                     extra={"job_id": task_id},
                 )
         credential = asyncio.run(mineru.load())
-        with collect_token_usage(task_id) as usage:
+        with deepseek_job_context(webhook_url), collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(
                 generate_document_reflow(

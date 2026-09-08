@@ -97,12 +97,12 @@ service without spending menu width on the license label.
   Profile, email, and password editing are never exposed in Scholens.
   `https://myaccount.sanchezcloud.net` is the canonical destination and
   `NEXT_PUBLIC_ACCOUNT_CENTER_URL` may override it for an explicit environment.
-- Usage owns plan and resource meters. Its selected period is local view state;
-  Server returns exact period bounds, the plan's Token Credit limit, and the
-  per-Project paper limit. Storage fields are explicitly KiB-valued
-  `knowledge_base_size_kb` fields and Web converts them to KiB/MiB/GiB without
-  changing their quantity. API date-only period bounds are always formatted in
-  UTC so user time zones cannot move a calendar boundary to the previous day.
+- Usage reads `/api/v1/billing/capacity` and shows current papers, Projects and
+  storage. It has no token meter, reset date, period selector or per-Project
+  paper allowance. Storage fields are KiB-valued `knowledge_base_size_kb` fields;
+  Web converts them to KiB/MiB/GiB. The account hub and shell menu summarize
+  current storage and plan. DeepSeek is a user-owned Connection with a provider
+  dashboard link and encrypted key entry, replacement and disconnection.
   Billing controls are omitted until real upgrade and portal workflows are
   connected; the interface does not present inert actions.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
@@ -113,7 +113,7 @@ service without spending menu width on the license label.
   management and creation no longer sits in a separate orphan row.
 - Connections owns built-in and user-configured provider status. Scholight is
   built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the
-  shared integration inventory and public `/me/integrations` contract. Zotero
+  shared integration inventory and public `/me/connections` contract. Zotero
   appears in that same inventory as a `reference_manager` connection, but its
   credential is established only through the dedicated read-only OAuth flow.
 - Translation uses the same translation-preference feature as Reader. It does
@@ -323,8 +323,8 @@ account center covers the fourth navigation destination, identity entry,
 parent and validated-source returns, conditional Install, Account-owned Sign
 out, long identity, billing success/loading/failure, and preference child
 navigation.
-Usage covers the per-Project paper limit, correct English/Chinese
-KiB-derived storage display, and UTC-negative date-only formatting.
+Usage covers the absence of retired meters and correct English/Chinese
+KiB-derived storage display.
 Connection stories include connected, not connected, invalid, replacement,
 OpenAlex key-link, and OpenAlex invalid behavior.
 `Features/Settings/Dialog/ZoteroConnected` is the executable Zotero management

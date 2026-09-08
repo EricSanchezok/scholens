@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class IntegrationProvider(StrEnum):
     SCHOLIGHT = "scholight"
+    DEEPSEEK = "deepseek"
     MINERU = "mineru"
     ANYSEARCH = "anysearch"
     TAVILY = "tavily"
@@ -28,9 +29,11 @@ USER_MANAGED_INTEGRATION_PROVIDERS = (
     *MCP_CONNECTOR_PROVIDERS,
     IntegrationProvider.OPENALEX,
     IntegrationProvider.ZOTERO,
+    IntegrationProvider.DEEPSEEK,
 )
 
 CREDENTIAL_INTEGRATION_PROVIDERS = (
+    IntegrationProvider.DEEPSEEK,
     IntegrationProvider.MINERU,
     *MCP_CONNECTOR_PROVIDERS,
     IntegrationProvider.OPENALEX,

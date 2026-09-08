@@ -2,7 +2,7 @@ from app.bootstrap.workflows.billing import BillingUsageWorkflow, BillingWorkflo
 from app.modules.billing.application.contracts import (
     SubscriptionResponse,
     UsagePeriod,
-    UsageResponse,
+    CapacityResponse,
 )
 from app.shared.application import Actor, OperationContext
 from app.transport.http.public_v1.auth_dependencies import (
@@ -13,6 +13,7 @@ from app.transport.http.public_v1.billing.dependencies import (
     get_billing_usage_workflow,
     get_billing_workflow,
 )
+from app.transport.http.public_v1.billing.legacy_usage import UsageResponse
 from fastapi import APIRouter, Depends
 
 subscription_status_router = APIRouter()
@@ -31,10 +32,18 @@ def get_user_subscription(
     )
 
 
-@usage_router.get("/usage", response_model=UsageResponse)
+@usage_router.get("/usage", response_model=UsageResponse, deprecated=True)
 def get_user_usage(
     period: UsagePeriod = UsagePeriod.CURRENT_WEEK,
     workflow: BillingUsageWorkflow = Depends(get_billing_usage_workflow),
     current_user: Actor = Depends(get_required_user),
 ) -> UsageResponse:
-    return workflow.get_usage(current_user, period)
+    return UsageResponse.from_capacity(workflow.get_usage(current_user, period), period)
+
+
+@usage_router.get("/capacity", response_model=CapacityResponse)
+def get_user_capacity(
+    workflow: BillingUsageWorkflow = Depends(get_billing_usage_workflow),
+    current_user: Actor = Depends(get_required_user),
+) -> CapacityResponse:
+    return workflow.get_usage(current_user, UsagePeriod.CURRENT_WEEK)

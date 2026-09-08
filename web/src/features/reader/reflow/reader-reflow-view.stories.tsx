@@ -19,6 +19,8 @@ const labels: ReaderReflowLabels = {
   repaired: "AI-assisted repair",
   retryTranslation: "Retry translation",
   translated: "Translated text",
+  translationConnectionRequired:
+    "Connect your DeepSeek API key in Settings → Connections.",
   translationFailed: "This section could not be translated.",
   translationMarker: "Translation",
 };

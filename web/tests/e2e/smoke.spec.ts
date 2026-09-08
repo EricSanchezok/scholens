@@ -129,8 +129,8 @@ test("account menu exposes live usage and direct Settings destinations", async (
   await accountMenu.click();
   const menu = page.getByRole("menu");
   await expect(menu.getByText("Researcher")).toBeVisible();
-  await expect(menu.getByText("24M / 100M")).toBeVisible();
-  await expect(menu.getByText("Credits reset on Aug 17, 2026")).toBeVisible();
+  await expect(menu.getByText("768 MiB / 3 GiB")).toBeVisible();
+  await expect(menu.getByText("Token Credits")).toHaveCount(0);
   await expect(
     menu.getByRole("menuitem", { name: "Repository" }),
   ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");

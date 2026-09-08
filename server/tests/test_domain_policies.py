@@ -11,7 +11,6 @@ from app.modules.billing.domain import (
     effective_plan,
     entitlements_for,
     require_account_document_capacity,
-    require_project_paper_capacity,
     resolve_entitlements,
 )
 from app.modules.identity.domain import (
@@ -90,19 +89,15 @@ def test_product_plan_limits_match_the_promotional_capacity_contract() -> None:
     researcher = entitlements_for(SubscriptionPlan.RESEARCHER)
 
     assert basic.as_limits() == {
-        "paper_uploads": 300,
-        "knowledge_base_size_kb": 5 * 1024 * 1024,
-        "token_credits_weekly": 30_000_000,
+        "paper_uploads": 200,
+        "knowledge_base_size_kb": 1 * 1024 * 1024,
         "projects": 10,
-        "project_papers": 300,
     }
     assert basic.zotero_auto_sync is False
     assert researcher.as_limits() == {
-        "paper_uploads": 5_000,
-        "knowledge_base_size_kb": 100 * 1024 * 1024,
-        "token_credits_weekly": 300_000_000,
-        "projects": 100,
-        "project_papers": 5_000,
+        "paper_uploads": 2_000,
+        "knowledge_base_size_kb": 10 * 1024 * 1024,
+        "projects": 50,
     }
     assert researcher.zotero_auto_sync is True
 
@@ -140,11 +135,11 @@ def test_quota_overrides_replace_individual_limits_and_allow_zero() -> None:
     resolution = resolve_entitlements(
         None,
         now=datetime(2026, 8, 16, tzinfo=UTC),
-        overrides={"paper_uploads": 0, "token_credits_weekly": 42},
+        overrides={"paper_uploads": 0, "knowledge_base_size_kb": 42},
     )
 
     assert resolution.limits.paper_uploads == 0
-    assert resolution.limits.token_credits_weekly == 42
+    assert resolution.limits.knowledge_base_size_kb == 42
     assert resolution.limits.projects == 10
 
 
@@ -161,14 +156,6 @@ def test_billing_domain_enforces_account_and_project_capacity() -> None:
             ),
         )
     assert account_error.value.code == "paper_quota_exceeded"
-
-    with pytest.raises(AppError) as project_error:
-        require_project_paper_capacity(
-            SubscriptionPlan.BASIC,
-            current_documents=basic.project_papers,
-            added_documents=1,
-        )
-    assert project_error.value.code == "project_paper_quota_exceeded"
 
 
 def test_paper_domain_normalizes_identity_and_access_rules() -> None:

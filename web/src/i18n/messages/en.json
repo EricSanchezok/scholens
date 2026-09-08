@@ -309,13 +309,11 @@
     },
     "account": {
       "openMenu": "Open account menu",
-      "usageSummary": "Current plan and Token Credits",
+      "usageSummary": "Current plan and storage",
       "plan": "Plan",
       "planBasic": "Basic",
       "planResearcher": "Researcher",
-      "tokenCredits": "Token Credits",
-      "creditsReset": "Credits reset on {date}",
-      "usageLoading": "Loading plan and Token Credits…",
+      "usageLoading": "Loading plan and storage…",
       "usageUnavailable": "Usage unavailable · Retry",
       "settings": "Settings",
       "accountSettings": "Account",
@@ -323,7 +321,8 @@
       "documentation": "Documentation",
       "repository": "Repository",
       "signOut": "Sign out",
-      "signingOut": "Signing out…"
+      "signingOut": "Signing out…",
+      "storage": "Storage"
     }
   },
   "AccountHub": {
@@ -335,10 +334,9 @@
     "usage": {
       "title": "Usage",
       "open": "Open plan and usage",
-      "tokenCredits": "Token Credits",
-      "reset": "Credits reset on {date}",
       "loading": "Loading plan and usage…",
-      "unavailable": "Plan and usage could not be loaded."
+      "unavailable": "Plan and usage could not be loaded.",
+      "storage": "Storage"
     },
     "settings": {
       "title": "Settings",
@@ -509,7 +507,8 @@
         "configuration": "The model service is not configured correctly. Share the diagnostic ID with support.",
         "stopFailed": "Could not stop yet · still running in the background",
         "generic": "The response stopped unexpectedly. Your message is saved; try again.",
-        "diagnostic": "Diagnostic ID: {id}"
+        "diagnostic": "Diagnostic ID: {id}",
+        "deepseek": "Connect or update your DeepSeek API key in Settings → Connections to use this feature."
       },
       "readOnly": "You can read this conversation, but you no longer have permission to continue it.",
       "readOnlyReason": "This conversation is read-only because its research context is no longer available.",
@@ -899,7 +898,8 @@
       "repaired": "AI-assisted repair",
       "translated": "Translated text",
       "translationFailed": "This section could not be translated.",
-      "translationMarker": "Translation"
+      "translationMarker": "Translation",
+      "translationConnectionRequired": "Connect your DeepSeek API key in Settings → Connections."
     },
     "fullTranslation": {
       "close": "Close full translation settings",
@@ -1026,13 +1026,13 @@
       },
       "errors": {
         "title": "Translation was not completed",
-        "quota": "Your Token Credits are exhausted. Cached translations remain available.",
         "busy": "Translation is busy right now. Wait a moment and try again.",
         "inProgress": "The same passage is already being translated. Try again shortly.",
         "provider": "The translation service is temporarily unavailable.",
         "access": "This paper is no longer available in your library.",
         "edgeBlocked": "The request was blocked by the network edge. The selected text may contain code or file-path patterns — try translating a different passage.",
-        "generic": "Something interrupted the translation. Try again."
+        "generic": "Something interrupted the translation. Try again.",
+        "deepseek": "Connect or update your DeepSeek API key in Settings → Connections to use this feature."
       },
       "preferencesError": "Translation preferences could not be saved. Your previous preferences are still active.",
       "instructions": {
@@ -1766,20 +1766,10 @@
       "title": "Usage",
       "description": "Review your current plan and resource consumption.",
       "plan": "Current plan",
-      "planDescription": "Limits and Token Credits follow the selected period.",
-      "periodLabel": "Usage period",
-      "period": {
-        "currentWeek": "Current week",
-        "fourWeeks": "Last 4 weeks",
-        "twelveWeeks": "Last 12 weeks"
-      },
+      "planDescription": "Current account capacity. AI uses your own DeepSeek API key.",
       "resources": "Resources",
-      "tokenCredits": "Token Credits",
       "papers": "Papers",
       "projects": "Projects",
-      "projectPapers": "Papers per project",
-      "projectPapersLimit": "Up to {value, number}",
-      "projectPapersDescription": "Maximum papers allowed in each individual project.",
       "storage": "Storage"
     },
     "accessKeys": {
@@ -1835,7 +1825,8 @@
         "exa": "Exa",
         "firecrawl": "Firecrawl",
         "openalex": "OpenAlex",
-        "zotero": "Zotero"
+        "zotero": "Zotero",
+        "deepseek": "DeepSeek"
       },
       "providerDescription": {
         "scholight": "Built-in scholarly discovery.",
@@ -1845,7 +1836,8 @@
         "exa": "Semantic web search.",
         "firecrawl": "Web extraction for research sources.",
         "openalex": "DOI resolution, external paper search, author works, and citation graphs.",
-        "zotero": "Read-only import and annotation sync for your personal Zotero library."
+        "zotero": "Read-only import and annotation sync for your personal Zotero library.",
+        "deepseek": "Your API key for chat, translation, and AI tasks. DeepSeek bills your account directly."
       },
       "state": {
         "connected": "Connected",
@@ -1877,7 +1869,8 @@
       "verifyError": "This connection could not be saved. Check the credential and try again.",
       "disconnectTitle": "Disconnect service?",
       "disconnectDescription": "{provider} will no longer be available to new jobs. Running jobs keep their credential revision.",
-      "zoteroDisconnectDescription": "Scholens will stop accessing Zotero and cancel future syncs. Papers and annotations already imported into Scholens are retained."
+      "zoteroDisconnectDescription": "Scholens will stop accessing Zotero and cancel future syncs. Papers and annotations already imported into Scholens are retained.",
+      "deepseekSaved": "Key saved"
     },
     "translation": {
       "title": "Translation",

@@ -49,6 +49,9 @@
     "/api/v1/auth/verify-email": [
       "post"
     ],
+    "/api/v1/billing/capacity": [
+      "get"
+    ],
     "/api/v1/billing/usage": [
       "get"
     ],
@@ -200,6 +203,14 @@
     ],
     "/api/v1/me/avatar": [
       "get"
+    ],
+    "/api/v1/me/connections": [
+      "get"
+    ],
+    "/api/v1/me/connections/{provider}": [
+      "delete",
+      "patch",
+      "put"
     ],
     "/api/v1/me/integrations": [
       "get"

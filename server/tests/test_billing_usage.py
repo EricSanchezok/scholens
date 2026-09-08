@@ -36,7 +36,7 @@ def _actor() -> Actor:
         (UsagePeriod.TWELVE_WEEKS, 12, date(2026, 5, 25)),
     ],
 )
-def test_usage_period_aggregates_monday_aligned_token_windows(
+def test_capacity_does_not_read_or_return_token_windows(
     monkeypatch: pytest.MonkeyPatch,
     period: UsagePeriod,
     weeks: int,
@@ -71,19 +71,15 @@ def test_usage_period_aggregates_monday_aligned_token_windows(
         period,
     )
 
-    assert response["period"] == period.value
-    assert response["period_start"] == start
-    assert response["period_end"] == date(2026, 8, 16)
     limits = response["limits"]
     assert isinstance(limits, dict)
-    assert limits["knowledge_base_size_kb"] == 5 * 1024 * 1024
+    assert limits["knowledge_base_size_kb"] == 1 * 1024 * 1024
     assert "knowledge_base_size" not in limits
     usage = response["usage"]
     assert isinstance(usage, dict)
     assert usage["knowledge_base_size_kb"] == 1_024
-    assert usage["knowledge_base_size_remaining_kb"] == 5 * 1024 * 1024 - 1_024
+    assert usage["knowledge_base_size_remaining_kb"] == 1 * 1024 * 1024 - 1_024
     assert "knowledge_base_size" not in usage
-    assert usage["token_credits_limit"] == 30_000_000 * weeks
-    assert usage["token_credits_used"] == 4_000_000 * weeks
-    assert usage["token_credits_remaining"] == 26_000_000 * weeks
-    assert usage["token_credits_overage"] == 0
+
+    assert not any("token" in key for key in usage)
+    assert "project_papers" not in limits

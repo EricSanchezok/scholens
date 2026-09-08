@@ -290,6 +290,7 @@ export function ReaderReflowSurface({
         retryTranslation: t("retryTranslation"),
         translated: t("translated"),
         translationFailed: t("translationFailed"),
+        translationConnectionRequired: t("translationConnectionRequired"),
         translationMarker: t("translationMarker"),
       }}
       onOpenPdfSource={onOpenPdfSource}

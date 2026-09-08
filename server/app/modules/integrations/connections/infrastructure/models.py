@@ -12,15 +12,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 
-class IntegrationConnection(Base):
-    __tablename__ = "integration_connections"
-    __table_args__ = (
-        CheckConstraint(
-            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex', 'zotero')",
-            name="ck_integration_connections_provider",
-        ),
-        {"schema": "scholens"},
-    )
+class IntegrationCredentialRow(Base):
+    """Common encrypted credential columns; concrete stores own their tables."""
+
+    __abstract__ = True
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -48,3 +43,19 @@ class IntegrationConnection(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error_code: Mapped[str | None] = mapped_column(Text)
+
+
+class IntegrationConnection(IntegrationCredentialRow):
+    __tablename__ = "integration_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex', 'zotero')",
+            name="ck_integration_connections_provider",
+        ),
+        {"schema": "scholens"},
+    )
+
+
+class ModelConnection(IntegrationCredentialRow):
+    __tablename__ = "model_connections"
+    __table_args__ = ({"schema": "scholens"},)

@@ -14,6 +14,7 @@ from app.transport.http.public_v1.auth import (
     topics_router,
 )
 from app.transport.http.public_v1.access_keys import access_keys_router
+from app.transport.http.public_v1.connections import connections_router
 from app.transport.http.public_v1.integrations import integrations_router
 from app.transport.http.public_v1.conversations import conversation_router
 from app.transport.http.public_v1.conversation_search import (
@@ -194,6 +195,7 @@ def _public_router() -> APIRouter:
         tags=["access-keys"],
     )
     router.include_router(integrations_router, prefix="/me/integrations")
+    router.include_router(connections_router, prefix="/me/connections")
     router.include_router(zotero_router, prefix="/integrations/zotero")
     return router
 

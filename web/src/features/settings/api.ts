@@ -5,21 +5,19 @@ import type { components } from "@/lib/api/generated/schema";
 
 export type AccessKey = components["schemas"]["AccessKeyResponse"];
 export type AccessKeyCreate = components["schemas"]["AccessKeyCreateRequest"];
-export type UsagePeriod = "current_week" | "four_weeks" | "twelve_weeks";
 
 export const settingsKeys = {
   all: ["settings"] as const,
-  usage: (period: UsagePeriod) => ["settings", "usage", period] as const,
+  usage: () => ["settings", "capacity"] as const,
   accessKeys: () => ["settings", "access-keys"] as const,
 };
 
 export const settingsQueries = {
-  usage: (period: UsagePeriod) =>
+  usage: () =>
     queryOptions({
-      queryKey: settingsKeys.usage(period),
+      queryKey: settingsKeys.usage(),
       queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/billing/usage", {
-          params: { query: { period } },
+        const { data } = await apiClient.GET("/api/v1/billing/capacity", {
           signal,
         });
         if (!data) throw new Error("Usage response was empty");

@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
@@ -26,7 +26,6 @@ from app.modules.billing.domain import (
     project_creation_denial,
     remaining,
     require_account_document_capacity,
-    require_project_paper_capacity,
     resolve_entitlements,
 )
 from app.modules.billing.application.contracts import UsagePeriod
@@ -34,10 +33,8 @@ from app.database.models import (
     AuthUser,
     Document,
     Project,
-    ProjectPaper,
     SubscriptionPlan,
     SubscriptionStatus,
-    TokenWeeklyUsage,
 )
 from app.database.product_analytics import track_event
 from app.shared.domain import AppError, FailureKind
@@ -87,7 +84,12 @@ def get_user_entitlements(
     return resolve_entitlements(
         subscription_facts,
         grant=grant_facts,
-        overrides={model.resource_key: model.limit_value for model in override_models},
+        overrides={
+            model.resource_key: model.limit_value
+            for model in override_models
+            if model.resource_key
+            in {"paper_uploads", "knowledge_base_size_kb", "projects"}
+        },
         now=current_time,
     )
 
@@ -175,23 +177,6 @@ def require_project_document_capacity(
     if not documents:
         return
     lock_account_resource_quota(db, user_id=owner_id)
-    owner = get_quota_user(db, user_id=owner_id)
-    resolution = get_user_entitlements(db, owner)
-    plan = resolution.plan
-    current_project_count = int(
-        db.scalar(
-            select(func.count(ProjectPaper.id)).where(
-                ProjectPaper.project_id == project_id
-            )
-        )
-        or 0
-    )
-    require_project_paper_capacity(
-        plan,
-        current_documents=current_project_count,
-        added_documents=len(documents),
-        limits=resolution.limits,
-    )
 
     _require_incremental_account_capacity(
         db,
@@ -319,7 +304,6 @@ def get_user_usage_info(
     period: UsagePeriod,
 ) -> dict[str, object]:
     """Return current resources plus a Monday-aligned Token Credit window."""
-    from app.llm.token_credits import utc_week_start
 
     resolution = get_user_entitlements(db, user)
     plan = resolution.plan
@@ -336,27 +320,9 @@ def get_user_usage_info(
     )
     project_limit = limits.projects
     assert isinstance(period, UsagePeriod)
-    period_end = utc_week_start() + timedelta(days=6)
-    period_start = utc_week_start() - timedelta(weeks=period.weeks - 1)
-    token_limit = limits.token_credits_weekly * period.weeks
-    token_used = int(
-        db.scalar(
-            select(func.sum(TokenWeeklyUsage.used_tokens)).where(
-                TokenWeeklyUsage.user_id == user.id,
-                TokenWeeklyUsage.week_start >= period_start,
-                TokenWeeklyUsage.week_start <= period_end,
-            )
-        )
-        or 0
-    )
-    token_remaining = max(0, token_limit - token_used)
-    token_overage = max(0, token_used - token_limit)
 
     return {
         "plan": plan.value,
-        "period": period.value,
-        "period_start": period_start,
-        "period_end": period_end,
         "limits": limits.as_limits(),
         "usage": {
             "paper_uploads": current_paper_count,
@@ -369,10 +335,6 @@ def get_user_usage_info(
                 total_size_allowed,
                 total_size,
             ),
-            "token_credits_limit": token_limit,
-            "token_credits_used": token_used,
-            "token_credits_remaining": token_remaining,
-            "token_credits_overage": token_overage,
             "projects": current_project_count,
             "projects_remaining": remaining(project_limit, current_project_count),
         },

@@ -382,7 +382,6 @@ def test_transfer_validates_and_reassigns_owner_quota(
             new_owner_project_limit=10,
             project_document_count=0,
             pending_project_slot_count=0,
-            project_paper_limit=300,
             active_reservation_count=0,
             owners=(),
             reservation_assignment_digest="a" * 64,

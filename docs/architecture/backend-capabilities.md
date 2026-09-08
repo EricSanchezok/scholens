@@ -206,9 +206,9 @@ retaining a session for the life of a conversation.
 
 ## User-owned integrations
 
-`GET /api/v1/me/integrations` is the unified connection inventory. Credential
+`GET /api/v1/me/connections` is the unified connection inventory. Credential
 providers, including MinerU, OpenAlex, and optional MCP providers, use
-`PUT|DELETE /api/v1/me/integrations/{provider}`. Zotero is an OAuth
+`PUT|DELETE /api/v1/me/connections/{provider}`. Zotero is an OAuth
 `reference_manager` and deliberately uses its dedicated authorization and
 disconnect endpoints. Responses expose status, revision, verification
 information, and non-secret metadata, never the credential. Scholight remains
@@ -860,7 +860,7 @@ NFKC. Compatibility-form characters already stored in paper metadata are not
 therefore guaranteed to match their ASCII equivalents; repairing that side of
 the comparison requires an expand–backfill–switch projection migration.
 Metadata expressions and the explicit trigram similarity threshold can also
-require a scan at the current product scale. Before increasing the 5,000-paper
+require a scan at the current product scale. Before increasing the 2,000-paper
 account limit or applying this adapter to a materially larger corpus, the owner
 must add a production-shaped `EXPLAIN ANALYZE` latency gate and choose an
 index-backed candidate strategy; changing to PostgreSQL's `%` operator without
@@ -1109,17 +1109,17 @@ job envelopes receive no session path, page payload, selected text, or exported
 history. Low-cardinality endpoint outcome and latency telemetry remains
 permitted.
 
-## Billing usage projection
+## Billing capacity projection
 
-`GET /api/v1/billing/usage` returns the selected inclusive date-only period,
-the effective plan, current resource usage, and plan limits. Storage accounting
+`GET /api/v1/billing/capacity` returns the effective plan and current paper,
+Project and storage usage and limits, without model or per-Project meters.
+The deprecated `/billing/usage` DTO is isolated in its HTTP adapter. Storage accounting
 is persisted and returned in KiB; public fields therefore use the explicit
 `knowledge_base_size_kb` and `knowledge_base_size_remaining_kb` names. Clients
 must convert those quantities from KiB rather than treating them as bytes.
-`period_end` is the inclusive final day of the selected window, not a timestamp
-or the next reset instant.
+Only the deprecated usage response retains date-window fields for old clients.
 
-This is the only mounted billing HTTP route in the current production release.
+Capacity and its deprecated usage adapter are the only mounted billing HTTP routes.
 Checkout, customer portal, subscription refresh/mutation, and Stripe webhook
 code remains dormant and is not composed into FastAPI; production therefore
 injects no Stripe or PostHog configuration. Researcher access is granted and
@@ -1130,7 +1130,7 @@ edge scope, and end-to-end tests together.
 Account paper and storage usage is the unique union of completed Documents in
 the personal Library and Projects owned by that account. A repeated Document
 therefore adds no account cost until its final owned reference disappears.
-Project paper limits remain membership counts, and collaborators reserve quota
+There is no independent Project paper limit. Collaborators reserve account quota
 against the Project owner. When a collaborator uploads into another user's
 Project with `add_to_library=true`, the uploader's own account reserves one
 personal Library slot; an owner uploading to their own Project is never
@@ -1154,8 +1154,7 @@ Effective entitlements combine paid `subscriptions`, product-owned
 `account_plan_grants`, and active `account_quota_overrides`. A paid Researcher
 and a granted Researcher are evaluated independently, numerical overrides
 replace only their named limit, and expired/revoked records are ignored. This
-resolution is shared by HTTP usage, upload/project checks, Zotero sync, and AI
-Token Credit enforcement; the public `plan/limits/usage` shape is unchanged.
+resolution is shared by HTTP usage, upload/project checks, Zotero sync, and account capacity enforcement. AI instead requires the acting user's encrypted DeepSeek connection. Historical token counters are not updated.
 
 Operator writes use the same application capabilities and Unit of Work as HTTP
 commands. CLI provenance is recorded as `CliOrigin(command_name,
@@ -1195,3 +1194,8 @@ Journal safe projection plus explicit confirmation where a write occurs.
 This boundary also applies when identity, Zotero, billing, or a future product
 area is reorganized; `/api/v1` is a platform version, not a paper-only
 namespace.
+
+The current connection catalog is `/api/v1/me/connections`, including user-owned
+DeepSeek keys. `/api/v1/me/integrations` remains a deprecated HTTP adapter with
+its original provider/category enums until the registered retirement conditions
+are met. Both adapters delegate to the same connection application capability.

@@ -18,7 +18,7 @@ from app.modules.billing.application.contracts import (
     SubscriptionActionResponse,
     SubscriptionInterval,
     SubscriptionResponse,
-    UsageResponse,
+    CapacityResponse,
     UsagePeriod,
 )
 from app.modules.billing.application.ports import (
@@ -53,7 +53,7 @@ class BillingUsageWorkflow:
     ) -> None:
         self._executor = executor
 
-    def get_usage(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
+    def get_usage(self, actor: Actor, period: UsagePeriod) -> CapacityResponse:
         return self._executor.query(
             lambda capabilities: capabilities.billing.get_usage(actor, period)
         )
@@ -190,7 +190,7 @@ class BillingWorkflow:
             lambda capabilities: capabilities.billing.get_subscription(actor)
         )
 
-    def get_usage(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
+    def get_usage(self, actor: Actor, period: UsagePeriod) -> CapacityResponse:
         return self._executor.query(
             lambda capabilities: capabilities.billing.get_usage(actor, period)
         )

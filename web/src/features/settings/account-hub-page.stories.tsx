@@ -32,6 +32,14 @@ const integrations = [
     updated_at: null,
     verified_at: null,
   },
+  {
+    provider: "deepseek",
+    category: "ai",
+    connection_method: "credential",
+    managed: false,
+    state: "disconnected",
+    enabled: false,
+  },
   ...(["anysearch", "tavily", "exa", "firecrawl", "openalex"] as const).map(
     (provider) => ({
       category: "search",
@@ -74,7 +82,7 @@ const accountHubHandlers = [
   http.get(`${api}/me/access-keys`, () =>
     HttpResponse.json({ items: [], next_cursor: null, previous_cursor: null }),
   ),
-  http.get(`${api}/me/integrations`, () =>
+  http.get(`${api}/me/connections`, () =>
     HttpResponse.json({ items: integrations }),
   ),
   http.get(`${api}/me/translation-preferences`, () =>
@@ -214,7 +222,10 @@ export const Usage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("heading", { name: "Usage" })).toBeVisible();
-    await expect(await canvas.findByText("Papers per project")).toBeVisible();
+    await expect(await canvas.findByText("Storage")).toBeVisible();
+    await expect(
+      canvas.queryByText("Papers per project"),
+    ).not.toBeInTheDocument();
   },
 };
 

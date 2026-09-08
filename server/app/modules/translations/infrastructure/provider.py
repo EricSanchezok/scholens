@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 import json
 
+from app.llm.user_credentials import current_deepseek_key
 from app.llm.backend import LLMUsageSettlementError
 from app.llm.token_credits import current_usage_context, settle_token_usage
 from app.modules.translations.application import (
@@ -123,7 +124,6 @@ def _translation_user_content(spec: TranslationStreamSpec) -> str:
 class LLMTranslationStreamProvider:
     def __init__(self) -> None:
         self._profile = resolve_profile(AIProfileName.TRANSLATION)
-        self._model = build_model(self._profile, max_output_tokens=20_000)
 
     def prompt_revision(self) -> str:
         return TRANSLATION_PROMPT_REVISION
@@ -133,7 +133,9 @@ class LLMTranslationStreamProvider:
 
     async def stream(self, spec: TranslationStreamSpec) -> AsyncIterator[str]:
         agent: Agent[None, str] = Agent(
-            self._model,
+            build_model(
+                self._profile, max_output_tokens=20_000, api_key=current_deepseek_key()
+            ),
             instructions=_translation_system_prompt(spec),
             retries=self._profile.structured_retries,
         )

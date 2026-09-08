@@ -295,7 +295,8 @@ async def _generate_turn_suggestions(
     conversation_id: uuid.UUID,
 ) -> tuple[str, str, str] | None:
     try:
-        suggestions = _validated_suggestions(await generator.generate(seed))
+        with llm_usage_context(user_id=actor.id, feature="follow_up_suggestions"):
+            suggestions = _validated_suggestions(await generator.generate(seed))
         saved = await asyncio.to_thread(
             executor.command,
             lambda capabilities: (
@@ -323,14 +324,16 @@ async def _generate_turn_suggestions(
 
 async def _generate_initial_title(
     *,
+    user_id: int,
     user_query: str,
     conversation_id: uuid.UUID,
 ) -> str | None:
     try:
-        return await asyncio.to_thread(
-            initial_conversation_title_generator.generate,
-            [ChatHistoryMessage(role="user", content=user_query)],
-        )
+        with llm_usage_context(user_id=user_id, feature="conversation_title"):
+            return await asyncio.to_thread(
+                initial_conversation_title_generator.generate,
+                [ChatHistoryMessage(role="user", content=user_query)],
+            )
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -533,6 +536,7 @@ async def stream_conversation_agent(
                 title_seed = history[0].content if history else request.user_query
                 title_task = asyncio.create_task(
                     _generate_initial_title(
+                        user_id=current_user.id,
                         user_query=title_seed,
                         conversation_id=conversation_id,
                     ),

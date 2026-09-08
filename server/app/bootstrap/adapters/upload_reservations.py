@@ -29,7 +29,6 @@ from app.modules.billing.domain import (
     KB_SIZE_KEY,
     PAPER_UPLOAD_KEY,
     PROJECTS_KEY,
-    PROJECT_PAPERS_KEY,
 )
 from app.modules.billing.infrastructure.quotas import (
     get_quota_user,
@@ -361,13 +360,6 @@ def prepare_project_quota_transfer(
         )
         or 0
     )
-    if project_document_count > new_owner_limits[PROJECT_PAPERS_KEY]:
-        raise AppError(
-            code="project_transfer_paper_quota_exceeded",
-            message="This Project exceeds the new owner's per-Project paper limit",
-            kind=FailureKind.CONFLICT,
-        )
-
     active_rows = _locked_transfer_reservations(
         db,
         owner_ids=owner_ids,
@@ -437,16 +429,6 @@ def prepare_project_quota_transfer(
         for _, job in active_rows
         if job.project_id == project.id and job.document_id is None
     )
-    if (
-        project_document_count + pending_project_slots
-        > new_owner_limits[PROJECT_PAPERS_KEY]
-    ):
-        raise AppError(
-            code="project_transfer_paper_quota_exceeded",
-            message="This Project exceeds the new owner's per-Project paper limit",
-            kind=FailureKind.CONFLICT,
-        )
-
     pricing_assignments = {
         (reservation.id, role): (reference_count, size_kb)
         for pricing in pricing_by_owner.values()
@@ -533,7 +515,6 @@ def prepare_project_quota_transfer(
             new_owner_project_limit=new_owner_limits[PROJECTS_KEY],
             project_document_count=project_document_count,
             pending_project_slot_count=pending_project_slots,
-            project_paper_limit=new_owner_limits[PROJECT_PAPERS_KEY],
             active_reservation_count=len(planned_assignments),
             owners=tuple(owner_states),
             reservation_assignment_digest=assignment_digest,
@@ -879,26 +860,6 @@ def reserve_upload(
                     message="The account's storage limit would be exceeded",
                     kind=FailureKind.PERMISSION_DENIED,
                 )
-
-    if project is not None:
-        linked_count = int(
-            db.scalar(
-                select(func.count(ProjectPaper.id)).where(
-                    ProjectPaper.project_id == project.id
-                )
-            )
-            or 0
-        )
-        waiting_count = _unattached_project_reservations(
-            db,
-            project_id=project.id,
-        )
-        if linked_count + waiting_count + 1 > limits[PROJECT_PAPERS_KEY]:
-            raise AppError(
-                code="project_paper_quota_exceeded",
-                message="The Project's paper limit has been reached",
-                kind=FailureKind.PERMISSION_DENIED,
-            )
 
     job_id = job_id or uuid4()
     persisted_job = job_repository.create(

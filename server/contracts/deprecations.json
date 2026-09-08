@@ -84,6 +84,76 @@
       "state": "deprecated",
       "removed_on": null,
       "removal_evidence": null
+    },
+    {
+      "id": "http-billing-usage-v1",
+      "boundary": "http",
+      "target": "GET /api/v1/billing/usage",
+      "owner": "scholens-platform",
+      "replacement": "GET /api/v1/billing/capacity",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.billing-usage",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "http-integrations-v1-get",
+      "boundary": "http",
+      "target": "GET /api/v1/me/integrations",
+      "owner": "scholens-platform",
+      "replacement": "GET /api/v1/me/connections",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.integrations-get",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "http-integrations-v1-put",
+      "boundary": "http",
+      "target": "PUT /api/v1/me/integrations/{provider}",
+      "owner": "scholens-platform",
+      "replacement": "PUT /api/v1/me/connections/{provider}",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.integrations-put",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "http-integrations-v1-patch",
+      "boundary": "http",
+      "target": "PATCH /api/v1/me/integrations/{provider}",
+      "owner": "scholens-platform",
+      "replacement": "PATCH /api/v1/me/connections/{provider}",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.integrations-patch",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
+    },
+    {
+      "id": "http-integrations-v1-delete",
+      "boundary": "http",
+      "target": "DELETE /api/v1/me/integrations/{provider}",
+      "owner": "scholens-platform",
+      "replacement": "DELETE /api/v1/me/connections/{provider}",
+      "deprecated_on": "2026-09-08",
+      "earliest_removal_on": "2026-12-07",
+      "telemetry_key": "http.deprecated.integrations-delete",
+      "zero_traffic_since": null,
+      "state": "deprecated",
+      "removed_on": null,
+      "removal_evidence": null
     }
   ]
 }

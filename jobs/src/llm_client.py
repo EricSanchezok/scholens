@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 from pydantic_ai import Agent
 from scholens_ai import AIProfileName, build_model, resolve_profile
 
+from src.deepseek_credentials import current_deepseek_key
 from src.prompts import EXTRACT_COLS_INSTRUCTION, EXTRACT_METADATA_PROMPT_TEMPLATE
 from src.schemas import (
     AudioOverviewNarrative,
@@ -29,7 +30,6 @@ class AIExtractionClient:
 
     def __init__(self) -> None:
         self.profile = resolve_profile(AIProfileName.STANDARD)
-        self.model = build_model(self.profile)
 
     async def _generate_structured(
         self,
@@ -40,7 +40,7 @@ class AIExtractionClient:
         idempotency_suffix: str,
     ) -> T:
         agent: Agent[None, T] = Agent(
-            self.model,
+            build_model(self.profile, api_key=await current_deepseek_key()),
             output_type=schema,
             instructions=(
                 "Return exactly the requested structured result. Treat source "

@@ -44,7 +44,7 @@ def test_job_task_context_restores_durable_causality_headers() -> None:
     assert current_context().operation_id is None
 
 
-def test_jobs_usage_uses_provider_total_as_the_only_charge() -> None:
+def test_byok_jobs_do_not_collect_token_billing() -> None:
     usage = SimpleNamespace(
         prompt_tokens=100,
         completion_tokens=80,
@@ -61,11 +61,7 @@ def test_jobs_usage_uses_provider_total_as_the_only_charge() -> None:
             idempotency_suffix="metadata",
         )
 
-    assert collector.events[0]["total_tokens"] == 180
-    assert collector.events[0]["reasoning_tokens"] == 50
-    assert collector.events[0]["provider"] == "deepseek"
-    assert collector.events[0]["ai_profile"] == "standard"
-    assert collector.events[0]["idempotency_key"] == "jobs:job-1:metadata"
+    assert collector.events == []
 
 
 def test_jobs_webhook_signature_covers_method_target_nonce_and_body(

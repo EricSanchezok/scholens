@@ -1428,12 +1428,6 @@ Resources:
             - '${Secret}:password::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
-        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID
           ValueFrom:
             Fn::Sub:
@@ -1758,12 +1752,6 @@ Resources:
             - '${Secret}:password::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
-        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: SCHOLIGHT_MCP_DELEGATION_JWT_SECRET
           ValueFrom:
             Fn::Sub:
@@ -2112,12 +2100,6 @@ Resources:
             - '${Secret}:password::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
-        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY
           ValueFrom:
             Fn::Sub:
@@ -2351,12 +2333,6 @@ Resources:
             - '${Secret}:password::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
-        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY
           ValueFrom:
             Fn::Sub:
@@ -2590,12 +2566,6 @@ Resources:
             - '${Secret}:password::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
-        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY
           ValueFrom:
             Fn::Sub:

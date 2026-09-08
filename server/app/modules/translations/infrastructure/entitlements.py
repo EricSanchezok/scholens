@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from app.llm.token_credits import has_token_credits
+from app.modules.integrations.connections.infrastructure.deepseek import (
+    require_deepseek_key,
+)
 from app.shared.application import Actor
 from sqlalchemy.orm import Session
 
@@ -11,5 +13,6 @@ class SqlTranslationEntitlements:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def has_token_credits(self, *, actor: Actor) -> bool:
-        return has_token_credits(self._db, user=actor)
+    def has_ai_connection(self, *, actor: Actor) -> bool:
+        require_deepseek_key(self._db, user_id=actor.id)
+        return True

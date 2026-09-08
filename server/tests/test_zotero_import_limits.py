@@ -15,11 +15,11 @@ from app.modules.billing.domain import entitlements_for
 @pytest.mark.parametrize(
     ("plan", "used", "expected"),
     [
-        (SubscriptionPlan.BASIC, 299, 1),
-        (SubscriptionPlan.BASIC, 300, 0),
-        (SubscriptionPlan.BASIC, 315, 0),
-        (SubscriptionPlan.RESEARCHER, 4_999, 1),
-        (SubscriptionPlan.RESEARCHER, 5_000, 0),
+        (SubscriptionPlan.BASIC, 199, 1),
+        (SubscriptionPlan.BASIC, 200, 0),
+        (SubscriptionPlan.BASIC, 215, 0),
+        (SubscriptionPlan.RESEARCHER, 1_999, 1),
+        (SubscriptionPlan.RESEARCHER, 2_000, 0),
     ],
 )
 def test_remaining_paper_upload_slots(

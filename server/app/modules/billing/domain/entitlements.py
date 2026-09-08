@@ -11,45 +11,35 @@ from app.shared.domain.enums import SubscriptionPlan, SubscriptionStatus
 
 PAPER_UPLOAD_KEY = "paper_uploads"
 KB_SIZE_KEY = "knowledge_base_size_kb"
-TOKEN_CREDITS_KEY = "token_credits_weekly"
 PROJECTS_KEY = "projects"
-PROJECT_PAPERS_KEY = "project_papers"
 
 
 @dataclass(frozen=True, slots=True)
 class PlanEntitlements:
     paper_uploads: int
     knowledge_base_size_kb: int
-    token_credits_weekly: int
     projects: int
-    project_papers: int
     zotero_auto_sync: bool
 
     def as_limits(self) -> dict[str, int]:
         return {
             PAPER_UPLOAD_KEY: self.paper_uploads,
             KB_SIZE_KEY: self.knowledge_base_size_kb,
-            TOKEN_CREDITS_KEY: self.token_credits_weekly,
             PROJECTS_KEY: self.projects,
-            PROJECT_PAPERS_KEY: self.project_papers,
         }
 
 
 PLAN_ENTITLEMENTS = {
     SubscriptionPlan.BASIC: PlanEntitlements(
-        paper_uploads=300,
-        knowledge_base_size_kb=5 * 1024 * 1024,
-        token_credits_weekly=30_000_000,
+        paper_uploads=200,
+        knowledge_base_size_kb=1 * 1024 * 1024,
         projects=10,
-        project_papers=300,
         zotero_auto_sync=False,
     ),
     SubscriptionPlan.RESEARCHER: PlanEntitlements(
-        paper_uploads=5_000,
-        knowledge_base_size_kb=100 * 1024 * 1024,
-        token_credits_weekly=300_000_000,
-        projects=100,
-        project_papers=5_000,
+        paper_uploads=2_000,
+        knowledge_base_size_kb=10 * 1024 * 1024,
+        projects=50,
         zotero_auto_sync=True,
     ),
 }
@@ -209,22 +199,6 @@ def require_account_document_capacity(
                 else "storage_quota_exceeded"
             ),
             message="The account's storage limit would be exceeded",
-            kind=FailureKind.PERMISSION_DENIED,
-        )
-
-
-def require_project_paper_capacity(
-    plan: SubscriptionPlan,
-    *,
-    current_documents: int,
-    added_documents: int,
-    limits: PlanEntitlements | None = None,
-) -> None:
-    resolved_limits = limits or entitlements_for(plan)
-    if current_documents + added_documents > resolved_limits.project_papers:
-        raise AppError(
-            code="project_paper_quota_exceeded",
-            message="The Project's paper limit would be exceeded",
             kind=FailureKind.PERMISSION_DENIED,
         )
 

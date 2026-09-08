@@ -146,6 +146,11 @@ class TranslationWorkflow:
         prepared: PreparedTranslation,
         client_ip: str,
     ) -> AsyncIterator[TranslationStreamEvent]:
+        self._executor.query(
+            lambda capabilities: capabilities.translations.require_ai_connection(
+                actor=actor
+            )
+        )
         fingerprint = TranslationFingerprint(
             schema_revision=TRANSLATION_RESULT_SCHEMA_REVISION,
             prompt_revision=self._provider.prompt_revision(),
@@ -195,11 +200,6 @@ class TranslationWorkflow:
             await self._capacity.enforce_rate(
                 user_id=actor.id,
                 client_ip=client_ip,
-            )
-            self._executor.query(
-                lambda capabilities: capabilities.translations.require_token_credits(
-                    actor=actor
-                )
             )
             capacity_lease = await self._capacity.acquire(
                 user_id=actor.id,

@@ -545,6 +545,37 @@ export interface components {
             /** Volume */
             volume?: string | null;
         };
+        /** CapacityLimits */
+        CapacityLimits: {
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
+            /** Paper Uploads */
+            paper_uploads: number;
+            /** Projects */
+            projects: number;
+        };
+        /** CapacityResponse */
+        CapacityResponse: {
+            limits: components["schemas"]["CapacityLimits"];
+            /** Plan */
+            plan: string;
+            usage: components["schemas"]["CapacityUsage"];
+        };
+        /** CapacityUsage */
+        CapacityUsage: {
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
+            /** Knowledge Base Size Remaining Kb */
+            knowledge_base_size_remaining_kb: number;
+            /** Paper Uploads */
+            paper_uploads: number;
+            /** Paper Uploads Remaining */
+            paper_uploads_remaining: number;
+            /** Projects */
+            projects: number;
+            /** Projects Remaining */
+            projects_remaining: number;
+        };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
             /** Current Password */
@@ -1963,7 +1994,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "built_in" | "parsing" | "search" | "reference_manager";
+            category: "ai" | "built_in" | "parsing" | "search" | "reference_manager";
             /**
              * Connection Method
              * @enum {string}
@@ -1997,7 +2028,7 @@ export interface components {
          * IntegrationProvider
          * @enum {string}
          */
-        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
+        IntegrationProvider: "scholight" | "deepseek" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
         /** IntegrationUpdateRequest */
         IntegrationUpdateRequest: {
             /** Enabled */
@@ -2060,6 +2091,46 @@ export interface components {
             id: string;
             /** Score */
             score?: number | null;
+        };
+        /** LegacyIntegrationConnectionResponse */
+        LegacyIntegrationConnectionResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "built_in" | "parsing" | "search" | "reference_manager";
+            /**
+             * Connection Method
+             * @enum {string}
+             */
+            connection_method: "built_in" | "credential" | "oauth";
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Managed */
+            managed: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "disconnected" | "connected_unverified" | "connected" | "disabled" | "invalid";
+            /** Updated At */
+            updated_at?: string | null;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** LegacyIntegrationListResponse */
+        LegacyIntegrationListResponse: {
+            /** Items */
+            items: components["schemas"]["LegacyIntegrationConnectionResponse"][];
         };
         /** LibraryOutputListResponse */
         LibraryOutputListResponse: {
