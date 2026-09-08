@@ -20,6 +20,7 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     environment: str = "development"
+    runtime_deployment_mode: Literal["managed", "single-host"] = "managed"
     release_sha: str | None = None
     otel_exporter_otlp_endpoint: str | None = None
     diagnostic_snapshot_bucket: str | None = None
@@ -75,6 +76,7 @@ class AppSettings(BaseSettings):
             password=self.cache_password,
             tls=self.cache_tls,
             environment=self.environment,
+            deployment_mode=self.runtime_deployment_mode,
         )
 
     @model_validator(mode="after")

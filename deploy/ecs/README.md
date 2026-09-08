@@ -4,6 +4,13 @@ This directory is the only production deployment package for Scholens. Productio
 in `ap-southeast-1` on the shared SanchezCloud VPC and ECS cluster. There is no EC2,
 Docker Compose, RabbitMQ, Redis, Celery result-backend, or legacy-client production path.
 
+The personal-account migration adds an opt-in runtime endpoint mode described in
+[ADR 0053](../../docs/decisions/0053-explicit-single-host-runtime.md). Its provisioned
+single-host workloads must set `RUNTIME_DEPLOYMENT_MODE=single-host`, mount the private
+service CA, set `AUTH_PG_SSL_ROOT_CERT`, and supply a system trust bundle containing that
+CA for TLS cache connections. This does not activate a second deployment or change the
+existing Singapore defaults by itself.
+
 ## Architecture
 
 Three CloudFormation stacks separate the administrator-owned execution boundary, retained

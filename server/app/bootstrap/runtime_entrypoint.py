@@ -34,6 +34,7 @@ def _database_url() -> str:
             host=os.environ["DATABASE_HOST"],
             port=os.environ["DATABASE_PORT"],
             environment=os.getenv("ENVIRONMENT", "development"),
+            deployment_mode=os.getenv("RUNTIME_DEPLOYMENT_MODE", "managed"),
         )
     except EndpointConfigurationError as exc:
         raise RuntimeError(str(exc)) from exc
