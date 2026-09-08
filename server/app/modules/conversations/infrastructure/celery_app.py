@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 
-from celery import Celery
+from celery import Celery, signals
 from dotenv import load_dotenv
 from scholens_job_contracts import JobQueue
+from scholens_observability.worker_health import heartbeat
 
 from app.helpers.celery_config import (
     get_celery_broker_url,
@@ -79,6 +80,8 @@ celery_app.conf.update(
 )
 
 register_task_protection_signals()
+signals.worker_ready.connect(heartbeat, weak=False)
+signals.heartbeat_sent.connect(heartbeat, weak=False)
 
 if __name__ == "__main__":
     celery_app.start()

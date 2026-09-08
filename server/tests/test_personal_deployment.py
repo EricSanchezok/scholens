@@ -110,6 +110,17 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
             if container["Name"] in {"web", "tmp-init"}:
                 continue
             env = {e["Name"]: e["Value"] for e in container["Environment"]}
+            if container["Name"].endswith("-worker"):
+                assert env["SCHOLENS_WORKER_HEARTBEAT_FILE"] == "/tmp/worker-heartbeat"
+                assert container["HealthCheck"]["Command"] == [
+                    "CMD",
+                    "python",
+                    "-m",
+                    "scholens_observability.worker_health",
+                ]
+                assert "/livez" not in json.dumps(container["HealthCheck"])
+            if container["Name"] == "maintenance-worker":
+                assert container["Memory"] >= 512
             assert env["RUNTIME_DEPLOYMENT_MODE"] == "single-host"
             assert env["AUTH_PG_SSL_ROOT_CERT"] == "/run/trust/private-ca.pem"
             assert env["SSL_CERT_FILE"] == "/run/trust/combined-ca.pem"
