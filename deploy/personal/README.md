@@ -53,6 +53,12 @@ soft memory and hard memory limits are explicit. Deployments stop the old task b
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
 short preview outage to avoid static-port conflicts and doubled memory use.
 
+The maintenance worker reserves 256 MiB with a 512 MiB hard limit: the shared Jobs
+imports exceed the original 256 MiB limit before it can consume a task. Every
+personal Celery worker reports a local heartbeat and has an explicit ECS health
+check, so Conversation does not inherit the API image's HTTP probe. Queue age and
+failed tasks remain separate operational signals from event-loop liveness.
+
 `ApplicationEnabled` defaults to false. Restoring a database does not authorize starting
 workers or replaying copied jobs. Before enabling services, provision database/cache
 TLS, restore and reconcile data, inject independent preview authentication secrets,

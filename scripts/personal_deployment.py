@@ -171,7 +171,7 @@ LIMITS = {
     "conversation-worker": (128, 512, 768),
     "document-worker": (256, 768, 1280),
     "research-worker": (128, 384, 768),
-    "maintenance-worker": (64, 128, 256),
+    "maintenance-worker": (64, 256, 512),
     "migration": (128, 256, 512),
     "scheduler": (64, 128, 256),
 }
@@ -290,6 +290,20 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                         "TRUST_CLOUDFLARE_CLIENT_IP": "false",
                     }
                 )
+                if container["Name"].endswith("-worker"):
+                    env["SCHOLENS_WORKER_HEARTBEAT_FILE"] = "/tmp/worker-heartbeat"
+                    container["HealthCheck"] = {
+                        "Command": [
+                            "CMD",
+                            "python",
+                            "-m",
+                            "scholens_observability.worker_health",
+                        ],
+                        "Interval": 30,
+                        "Timeout": 5,
+                        "Retries": 3,
+                        "StartPeriod": 90,
+                    }
                 if "SCHOLIGHT_MCP_URL" in env:
                     env["SCHOLIGHT_MCP_URL"] = {"Ref": "ScholightMcpUrl"}
                 for limit in (

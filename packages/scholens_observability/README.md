@@ -31,3 +31,10 @@ OpenTelemetry setup, custom spans, and bounded diagnostic snapshots.
 The supported public surface is exported from `scholens_observability`. The
 package is typed and ships `py.typed`; direct tests live in `tests/` and run
 through the workspace described in [`../README.md`](../README.md).
+
+`scholens_observability.worker_health` additionally exposes an opt-in filesystem
+heartbeat and the `python -m scholens_observability.worker_health` health command.
+Server and Jobs wire their Celery ready/heartbeat signals to `heartbeat`; without
+`SCHOLENS_WORKER_HEARTBEAT_FILE` it performs no writes. Configured workers are
+unhealthy when the file is absent, unreadable, future-dated, or older than 90
+seconds. This checks worker event-loop liveness without SQS remote-control probes.

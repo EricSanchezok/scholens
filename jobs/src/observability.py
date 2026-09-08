@@ -262,6 +262,9 @@ def _task_retry(
 
 
 def _worker_ready(*, sender: Any = None, **_kwargs: object) -> None:
+    from scholens_observability.worker_health import heartbeat
+
+    heartbeat()
     log_event(
         logger,
         logging.INFO,
@@ -271,6 +274,9 @@ def _worker_ready(*, sender: Any = None, **_kwargs: object) -> None:
 
 
 def _heartbeat_sent(**_kwargs: object) -> None:
+    from scholens_observability.worker_health import heartbeat
+
+    heartbeat()
     add_counter("scholens.jobs.worker_heartbeat")
 
 
