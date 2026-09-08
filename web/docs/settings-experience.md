@@ -102,7 +102,8 @@ service without spending menu width on the license label.
   paper allowance. Storage fields are KiB-valued `knowledge_base_size_kb` fields;
   Web converts them to KiB/MiB/GiB. The account hub and shell menu summarize
   current storage and plan. DeepSeek is a user-owned Connection with a provider
-  dashboard link and encrypted key entry, replacement and disconnection.
+  dashboard link and encrypted key entry, replacement and disconnection. Its
+  description names the available chat, translation, and AI capabilities concisely.
   Billing controls are omitted until real upgrade and portal workflows are
   connected; the interface does not present inert actions.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.

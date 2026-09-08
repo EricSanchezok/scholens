@@ -499,7 +499,10 @@ exactly `s3:GetObject` below the retained Account Center bucket's
 `auth/avatars/v1/*` prefix; and KMS decrypt is constrained by S3 service and that
 encryption context. Workers, schedulers, migration tasks, and the browser receive no
 avatar bucket or key permission. `SHARED_AVATAR_BUCKET` is derived from the retained
-account bucket name and the API signs 15-minute GET views; CloudFormation never creates,
+account bucket name and the API signs 15-minute GET views using `AWS_REGION`
+(with `AWS_DEFAULT_REGION` as the local SDK fallback). Signing and endpoint selection
+must use the bucket region, including opt-in regions; a global S3 URL is not a valid
+substitute. CloudFormation never creates,
 writes, deletes, or deploys that shared resource from Scholens.
 
 ## GitHub environments

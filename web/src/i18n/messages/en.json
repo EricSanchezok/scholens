@@ -1837,7 +1837,7 @@
         "firecrawl": "Web extraction for research sources.",
         "openalex": "DOI resolution, external paper search, author works, and citation graphs.",
         "zotero": "Read-only import and annotation sync for your personal Zotero library.",
-        "deepseek": "Your API key for chat, translation, and AI tasks. DeepSeek bills your account directly."
+        "deepseek": "Connect DeepSeek for chat, translation, and AI tasks."
       },
       "state": {
         "connected": "Connected",
