@@ -84,6 +84,23 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
         assert service["DeploymentConfiguration"]["MaximumPercent"] == 100
 
 
+def test_personal_email_requires_explicit_cutover_opt_in() -> None:
+    template = renderer.render("runtime")
+    parameter = template["Parameters"]["EmailDeliveryEnabled"]
+    assert parameter["Default"] == "false"
+    assert parameter["AllowedValues"] == ["false", "true"]
+    for resource in template["Resources"].values():
+        if resource["Type"] != "AWS::ECS::TaskDefinition":
+            continue
+        for container in resource["Properties"]["ContainerDefinitions"]:
+            if container["Name"] in {"web", "tmp-init"}:
+                continue
+            env = {item["Name"]: item["Value"] for item in container["Environment"]}
+            assert env["SCHOLENS_EMAIL_DELIVERY_ENABLED"] == {
+                "Ref": "EmailDeliveryEnabled"
+            }
+
+
 def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None:
     resources = renderer.render("runtime")["Resources"]
     definitions = [
