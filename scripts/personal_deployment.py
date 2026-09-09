@@ -206,6 +206,12 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "AllowedPattern": "https://.+/api/mcp",
     }
     template["Parameters"]["ApplicationEnabled"]["Default"] = "false"
+    template["Parameters"]["EmailDeliveryEnabled"] = {
+        "Type": "String",
+        "Default": "false",
+        "AllowedValues": ["false", "true"],
+        "Description": "Enable real email only after the reviewed production cutover.",
+    }
     for name, resource in resources.items():
         kind, props = resource["Type"], resource["Properties"]
         resource.pop("DependsOn", None)
@@ -281,7 +287,9 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 env.update(
                     {
                         "RUNTIME_DEPLOYMENT_MODE": "single-host",
-                        "SCHOLENS_EMAIL_DELIVERY_ENABLED": "false",
+                        "SCHOLENS_EMAIL_DELIVERY_ENABLED": {
+                            "Ref": "EmailDeliveryEnabled"
+                        },
                         "WEB_CONCURRENCY": "1",
                         "AUTH_PG_SSL_ROOT_CERT": "/run/trust/private-ca.pem",
                         "SSL_CERT_FILE": "/run/trust/combined-ca.pem",

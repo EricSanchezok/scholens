@@ -93,9 +93,18 @@ all components must agree. CLI manifest verification defaults to `linux/amd64` f
 managed production path and requires explicit `--expected-platform linux/arm64` here.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
 
-The personal renderer disables all Scholens email delivery explicitly. This suppresses
+The personal renderer defaults `EmailDeliveryEnabled` to `false`. This suppresses
 both identity email senders and the project-invitation delivery supervisor, even if
-credentials are accidentally present. Managed deployments retain the enabled default.
+credentials are accidentally present. Set it to `true` only during the reviewed
+production cutover, after restoring the production sender credentials and checking
+pending invitations. Managed deployments retain the enabled default.
+
+For production adoption, set `DomainName` to the production hostname and publish a new
+merged revision with the production `PRODUCTION_API_URL` and `ACCOUNT_CENTER_URL` in
+`personal-image-publish`. Web embeds these URLs at build time; reusing a preview
+manifest cannot change them. Keep the personal workflow environments and existing
+queue, secret, bucket and log identifiers: renaming durable resources is not part of
+cutover. Preserve the old account's release path until rollback is retired.
 
 
 ## Private Valkey runtime
