@@ -173,3 +173,7 @@ one-shot task definitions with hard aggregate memory and 0.5-vCPU limits. Deploy
 `background.yml` with task revisions, role ARNs and queue outputs from this product;
 its registrations are disabled by default. Platform admission must be installed and
 healthy before enabling them. API, web and conversation remain independent services.
+The manual runtime workflow's `background_mode` input defaults to `preserve` so an
+ordinary product release keeps admission enabled. Explicit `admitted` or `resident`
+changes are included in the reviewed change set. Stop competing consumers and
+refresh product registrations to the new immutable task revisions before admission.
