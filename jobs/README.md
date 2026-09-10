@@ -6,6 +6,14 @@ for shared limits and resumable parser state, and return signed results to the
 Server webhook API. Celery has no result backend; PostgreSQL-owned jobs and
 signed callbacks are the durable state contract.
 
+Personal-host background tasks set `SCHOLENS_WORKER_ONE_SHOT=1` and consume one
+queue with concurrency and prefetch one. The parent cancels consumption after
+the first delivery and exits only after its broker acknowledgement or rejection;
+an empty worker exits after 30 seconds. Child `task_postrun` is not an exit signal.
+Retries and interrupted deliveries retain the existing durable job and callback
+contracts. The shared host admission controller starts the next ECS task; the
+conversation worker remains a resident service and does not enable this mode.
+
 ECS scale-in protection covers each active task on a single-concurrency worker.
 Normal completion, terminal failure and revocation all release protection.
 The failure handler also runs in the parent when a child is killed, where
