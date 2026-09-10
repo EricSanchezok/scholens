@@ -163,3 +163,13 @@ a visible message older than the configured waiting budget for three minutes, an
 visible dead-letter message. Missing idle SQS metrics are non-breaching. The default
 waiting budget is 30 minutes for serial background work; use 60 seconds for conversation.
 These alerts report delay/failure and never scale instances or replay failed work.
+
+## Admitted background workers
+
+[ADR 0054](../../docs/decisions/0054-admitted-background-workers.md) owns the worker
+lifecycle. `BackgroundMode=resident` preserves the previous deployment. The reviewed
+`admitted` mode scales only document/research/maintenance services to zero and enables
+one-shot task definitions with hard aggregate memory and 0.5-vCPU limits. Deploy
+`background.yml` with task revisions, role ARNs and queue outputs from this product;
+its registrations are disabled by default. Platform admission must be installed and
+healthy before enabling them. API, web and conversation remain independent services.

@@ -187,6 +187,7 @@ run_deployment() {
       deploy/ecs/scholens-foundation-bootstrap.yml \
       deploy/ecs/scholens-foundation.yml \
       deploy/ecs/scholens-production.yml \
+      deploy/personal/background.yml \
       deploy/personal/valkey/runtime.yml
     if grep -En '(^|[[:space:]])(&[[:alnum:]_-]+|\*[[:alnum:]_-]+|<<:)' \
       deploy/ecs/scholens-foundation-bootstrap.yml \

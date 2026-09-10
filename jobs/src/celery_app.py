@@ -11,6 +11,7 @@ from scholens_job_contracts import JobQueue, PDF_TEXT_REPAIR_TASK_NAME
 from src.observability import configure_jobs_observability
 from src.pdf import validate_pdf_runtime_configuration
 from src.task_protection import register_task_protection_signals
+from src.oneshot import OneShotConsumer
 from src.webhook_signing import callback_base_url
 
 load_dotenv()
@@ -54,7 +55,17 @@ def _transport_options(broker_url: str) -> dict[str, object]:
 
 
 BROKER_URL = _broker_url()
-celery_app = Celery("scholens_tasks", broker=BROKER_URL, include=["src.tasks"])
+celery_app = Celery(
+    "scholens_tasks",
+    broker=BROKER_URL,
+    include=["src.tasks"],
+    task_cls=(
+        "src.oneshot:OneShotTask"
+        if os.getenv("SCHOLENS_WORKER_ONE_SHOT") == "1"
+        else "celery.app.task:Task"
+    ),
+)
+celery_app.steps["consumer"].add(OneShotConsumer)
 
 celery_app.conf.update(
     task_serializer="json",
