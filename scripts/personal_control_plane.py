@@ -74,6 +74,11 @@ def main() -> None:
     parser.add_argument("--change-set-arn")
     parser.add_argument("--release-sha")
     parser.add_argument(
+        "--background-mode",
+        choices=["preserve", "resident", "admitted"],
+        default="preserve",
+    )
+    parser.add_argument(
         "--application-enabled", choices=["true", "false"], default="false"
     )
     args = parser.parse_args()
@@ -121,6 +126,10 @@ def main() -> None:
         raise ValueError("Existing stack must be stable before planning")
     previous = {x["ParameterKey"] for x in stack["Parameters"]}
     overrides = {"ExpectedAccountId": ACCOUNT}
+    if args.background_mode != "preserve":
+        if args.stage != "runtime":
+            raise ValueError("Worker mode only belongs to the runtime stack")
+        overrides["BackgroundMode"] = args.background_mode
     with tempfile.TemporaryDirectory(prefix="personal-plan-") as directory:
         folder = Path(directory)
         if args.stage == "runtime":

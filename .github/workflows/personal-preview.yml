@@ -27,6 +27,12 @@ on:
         default: 'true'
         type: choice
         options: ['true', 'false']
+      background_mode:
+        description: Preserve current worker mode or explicitly adopt/roll back admission
+        required: true
+        default: preserve
+        type: choice
+        options: [preserve, resident, admitted]
 
 permissions:
   contents: read
@@ -61,10 +67,11 @@ jobs:
           CHANGE_SET_ARN: ${{ inputs.change_set_arn }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           APPLICATION_ENABLED: ${{ inputs.application_enabled || 'false' }}
+          BACKGROUND_MODE: ${{ inputs.background_mode || 'preserve' }}
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
         run: |
           uv run --no-project --with PyYAML==6.0.3 python scripts/personal_control_plane.py runtime "$OPERATION" \
-            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED"
+            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED" --background-mode "$BACKGROUND_MODE"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: inputs.operation == 'plan'
         with:
