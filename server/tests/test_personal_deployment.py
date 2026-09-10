@@ -78,10 +78,34 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
     assert len(services) == 6
     for service in services:
         assert service["LaunchType"] == "EC2"
-        assert service["DesiredCount"] == {"Fn::If": ["RunApplication", 1, 0]}
+        assert service["DesiredCount"] in (
+            {"Fn::If": ["RunApplication", 1, 0]},
+            {"Fn::If": ["RunResidentBackground", 1, 0]},
+        )
         assert "NetworkConfiguration" not in service
         assert service["DeploymentConfiguration"]["MinimumHealthyPercent"] == 0
         assert service["DeploymentConfiguration"]["MaximumPercent"] == 100
+
+
+def test_admitted_workers_have_task_limits_and_do_not_change_resident_chat() -> None:
+    template = renderer.render("runtime")
+    assert template["Parameters"]["BackgroundMode"]["Default"] == "resident"
+    for name in ("Document", "Research", "Maintenance"):
+        task = template["Resources"][name + "WorkerTaskDefinition"]["Properties"]
+        assert task["Cpu"] == {
+            "Fn::If": ["AdmittedBackground", "512", {"Ref": "AWS::NoValue"}]
+        }
+        containers = task["ContainerDefinitions"]
+        limit = sum(c["Memory"] for c in containers)
+        assert task["Memory"]["Fn::If"][1] == str(limit)
+        worker = next(c for c in containers if c["Name"].endswith("-worker"))
+        env = {e["Name"]: e["Value"] for e in worker["Environment"]}
+        assert env["SCHOLENS_WORKER_ONE_SHOT"] == {
+            "Fn::If": ["AdmittedBackground", "1", "0"]
+        }
+    chat = template["Resources"]["ConversationWorkerTaskDefinition"]["Properties"]
+    assert "Cpu" not in chat
+    assert "SCHOLENS_WORKER_ONE_SHOT" not in json.dumps(chat)
 
 
 def test_personal_email_requires_explicit_cutover_opt_in() -> None:

@@ -206,6 +206,21 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "AllowedPattern": "https://.+/api/mcp",
     }
     template["Parameters"]["ApplicationEnabled"]["Default"] = "false"
+    template["Parameters"]["BackgroundMode"] = {
+        "Type": "String",
+        "Default": "resident",
+        "AllowedValues": ["resident", "admitted"],
+    }
+    template["Conditions"]["AdmittedBackground"] = {
+        "Fn::Equals": [{"Ref": "BackgroundMode"}, "admitted"]
+    }
+    template["Conditions"]["RunResidentBackground"] = {
+        "Fn::And": [
+            {"Condition": "RunApplication"},
+            {"Fn::Not": [{"Condition": "AdmittedBackground"}]},
+        ]
+    }
+    background = {"document-worker", "research-worker", "maintenance-worker"}
     template["Parameters"]["EmailDeliveryEnabled"] = {
         "Type": "String",
         "Default": "false",
@@ -236,6 +251,12 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 props.pop(key, None)
             props["LaunchType"] = "EC2"
             props["DesiredCount"] = {"Fn::If": ["RunApplication", 1, 0]}
+            if name in {
+                "DocumentWorkerService",
+                "ResearchWorkerService",
+                "MaintenanceWorkerService",
+            }:
+                props["DesiredCount"] = {"Fn::If": ["RunResidentBackground", 1, 0]}
             props["DeploymentConfiguration"].update(
                 {"MinimumHealthyPercent": 0, "MaximumPercent": 100}
             )
@@ -312,6 +333,10 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                         "Retries": 3,
                         "StartPeriod": 90,
                     }
+                if container["Name"] in background:
+                    env["SCHOLENS_WORKER_ONE_SHOT"] = {
+                        "Fn::If": ["AdmittedBackground", "1", "0"]
+                    }
                 if "SCHOLIGHT_MCP_URL" in env:
                     env["SCHOLIGHT_MCP_URL"] = {"Ref": "ScholightMcpUrl"}
                 for limit in (
@@ -324,6 +349,17 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 container["Environment"] = [
                     {"Name": k, "Value": v} for k, v in env.items()
                 ]
+            if any(c["Name"] in background for c in containers):
+                props["Cpu"] = {
+                    "Fn::If": ["AdmittedBackground", "512", {"Ref": "AWS::NoValue"}]
+                }
+                props["Memory"] = {
+                    "Fn::If": [
+                        "AdmittedBackground",
+                        str(sum(c["Memory"] for c in containers)),
+                        {"Ref": "AWS::NoValue"},
+                    ]
+                }
     template["Outputs"] = {
         name: {"Value": {"Ref": name}}
         for name, r in resources.items()

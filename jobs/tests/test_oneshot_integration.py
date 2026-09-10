@@ -13,9 +13,14 @@ import pytest
 @pytest.mark.skipif(
     not os.getenv("SCHOLENS_TEST_BROKER_URL"), reason="isolated RabbitMQ not configured"
 )
-def test_real_prefork_worker_acknowledges_only_one_message(tmp_path: Path) -> None:
+def test_real_prefork_worker_acknowledges_only_one_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     queue = "oneshot-" + uuid.uuid4().hex
     broker = os.environ["SCHOLENS_TEST_BROKER_URL"]
+    # Other tests initialize the product app; this probe owns both connections.
+    monkeypatch.setenv("CELERY_BROKER_URL", broker)
+    monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
     (tmp_path / "probe.py").write_text(
         "import os\n"
         "from celery import Celery\n"
@@ -39,7 +44,7 @@ def test_real_prefork_worker_acknowledges_only_one_message(tmp_path: Path) -> No
         channel.queue_declare(queue=queue, durable=True, auto_delete=False)
         try:
             for _ in range(2):
-                app.send_task("probe.noop", queue=queue)
+                app.send_task("probe.noop", queue=queue, ignore_result=True)
             result = subprocess.run(
                 [
                     sys.executable,

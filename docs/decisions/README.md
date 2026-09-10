@@ -33,6 +33,7 @@ change what the accepted record decided.
 ## Accepted decisions
 
 - [ADR 0053: Explicit single-host runtime endpoints](./0053-explicit-single-host-runtime.md)
+- [ADR 0054: Admit background workers on the shared host](./0054-admitted-background-workers.md)
 
 - [ADR 0001: Independent web application](./0001-independent-web-application.md)
 - [ADR 0002: DTCG token source of truth](./0002-dtcg-token-source-of-truth.md)

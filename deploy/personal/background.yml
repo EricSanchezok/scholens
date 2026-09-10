@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scholens registrations and least-privilege host admission grants.
+Parameters:
+  ExpectedAccountId: {Type: String, AllowedPattern: '[0-9]{12}'}
+  ClusterArn: {Type: String}
+  HostRoleName: {Type: String}
+  Enabled: {Type: String, Default: 'false', AllowedValues: ['false', 'true']}
+  DocumentTaskArn: {Type: String}
+  DocumentTaskRoleArn: {Type: String}
+  DocumentExecutionRoleArn: {Type: String}
+  DocumentQueueUrl: {Type: String}
+  DocumentQueueArn: {Type: String}
+  ResearchTaskArn: {Type: String}
+  ResearchTaskRoleArn: {Type: String}
+  ResearchExecutionRoleArn: {Type: String}
+  ResearchQueueUrl: {Type: String}
+  ResearchQueueArn: {Type: String}
+  MaintenanceTaskArn: {Type: String}
+  MaintenanceTaskRoleArn: {Type: String}
+  MaintenanceExecutionRoleArn: {Type: String}
+  MaintenanceQueueUrl: {Type: String}
+  MaintenanceQueueArn: {Type: String}
+Rules:
+  ExpectedAccount:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::AccountId', !Ref ExpectedAccountId]
+        AssertDescription: Only the reviewed personal account is allowed.
+Resources:
+  AdmissionGrant:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ScholensBackgroundAdmission
+      Roles: [!Ref HostRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ecs:RunTask
+            Resource: [!Ref DocumentTaskArn, !Ref ResearchTaskArn, !Ref MaintenanceTaskArn]
+            Condition: {ArnEquals: {'ecs:cluster': !Ref ClusterArn}}
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource: [!Ref DocumentTaskRoleArn, !Ref DocumentExecutionRoleArn, !Ref ResearchTaskRoleArn, !Ref ResearchExecutionRoleArn, !Ref MaintenanceTaskRoleArn, !Ref MaintenanceExecutionRoleArn]
+            Condition: {StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}}
+          - Effect: Allow
+            Action: sqs:GetQueueAttributes
+            Resource: [!Ref DocumentQueueArn, !Ref ResearchQueueArn, !Ref MaintenanceQueueArn]
+  DocumentRegistration:
+    Type: AWS::SSM::Parameter
+    DependsOn: AdmissionGrant
+    Properties:
+      Name: /sanchezcloud/personal/background/scholens-document
+      Type: String
+      Value: !Sub '{"version":1,"name":"scholens-document","enabled":${Enabled},"task_definition":"${DocumentTaskArn}","memory_mib":2624,"priority":0,"queue_url":"${DocumentQueueUrl}"}'
+  ResearchRegistration:
+    Type: AWS::SSM::Parameter
+    DependsOn: AdmissionGrant
+    Properties:
+      Name: /sanchezcloud/personal/background/scholens-research
+      Type: String
+      Value: !Sub '{"version":1,"name":"scholens-research","enabled":${Enabled},"task_definition":"${ResearchTaskArn}","memory_mib":832,"priority":0,"queue_url":"${ResearchQueueUrl}"}'
+  MaintenanceRegistration:
+    Type: AWS::SSM::Parameter
+    DependsOn: AdmissionGrant
+    Properties:
+      Name: /sanchezcloud/personal/background/scholens-maintenance
+      Type: String
+      Value: !Sub '{"version":1,"name":"scholens-maintenance","enabled":${Enabled},"task_definition":"${MaintenanceTaskArn}","memory_mib":576,"priority":0,"queue_url":"${MaintenanceQueueUrl}"}'
