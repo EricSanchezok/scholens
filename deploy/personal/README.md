@@ -177,3 +177,33 @@ The manual runtime workflow's `background_mode` input defaults to `preserve` so 
 ordinary product release keeps admission enabled. Explicit `admitted` or `resident`
 changes are included in the reviewed change set. Stop competing consumers and
 refresh product registrations to the new immutable task revisions before admission.
+
+### Every subsequent product release
+
+The background registration stack is separate from the application runtime stack.
+Deploying new images with `background_mode=preserve` does **not** update its pinned
+worker revisions. Refresh it during every worker release and rollback:
+
+1. Set the existing `background.yml` stack's `Enabled` parameter to `false` through
+   a reviewed change set. Wait for the controller's registration refresh (up to
+   five minutes), then let any active Scholens task finish. Other products and
+   their registrations remain enabled; queue messages remain durable.
+2. Apply the reviewed product migration and runtime release while preserving
+   `BackgroundMode=admitted`. Document, research and maintenance services must
+   still have desired count zero; API, Web and conversation use their independent
+   services.
+3. Read the three worker task-definition ARNs and their task/execution-role ARNs
+   from the resulting runtime. Update the **existing** background stack using
+   those exact revisions, preserving its queue URLs, queue ARNs, cluster and host
+   role. Review the SSM registrations and `RunTask`/`PassRole` grant together;
+   keep `Enabled=false` until the stack update succeeds.
+4. Enable the same registrations, wait for the controller refresh, and verify
+   the next admitted task uses the intended revision. Confirm the queue delivery
+   settles and Account Center, Scholight, PostgreSQL, Valkey and the edge retain
+   their running task identities.
+
+Use this sequence for rollback with the selected compatible prior images and
+their resulting task revisions. Never re-enable resident workers while admitted
+consumers can still run, and never roll back shared database data as part of an
+application release. These registration updates remain explicit operator
+operations; the personal runtime workflow does not perform them automatically.
