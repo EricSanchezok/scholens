@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import tempfile
+import tarfile
 import time
 from typing import Any
 
@@ -46,7 +49,7 @@ def guard_change(change: dict[str, Any], stage: str, revision: str) -> None:
         or change.get("Status") != "CREATE_COMPLETE"
     ):
         raise ValueError("Change set does not belong to the selected stable stack")
-    if change.get("Description") != f"personal:{stage}:{revision}":
+    if change.get("Description", "").split(":")[:3] != ["personal", stage, revision]:
         raise ValueError("Change set source revision does not match reviewed code")
     for entry in change.get("Changes", []):
         resource = entry["ResourceChange"]
@@ -65,6 +68,19 @@ def guard_change(change: dict[str, Any], stage: str, revision: str) -> None:
             raise ValueError(
                 "Managed fixed-cost resources are outside the personal topology"
             )
+
+
+def guard_plan_freshness(change: dict, current: dict, now: datetime) -> None:
+    if change.get("ExecutionStatus") != "AVAILABLE":
+        return
+    created = datetime.fromisoformat(change["CreationTime"])
+    updated = datetime.fromisoformat(
+        current.get("LastUpdatedTime", current["CreationTime"])
+    )
+    if not 0 <= (now - created).total_seconds() <= 86400:
+        raise ValueError("Plan expired; review a new change set")
+    if updated > created:
+        raise ValueError("Runtime changed after planning")
 
 
 def main() -> None:
@@ -100,6 +116,47 @@ def main() -> None:
             )
         change = aws("cloudformation", "describe-change-set", "--change-set-name", arn)
         guard_change(change, args.stage, revision)
+        current_stack = aws(
+            "cloudformation", "describe-stacks", "--stack-name", STACKS[args.stage]
+        )["Stacks"][0]
+        guard_plan_freshness(change, current_stack, datetime.now(UTC))
+        if args.stage == "runtime":
+            from release_admission import AdmissionRelease
+
+            planned = {
+                p["ParameterKey"]: p.get("ParameterValue") for p in change["Parameters"]
+            }
+            sha = planned.get("ReleaseSha", "")
+            if sha != args.release_sha:
+                raise ValueError("Selected release differs from the reviewed plan")
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "manifest.json"
+                aws(
+                    "s3api",
+                    "get-object",
+                    "--bucket",
+                    BUCKET,
+                    "--key",
+                    f"releases/{sha}/manifest.json",
+                    str(path),
+                )
+                if (
+                    change["Description"].split(":")[-1]
+                    != hashlib.sha256(path.read_bytes()).hexdigest()
+                ):
+                    raise ValueError("Manifest changed after planning")
+            if change.get("ExecutionStatus") != "AVAILABLE":
+                actual = {
+                    p["ParameterKey"]: p.get("ParameterValue")
+                    for p in current_stack["Parameters"]
+                }
+                if current_stack["StackStatus"] == "UPDATE_COMPLETE" and any(
+                    actual.get(k) != planned.get(k)
+                    for k in ("ReleaseSha", "ApiImage", "WebImage", "JobsImage")
+                ):
+                    raise ValueError("Another release superseded this operation")
+            AdmissionRelease(arn).run()
+            return
         aws("cloudformation", "execute-change-set", "--change-set-name", arn)
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
@@ -126,6 +183,7 @@ def main() -> None:
         raise ValueError("Existing stack must be stable before planning")
     previous = {x["ParameterKey"] for x in stack["Parameters"]}
     overrides = {"ExpectedAccountId": ACCOUNT}
+    manifest_hash = ""
     if args.background_mode != "preserve":
         if args.stage != "runtime":
             raise ValueError("Worker mode only belongs to the runtime stack")
@@ -150,6 +208,23 @@ def main() -> None:
                 check=True,
             )
             manifest = folder / "manifest.json"
+            source = folder / "source"
+            archive = folder / "source.tar"
+            subprocess.run(
+                [
+                    "git",
+                    "archive",
+                    "--format=tar",
+                    "--output",
+                    str(archive),
+                    sha,
+                    "server",
+                    "deploy/ecs/scholens-production.yml",
+                ],
+                check=True,
+            )
+            with tarfile.open(archive) as tar:
+                tar.extractall(source, filter="data")
             aws(
                 "s3api",
                 "get-object",
@@ -174,6 +249,8 @@ def main() -> None:
                     REGION,
                     "--expected-platform",
                     "linux/arm64",
+                    "--source-root",
+                    str(source),
                 ],
                 check=True,
             )
@@ -213,6 +290,7 @@ def main() -> None:
                     check=True,
                 )
             data = json.loads(manifest.read_text())
+            manifest_hash = hashlib.sha256(manifest.read_bytes()).hexdigest()
             overrides.update(
                 {
                     "ReleaseSha": sha,
@@ -239,7 +317,8 @@ def main() -> None:
             "StackName": STACKS[args.stage],
             "ChangeSetName": name,
             "ChangeSetType": "UPDATE",
-            "Description": f"personal:{args.stage}:{revision}",
+            "Description": f"personal:{args.stage}:{revision}"
+            + (":" + manifest_hash if manifest_hash else ""),
             "Parameters": parameters,
             "Capabilities": ["CAPABILITY_NAMED_IAM"],
         }

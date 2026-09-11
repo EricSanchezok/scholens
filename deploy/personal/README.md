@@ -1,7 +1,7 @@
-# Personal-account ECS deployment
+# Personal-account production deployment
 
-This is the isolated migration target. The existing Singapore Fargate package and
-release workflows remain available until a separately approved production cutover.
+Production uses account `669409472143`, region `ap-south-2`. Normal releases are
+manual and use the personal workflows; retired workflows are archived outside Actions.
 `scripts/personal_deployment.py` renders three CloudFormation JSON templates from the
 canonical product contracts under `deploy/ecs/`; generated files are deployment
 artifacts, not a second editable copy of those contracts.
@@ -180,30 +180,26 @@ refresh product registrations to the new immutable task revisions before admissi
 
 ### Every subsequent product release
 
-The background registration stack is separate from the application runtime stack.
-Deploying new images with `background_mode=preserve` does **not** update its pinned
-worker revisions. Refresh it during every worker release and rollback:
+Manually publish a merged SHA with `personal-publish.yml`, run the protected product
+migration workflow when an attestation is needed, then use `personal-preview.yml`
+with `operation=plan`. Review its exact change set before `operation=apply`. Select
+an earlier compatible release SHA for rollback through the same current control code.
+The historical `personal-preview` name remains for its configured OIDC identity.
 
-1. Set the existing `background.yml` stack's `Enabled` parameter to `false` through
-   a reviewed change set. Wait for the controller's registration refresh (up to
-   five minutes), then let any active Scholens task finish. Other products and
-   their registrations remain enabled; queue messages remain durable.
-2. Apply the reviewed product migration and runtime release while preserving
-   `BackgroundMode=admitted`. Document, research and maintenance services must
-   still have desired count zero; API, Web and conversation use their independent
-   services.
-3. Read the three worker task-definition ARNs and their task/execution-role ARNs
-   from the resulting runtime. Update the **existing** background stack using
-   those exact revisions, preserving its queue URLs, queue ARNs, cluster and host
-   role. Review the SSM registrations and `RunTask`/`PassRole` grant together;
-   keep `Enabled=false` until the stack update succeeds.
-4. Enable the same registrations, wait for the controller refresh, and verify
-   the next admitted task uses the intended revision. Confirm the queue delivery
-   settles and Account Center, Scholight, PostgreSQL, Valkey and the edge retain
-   their running task identities.
+Application apply automatically disables only this product's background registrations,
+requires the live controller to acknowledge their exact SSM versions, and waits up to
+20 minutes for actual task termination, including STOPPING tasks. It then applies the
+runtime change, refreshes the three task revisions and RunTask/PassRole grant together,
+restores the preceding enabled flag, and waits for acknowledgement again. Other
+products and their schedules stay enabled. Durable checkpoints under the release
+bucket's `cloudformation/personal/releases/` prefix allow the same operation to resume
+without repeating completed runtime or registration updates. A timeout leaves admission
+paused; it never kills a user's task. Failed CloudFormation updates require investigation
+or a newly reviewed compatible rollback before restoring the recorded enabled flag.
 
-Use this sequence for rollback with the selected compatible prior images and
-their resulting task revisions. Never re-enable resident workers while admitted
-consumers can still run, and never roll back shared database data as part of an
-application release. These registration updates remain explicit operator
-operations; the personal runtime workflow does not perform them automatically.
+Plans bind the exact manifest bytes and control SHA, expire after 24 hours before
+execution, and reject intervening runtime changes. Rollback validates manifests against
+the selected commit's source files without executing that commit's control scripts.
+Bootstrap supplies the exact Platform host role ARN for the registration IAM grant.
+An ordinary release must preserve `BackgroundMode=admitted`. PostgreSQL, Valkey,
+Account Center, Scholight and the common edge remain outside this runtime operation.
