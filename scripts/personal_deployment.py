@@ -137,6 +137,104 @@ def foundation(template: dict[str, Any]) -> dict[str, Any]:
 
 def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
     template["Parameters"]["RdsSecurityGroupId"].pop("Default", None)
+    template["Parameters"]["BackgroundHostRoleArn"] = {
+        "Type": "String",
+        "AllowedPattern": r"^arn:aws:iam::[0-9]{12}:role/sanchezcloud-personal-foundation-HostRole-[A-Za-z0-9]+$",
+    }
+    registrations = [
+        {
+            "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sanchezcloud/personal/background/scholens-"
+            + name
+        }
+        for name in ("document", "research", "maintenance")
+    ]
+    region = {"StringEquals": {"aws:RequestedRegion": {"Ref": "AWS::Region"}}}
+    template["Resources"]["ProductionDeployRole"]["Properties"]["Policies"].append(
+        {
+            "PolicyName": "CoordinateProductAdmission",
+            "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "cloudformation:CreateChangeSet",
+                            "cloudformation:DescribeChangeSet",
+                            "cloudformation:ExecuteChangeSet",
+                            "cloudformation:DescribeStacks",
+                            "cloudformation:GetTemplate",
+                        ],
+                        "Resource": {
+                            "Fn::Sub": "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/scholens-personal-background/*"
+                        },
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+                        "Resource": registrations
+                        + [
+                            {
+                                "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sanchezcloud/personal/admission-status"
+                            }
+                        ],
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["ecs:ListTasks", "ecs:DescribeTaskDefinition"],
+                        "Resource": "*",
+                        "Condition": region,
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": "ecs:DescribeTasks",
+                        "Resource": {
+                            "Fn::Sub": "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/${ClusterName}/*"
+                        },
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["s3:GetObject", "s3:PutObject"],
+                        "Resource": {
+                            "Fn::Sub": "arn:aws:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/cloudformation/personal/releases/*"
+                        },
+                    },
+                ],
+            },
+        }
+    )
+    template["Resources"]["RuntimeCloudFormationServiceRole"]["Properties"][
+        "Policies"
+    ] = [
+        {
+            "PolicyName": "ManageProductAdmissionRegistration",
+            "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:PutParameter",
+                            "ssm:GetParameter",
+                            "ssm:AddTagsToResource",
+                            "ssm:RemoveTagsFromResource",
+                            "ssm:ListTagsForResource",
+                        ],
+                        "Resource": registrations,
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "iam:GetRole",
+                            "iam:GetRolePolicy",
+                            "iam:PutRolePolicy",
+                            "iam:DeleteRolePolicy",
+                        ],
+                        "Resource": {"Ref": "BackgroundHostRoleArn"},
+                    },
+                ],
+            },
+        }
+    ]
 
     # The conversation process has its own role, with the same API capability boundary.
     def add_conversation_role(value: Any) -> None:

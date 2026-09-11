@@ -1,15 +1,10 @@
-# Scholens ECS production operations
+# Scholens legacy ECS reference
 
-This directory owns the existing managed production deployment for Scholens. Production runs
-in `ap-southeast-1` on the shared SanchezCloud VPC and ECS cluster. It does not use Docker Compose, RabbitMQ, Redis, Celery result-backend, or the legacy client.
-The isolated EC2 migration package is documented in [personal deployment](../personal/README.md).
-
-The personal-account migration adds an opt-in runtime endpoint mode described in
-[ADR 0053](../../docs/decisions/0053-explicit-single-host-runtime.md). Its provisioned
-single-host workloads must set `RUNTIME_DEPLOYMENT_MODE=single-host`, mount the private
-service CA, set `AUTH_PG_SSL_ROOT_CERT`, and supply a system trust bundle containing that
-CA for TLS cache connections. This does not activate a second deployment or change the
-existing Singapore defaults by itself.
+Current production runs in personal AWS account `669409472143`, `ap-south-2`.
+Use [personal production operations](../personal/README.md). The managed Fargate
+architecture below is retained as a historical reconstruction reference; its
+workflows are archived under `deploy/legacy/workflows/` and are not executable Actions.
+Do not use this package for a normal deployment or application rollback.
 
 ## Architecture
 

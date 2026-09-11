@@ -1,10 +1,10 @@
-name: Publish personal ARM64 images
+name: Publish production ARM64 images
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Commit or tag already merged into main
+        description: Revision already merged into main
         required: false
         default: main
         type: string
@@ -33,6 +33,7 @@ jobs:
       - name: Resolve and validate immutable revision
         id: revision
         run: |
+          test "$GITHUB_REF" = refs/heads/main
           release_sha=$(git rev-parse HEAD)
           git merge-base --is-ancestor "$release_sha" origin/main
           echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"

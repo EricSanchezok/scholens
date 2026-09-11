@@ -1132,7 +1132,7 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
     }
     assert environment["SHARED_AVATAR_URL_TTL_SECONDS"] == "900"
 
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
     readme = (ECS / "README.md").read_text(encoding="utf-8")
@@ -1718,7 +1718,7 @@ def test_identity_revision_is_consistent_across_runtime_and_ci() -> None:
 def test_workflows_use_the_scoped_dependency_reader_app() -> None:
     workflows = "\n".join(
         (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-        for name in ("ci.yml", "publish.yml")
+        for name in ("ci.yml", "personal-publish.yml")
     )
 
     assert "actions/create-github-app-token@" in workflows
@@ -1732,7 +1732,9 @@ def test_workflows_use_the_scoped_dependency_reader_app() -> None:
 
 def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     workflows = {
-        name: (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        name: (ROOT / "deploy" / "legacy" / "workflows" / name).read_text(
+            encoding="utf-8"
+        )
         for name in ("publish.yml", "database-production.yml", "release.yml")
     }
 
@@ -1798,7 +1800,7 @@ def test_production_dashboard_uses_cloudwatch_metric_expression_shape() -> None:
 
 
 def test_release_uses_current_control_plane_for_candidate_and_rollback_data() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
 
@@ -1820,7 +1822,7 @@ def test_release_uses_current_control_plane_for_candidate_and_rollback_data() ->
 
 
 def test_release_rejects_an_incomplete_first_runtime_stack() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
     readme = (ECS / "README.md").read_text(encoding="utf-8")
@@ -1843,7 +1845,7 @@ def test_release_rejects_an_incomplete_first_runtime_stack() -> None:
 
 
 def test_release_stages_compatible_runtime_and_recovers_candidate_failures() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
 
@@ -1913,7 +1915,7 @@ def test_release_stages_compatible_runtime_and_recovers_candidate_failures() -> 
 
 
 def test_publish_is_retry_safe_at_every_immutable_commit_boundary() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "publish.yml").read_text(
         encoding="utf-8"
     )
 
@@ -1931,7 +1933,7 @@ def test_publish_is_retry_safe_at_every_immutable_commit_boundary() -> None:
 
 
 def test_web_image_and_source_maps_share_one_buildkit_graph() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "publish.yml").read_text(
         encoding="utf-8"
     )
     dockerfile = (ROOT / "web" / "Dockerfile").read_text(encoding="utf-8")
@@ -1986,7 +1988,7 @@ def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
 
 
 def test_release_objects_are_conditionally_created_and_byte_compared() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+    workflow = (ROOT / "deploy" / "legacy" / "workflows" / "publish.yml").read_text(
         encoding="utf-8"
     )
 
@@ -2002,9 +2004,9 @@ def test_release_objects_are_conditionally_created_and_byte_compared() -> None:
 
 
 def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "database-production.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (
+        ROOT / "deploy" / "legacy" / "workflows" / "database-production.yml"
+    ).read_text(encoding="utf-8")
 
     assert "aws ecs wait tasks-stopped" not in workflow
     assert "deadline=$((SECONDS + 3600))" in workflow
@@ -2027,7 +2029,7 @@ def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -
     readme = (ECS / "README.md").read_text(encoding="utf-8")
     bootstrap = (ECS / "scholens-foundation-bootstrap.yml").read_text(encoding="utf-8")
     workflow = (
-        ROOT / ".github" / "workflows" / "infrastructure-production.yml"
+        ROOT / "deploy" / "legacy" / "workflows" / "infrastructure-production.yml"
     ).read_text(encoding="utf-8")
 
     for contract in (
@@ -2060,7 +2062,7 @@ def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -
 
 def test_foundation_plan_fails_closed_except_for_aws_no_changes() -> None:
     workflow = (
-        ROOT / ".github" / "workflows" / "infrastructure-production.yml"
+        ROOT / "deploy" / "legacy" / "workflows" / "infrastructure-production.yml"
     ).read_text(encoding="utf-8")
     wait_block = workflow.split("wait change-set-create-complete", 1)[1].split(
         "describe-change-set", 1
@@ -2190,7 +2192,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
 def test_account_center_url_is_a_web_build_value_not_runtime_configuration() -> None:
     readme = (ECS / "README.md").read_text(encoding="utf-8")
     runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
-    publish = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+    publish = (ROOT / "deploy" / "legacy" / "workflows" / "publish.yml").read_text(
         encoding="utf-8"
     )
 
@@ -2800,10 +2802,10 @@ def test_external_actions_are_pinned_to_full_commit_shas() -> None:
     action_reference = re.compile(r"^\s*uses:\s*([^\s]+)@([^\s#]+)", re.MULTILINE)
     for name in (
         "ci.yml",
-        "database-production.yml",
-        "infrastructure-production.yml",
-        "publish.yml",
-        "release.yml",
+        "personal-database.yml",
+        "personal-infrastructure.yml",
+        "personal-publish.yml",
+        "personal-preview.yml",
         "sanchezcloud-identity-compat.yml",
     ):
         workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
