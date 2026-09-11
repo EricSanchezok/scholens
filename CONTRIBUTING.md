@@ -19,7 +19,7 @@ will change:
 - [`docs/architecture/`](./docs/architecture/) for service and data ownership;
 - [`docs/architecture/contract-evolution.md`](./docs/architecture/contract-evolution.md)
   for API, MCP, job, and database compatibility;
-- [`deploy/ecs/README.md`](./deploy/ecs/README.md) for the current
+- [`deploy/personal/README.md`](./deploy/personal/README.md) for the current
   production boundary.
 
 Do not begin by copying behavior from legacy `client/`. `web/` is the canonical
@@ -29,7 +29,7 @@ architecture contract.
 ## Daily workflow
 
 1. Start from an up-to-date `main` and create a short-lived task branch. Agent
-   branches use the configured `codex/` prefix; human branches should use a
+   branches use the configured `synergy/` prefix; human branches should use a
    similarly descriptive name.
 2. Inspect the current implementation, tests, generated artifacts, and owning
    documentation before editing. Do not infer a missing contract from UI alone.
@@ -112,7 +112,7 @@ it without reconstructing local context. Complete the repository template:
 Do not merge with unresolved review threads, a stale base, or a failing required
 check. `main` uses linear history and squash merges. Passing CI proves only the
 surfaces represented by its required aggregate; it is not authorization to run
-the manual production Release workflow.
+the manual production publish or deployment workflows.
 
 ## Where information belongs
 

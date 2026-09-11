@@ -16,7 +16,7 @@ and implementation snapshots.
 | Backend API and capability ownership   | [`server/README.md`](../server/README.md) and [`architecture/backend-capabilities.md`](./architecture/backend-capabilities.md) |
 | Async processing                       | [`jobs/README.md`](../jobs/README.md)                                                                                          |
 | Shared Python packages                 | [`packages/README.md`](../packages/README.md)                                                                                  |
-| Production release                     | [`deploy/ecs/README.md`](../deploy/ecs/README.md)                                                                              |
+| Production release                     | [`deploy/personal/README.md`](../deploy/personal/README.md)                                                                    |
 
 ## Architecture and decisions
 
