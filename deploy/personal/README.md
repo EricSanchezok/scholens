@@ -51,7 +51,7 @@ with explicit `RUNTIME_DEPLOYMENT_MODE=single-host`.
 Each service runs one task when enabled; workers retain concurrency one. Container CPU,
 soft memory and hard memory limits are explicit. Deployments stop the old task before
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
-short preview outage to avoid static-port conflicts and doubled memory use.
+short product outage to avoid static-port conflicts and doubled memory use.
 
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
@@ -67,44 +67,48 @@ personal Celery worker reports a local heartbeat and has an explicit ECS health
 check, so Conversation does not inherit the API image's HTTP probe. Queue age and
 failed tasks remain separate operational signals from event-loop liveness.
 
-`ApplicationEnabled` defaults to false. Restoring a database does not authorize starting
-workers or replaying copied jobs. Before enabling services, provision database/cache
-TLS, restore and reconcile data, inject independent preview authentication secrets,
-keep `SCHOLENS_EMAIL_DELIVERY_ENABLED=false`, configure the authenticated edge, and verify all endpoints and
-queue URLs point to the intended environment. `ScholightMcpUrl` explicitly preserves
-the existing external Scholight API; its production database connection is unchanged.
+`ApplicationEnabled` defaults to false for a new installation. Production is already
+enabled. Ordinary releases preserve its reviewed authentication, email and endpoint
+configuration. `ScholightMcpUrl` points to the unchanged public Scholight API, whose
+lean service and shared database now also run in the personal account.
 
-These templates prepare infrastructure; they are not evidence of a completed restore,
-ARM64 image smoke test, application rollout or load rehearsal. Those execution results
-belong in the migration record. The adapter is owned by Scholens maintainers and can be
-folded into the sole deployment package after old-account cutover and decommissioning.
+For an isolated recovery rehearsal, provision database/cache TLS, restore and reconcile
+data, inject independent authentication secrets, keep email delivery disabled, and
+verify every endpoint and queue belongs to that rehearsal before enabling services.
+Restoring a database does not authorize replaying copied jobs. Record actual restore,
+ARM64 startup and functional verification results separately from template generation.
 
 ## Manual ARM64 image publication
 
 `personal-publish.yml` accepts only a revision already merged into main, runs the shared
 CI workflow, and uses the `personal-image-publish` environment. Configure its AWS account,
-region, publishing role, preview API URL and Account Center URL from the reviewed stack
+region, publishing role, production API URL and Account Center URL from the reviewed stack
 outputs. The existing repository Identity reader key is passed as a BuildKit secret.
 
 The job runs on native ARM64, overrides both Web bake targets to ARM64, imports native
 Python dependencies in the resulting images, and scans the ARM64 child digest of each
 OCI index. The existing release manifest format records `linux/arm64` in each image scan;
-all components must agree. CLI manifest verification defaults to `linux/amd64` for the
-managed production path and requires explicit `--expected-platform linux/arm64` here.
+all components must agree. The legacy CLI default is `linux/amd64`; production
+verification requires explicit `--expected-platform linux/arm64`.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
 
 The personal renderer defaults `EmailDeliveryEnabled` to `false`. This suppresses
 both identity email senders and the project-invitation delivery supervisor, even if
-credentials are accidentally present. Set it to `true` only during the reviewed
-production cutover, after restoring the production sender credentials and checking
-pending invitations. Managed deployments retain the enabled default.
+credentials are accidentally present. Enable it only after reviewing the production
+sender credentials and pending invitations. Ordinary releases preserve the deployed
+value; isolated rehearsals keep it disabled.
 
-For production adoption, set `DomainName` to the production hostname and publish a new
-merged revision with the production `PRODUCTION_API_URL` and `ACCOUNT_CENTER_URL` in
-`personal-image-publish`. Web embeds these URLs at build time; reusing a preview
-manifest cannot change them. Keep the personal workflow environments and existing
-queue, secret, bucket and log identifiers: renaming durable resources is not part of
-cutover. Preserve the old account's release path until rollback is retired.
+Production uses its public `DomainName` and the production `PRODUCTION_API_URL` and
+`ACCOUNT_CENTER_URL` in `personal-image-publish`. Web embeds these URLs at build time;
+a rehearsal manifest cannot change them at deployment. The retained `personal-*`
+environments and `preview` queue, secret, bucket and log names identify production
+resources; their historical names do not imply an isolated test environment.
+
+Old-account workflows are archived under `deploy/legacy/workflows` and are not release
+or rollback entrypoints. Roll back through a compatible manifest in the personal
+account. Retired old runtime resources require reconstruction from a verified recovery
+backup; changing DNS cannot restore them. Shared production database data is never
+rolled back as part of an application release.
 
 
 ## Private Valkey runtime
@@ -139,7 +143,7 @@ The runtime accepts only merged ARM64 manifests containing the worker-heartbeat 
 rollback candidates must meet that compatibility floor. Starting services additionally
 requires a matching migration attestation and current database-contract verification.
 Use the personal database workflow before planning an enabled deployment. Neither
-workflow creates a GitHub Release or changes the old production environment.
+workflow creates a GitHub Release or targets the retired account.
 
 `personal-database.yml` uses OIDC to run a one-off EC2 ECS migration task in the private
 cluster. It exposes no PostgreSQL endpoint to a GitHub runner and grants the host no
