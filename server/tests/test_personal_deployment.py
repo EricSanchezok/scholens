@@ -87,7 +87,9 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
         assert service["DeploymentConfiguration"]["MaximumPercent"] == 100
 
 
-def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat() -> None:
+def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat() -> (
+    None
+):
     template = renderer.render("runtime")
     assert template["Parameters"]["BackgroundMode"]["Default"] == "resident"
     for name in ("Document", "Research", "Maintenance"):
