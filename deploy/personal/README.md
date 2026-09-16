@@ -173,7 +173,8 @@ These alerts report delay/failure and never scale instances or replay failed wor
 [ADR 0054](../../docs/decisions/0054-admitted-background-workers.md) owns the worker
 lifecycle. `BackgroundMode=resident` preserves the previous deployment. The reviewed
 `admitted` mode scales only document/research/maintenance services to zero and enables
-one-shot task definitions with hard aggregate memory and 0.5-vCPU limits. Deploy
+one-shot task definitions with explicit container hard memory bounds and soft placement reservations.
+Background CPU shares may use idle host CPU; the document embedder uses one thread. Deploy
 `background.yml` with task revisions, role ARNs and queue outputs from this product;
 its registrations are disabled by default. Platform admission must be installed and
 healthy before enabling them. API, web and conversation remain independent services.
@@ -207,3 +208,26 @@ the selected commit's source files without executing that commit's control scrip
 Bootstrap supplies the exact Platform host role ARN for the registration IAM grant.
 An ordinary release must preserve `BackgroundMode=admitted`. PostgreSQL, Valkey,
 Account Center, Scholight and the common edge remain outside this runtime operation.
+
+### Independent user and batch lanes
+
+Scholens document/research/maintenance registrations select Platform's `interactive`
+lane. Platform must first deploy the additive lane/resource contract with total
+concurrency one. Its later reviewed concurrency-two change permits Scholight batch
+work to run alongside a Scholens task. Preserve the existing 2,560/768/512 MiB
+worker container ceilings plus the 64 MiB initializer, but omit task-level memory
+and CPU so ECS placement uses the existing soft reservations and CPU shares.
+Release validation derives the hard total from all containers and rejects missing
+bounds. No database, queue or job-envelope migration is involved.
+
+Document workers accept at most five jobs or five minutes of new deliveries per
+launch, finishing the current delivery before exit. This reduces cold starts while
+retaining lane fairness and parent-side broker settlement. Update the document
+queue monitoring stack's `MaximumWaitSeconds` to 120; its three-minute evaluation
+window and dead-letter alarm remain unchanged. A 120-second pickup objective assumes
+an empty healthy interactive lane, not an existing same-product backlog.
+
+Rollback first sets Platform concurrency to one and reconciles all active tasks;
+then drain this product before restoring task definitions. Never restore the old
+single-intent controller over the new controller's multi-lane state. Do not purge,
+receive for inspection, or recreate production queues during this transition.

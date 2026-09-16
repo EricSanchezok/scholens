@@ -61,3 +61,8 @@ DeepSeek profiles and pins the official DeepSeek endpoint. Server and Jobs own
 credential lookup and supply this argument for product workloads. Omitting it
 retains the package's environment-provider API for non-product tools/tests; it
 is never the product fallback path.
+
+`SCHOLENS_EMBEDDING_THREADS` optionally bounds local ONNX intra-op threads (1–32)
+and sets inter-op threads to one. Unset retains ONNX defaults. Personal document
+workers set one; Server behavior is unchanged. This execution setting changes no
+model revision, dimensions, normalized-vector contract or stored artifact format.

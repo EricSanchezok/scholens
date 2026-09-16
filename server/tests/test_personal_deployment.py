@@ -87,17 +87,15 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
         assert service["DeploymentConfiguration"]["MaximumPercent"] == 100
 
 
-def test_admitted_workers_have_task_limits_and_do_not_change_resident_chat() -> None:
+def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat() -> None:
     template = renderer.render("runtime")
     assert template["Parameters"]["BackgroundMode"]["Default"] == "resident"
     for name in ("Document", "Research", "Maintenance"):
         task = template["Resources"][name + "WorkerTaskDefinition"]["Properties"]
-        assert task["Cpu"] == {
-            "Fn::If": ["AdmittedBackground", "512", {"Ref": "AWS::NoValue"}]
-        }
+        assert "Cpu" not in task
+        assert "Memory" not in task
         containers = task["ContainerDefinitions"]
-        limit = sum(c["Memory"] for c in containers)
-        assert task["Memory"]["Fn::If"][1] == str(limit)
+        assert all(c["Memory"] >= c["MemoryReservation"] > 0 for c in containers)
         worker = next(c for c in containers if c["Name"].endswith("-worker"))
         env = {e["Name"]: e["Value"] for e in worker["Environment"]}
         assert env["SCHOLENS_WORKER_ONE_SHOT"] == {

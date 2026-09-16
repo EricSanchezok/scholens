@@ -1,4 +1,4 @@
-"""Optional single-delivery Celery lifecycle for admitted ECS RunTask workers."""
+"""Bounded, broker-settled Celery lifecycle for admitted ECS RunTask workers."""
 
 from __future__ import annotations
 
@@ -15,19 +15,41 @@ from celery.worker.request import Request
 @dataclass
 class DrainState:
     started: float
+    max_tasks: int = 1
+    max_seconds: float = 300
     received_count: int = 0
     settled_count: int = 0
+    first_received: float | None = None
+    last_settled: float | None = None
 
-    def received(self) -> None:
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_tasks <= 5 or not 1 <= self.max_seconds <= 300:
+            raise ValueError(
+                "Worker drain must be bounded to five tasks and 300 seconds"
+            )
+
+    def received(self, *, now: float | None = None) -> None:
         self.received_count += 1
+        if self.first_received is None:
+            self.first_received = time.monotonic() if now is None else now
 
-    def settled(self) -> None:
+    def settled(self, *, now: float | None = None) -> None:
         self.settled_count += 1
+        self.last_settled = time.monotonic() if now is None else now
+
+    def stop_consuming(self, *, now: float) -> bool:
+        return self.received_count >= self.max_tasks or (
+            self.first_received is not None
+            and now - self.first_received >= self.max_seconds
+        )
 
     def should_exit(self, *, now: float) -> bool:
-        if self.settled_count and self.settled_count >= self.received_count:
-            return True
-        return not self.received_count and now - self.started >= 30
+        if self.received_count > self.settled_count:
+            return False
+        idle_since = (
+            self.last_settled if self.last_settled is not None else self.started
+        )
+        return self.stop_consuming(now=now) or now - idle_since >= 30
 
 
 drain = DrainState(started=time.monotonic())
@@ -73,7 +95,12 @@ class OneShotConsumer(bootsteps.StartStopStep):
             worker_state.should_stop = 0  # type: ignore[attr-defined]
             return
         self.started_once = True
-        drain = DrainState(started=time.monotonic())
+        drain = DrainState(
+            started=time.monotonic(),
+            max_tasks=int(os.getenv("SCHOLENS_WORKER_MAX_TASKS", "1")),
+            max_seconds=float(os.getenv("SCHOLENS_WORKER_MAX_SECONDS", "300")),
+        )
+        self.consumption_cancelled = False
         self.consumer = consumer
         signals.task_received.connect(self.received, weak=False)  # type: ignore[attr-defined]
         self.timer = consumer.timer.call_repeatedly(1.0, self.check)
@@ -81,11 +108,20 @@ class OneShotConsumer(bootsteps.StartStopStep):
     def received(self, sender: Any = None, **_kwargs: Any) -> None:
         if sender is self.consumer:
             drain.received()
-            # Do not reserve a second message after acknowledging the first.
+            if drain.stop_consuming(now=time.monotonic()):
+                self.cancel_consumption()
+
+    def cancel_consumption(self) -> None:
+        if not self.consumption_cancelled:
             self.consumer.task_consumer.cancel()
+            self.consumption_cancelled = True
 
     def check(self) -> None:
-        if drain.should_exit(now=time.monotonic()):
+        now = time.monotonic()
+        if drain.stop_consuming(now=now):
+            self.cancel_consumption()
+        if drain.should_exit(now=now):
+            self.cancel_consumption()
             worker_state.should_stop = 0  # type: ignore[attr-defined]
 
     def stop(self, consumer: Any) -> None:
