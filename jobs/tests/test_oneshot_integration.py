@@ -13,8 +13,9 @@ import pytest
 @pytest.mark.skipif(
     not os.getenv("SCHOLENS_TEST_BROKER_URL"), reason="isolated RabbitMQ not configured"
 )
-def test_real_prefork_worker_acknowledges_only_one_message(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("max_tasks", [1, 5])
+def test_real_prefork_worker_acknowledges_only_bounded_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, max_tasks: int
 ) -> None:
     queue = "oneshot-" + uuid.uuid4().hex
     broker = os.environ["SCHOLENS_TEST_BROKER_URL"]
@@ -37,13 +38,14 @@ def test_real_prefork_worker_acknowledges_only_one_message(
     env = {
         **os.environ,
         "SCHOLENS_WORKER_ONE_SHOT": "1",
+        "SCHOLENS_WORKER_MAX_TASKS": str(max_tasks),
         "PYTHONPATH": os.pathsep.join([str(tmp_path), str(Path.cwd())]),
     }
     with app.connection_for_write() as connection:
         channel = connection.channel()
         channel.queue_declare(queue=queue, durable=True, auto_delete=False)
         try:
-            for _ in range(2):
+            for _ in range(max_tasks + 1):
                 app.send_task("probe.noop", queue=queue, ignore_result=True)
             result = subprocess.run(
                 [

@@ -254,7 +254,10 @@ class AdmissionRelease:
             ]
             if (
                 task.get("requiresCompatibilities") != ["EC2"]
-                or int(task["memory"]) != memory
+                or sum(c.get("memory", 0) for c in task["containerDefinitions"]) != memory
+                or any(not c.get("memory") for c in task["containerDefinitions"])
+                or task.get("memory") is not None
+                or task.get("cpu") is not None
             ):
                 raise ValueError(
                     "Worker does not satisfy admitted memory and launch contract"

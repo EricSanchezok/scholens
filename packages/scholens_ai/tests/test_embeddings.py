@@ -35,3 +35,26 @@ def test_embed_text_preserves_query_and_passage_roles() -> None:
 
     assert embed_text("query", kind="query", embedder=embedder) == [5.0]
     assert embed_text("passage", kind="passage", embedder=embedder) == [7.0]
+
+
+def test_worker_embedding_threads_are_explicit_without_changing_model(
+    tmp_path, monkeypatch
+) -> None:
+    import sys
+    from types import SimpleNamespace
+    from scholens_ai import LocalOnnxTextEmbedder
+
+    for name in ("model.onnx", "tokenizer.json"):
+        (tmp_path / name).write_text("")
+    monkeypatch.setenv("SCHOLENS_EMBEDDING_THREADS", "1")
+    calls = []
+    fake = SimpleNamespace(
+        SessionOptions=SimpleNamespace,
+        InferenceSession=lambda path, **kwargs: calls.append((path, kwargs)),
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake)
+    model = LocalOnnxTextEmbedder(tmp_path)
+    _ = model._session
+    assert calls[0][0] == str(tmp_path / "model.onnx")
+    options = calls[0][1]["sess_options"]
+    assert options.intra_op_num_threads == options.inter_op_num_threads == 1

@@ -51,18 +51,18 @@ Resources:
     Properties:
       Name: /sanchezcloud/personal/background/scholens-document
       Type: String
-      Value: !Sub '{"version":1,"name":"scholens-document","enabled":${Enabled},"task_definition":"${DocumentTaskArn}","memory_mib":2624,"priority":0,"queue_url":"${DocumentQueueUrl}"}'
+      Value: !Sub '{"version":1,"name":"scholens-document","enabled":${Enabled},"task_definition":"${DocumentTaskArn}","memory_mib":2624,"priority":0,"lane":"interactive","queue_url":"${DocumentQueueUrl}"}'
   ResearchRegistration:
     Type: AWS::SSM::Parameter
     DependsOn: AdmissionGrant
     Properties:
       Name: /sanchezcloud/personal/background/scholens-research
       Type: String
-      Value: !Sub '{"version":1,"name":"scholens-research","enabled":${Enabled},"task_definition":"${ResearchTaskArn}","memory_mib":832,"priority":0,"queue_url":"${ResearchQueueUrl}"}'
+      Value: !Sub '{"version":1,"name":"scholens-research","enabled":${Enabled},"task_definition":"${ResearchTaskArn}","memory_mib":832,"priority":0,"lane":"interactive","queue_url":"${ResearchQueueUrl}"}'
   MaintenanceRegistration:
     Type: AWS::SSM::Parameter
     DependsOn: AdmissionGrant
     Properties:
       Name: /sanchezcloud/personal/background/scholens-maintenance
       Type: String
-      Value: !Sub '{"version":1,"name":"scholens-maintenance","enabled":${Enabled},"task_definition":"${MaintenanceTaskArn}","memory_mib":576,"priority":0,"queue_url":"${MaintenanceQueueUrl}"}'
+      Value: !Sub '{"version":1,"name":"scholens-maintenance","enabled":${Enabled},"task_definition":"${MaintenanceTaskArn}","memory_mib":576,"priority":0,"lane":"interactive","queue_url":"${MaintenanceQueueUrl}"}'

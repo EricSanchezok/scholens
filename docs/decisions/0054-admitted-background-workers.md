@@ -1,6 +1,6 @@
 # ADR 0054: Admit background workers on the shared host
 
-- Status: Accepted
+- Status: Superseded for global serialization and single-document lifetime by ADR 0055
 - Scope: Personal EC2 deployment
 
 ## Problem

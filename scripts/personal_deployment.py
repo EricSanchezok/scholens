@@ -435,6 +435,10 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     env["SCHOLENS_WORKER_ONE_SHOT"] = {
                         "Fn::If": ["AdmittedBackground", "1", "0"]
                     }
+                if container["Name"] == "document-worker":
+                    env["SCHOLENS_WORKER_MAX_TASKS"] = "5"
+                    env["SCHOLENS_WORKER_MAX_SECONDS"] = "300"
+                    env["SCHOLENS_EMBEDDING_THREADS"] = "1"
                 if "SCHOLIGHT_MCP_URL" in env:
                     env["SCHOLIGHT_MCP_URL"] = {"Ref": "ScholightMcpUrl"}
                 for limit in (
@@ -447,17 +451,6 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 container["Environment"] = [
                     {"Name": k, "Value": v} for k, v in env.items()
                 ]
-            if any(c["Name"] in background for c in containers):
-                props["Cpu"] = {
-                    "Fn::If": ["AdmittedBackground", "512", {"Ref": "AWS::NoValue"}]
-                }
-                props["Memory"] = {
-                    "Fn::If": [
-                        "AdmittedBackground",
-                        str(sum(c["Memory"] for c in containers)),
-                        {"Ref": "AWS::NoValue"},
-                    ]
-                }
     template["Outputs"] = {
         name: {"Value": {"Ref": name}}
         for name, r in resources.items()

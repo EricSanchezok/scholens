@@ -88,8 +88,18 @@ class LocalOnnxTextEmbedder:
         # pinned artifacts before the runtime-specific ONNX package is present.
         import onnxruntime as ort
 
+        options = ort.SessionOptions()
+        configured_threads = os.getenv("SCHOLENS_EMBEDDING_THREADS")
+        if configured_threads:
+            threads = int(configured_threads)
+            if not 1 <= threads <= 32:
+                raise ValueError("SCHOLENS_EMBEDDING_THREADS must be between 1 and 32")
+            options.intra_op_num_threads = threads
+            options.inter_op_num_threads = 1
         return ort.InferenceSession(
-            str(self._model_path), providers=["CPUExecutionProvider"]
+            str(self._model_path),
+            providers=["CPUExecutionProvider"],
+            sess_options=options,
         )
 
     def embed_query(self, text: str) -> list[float]:

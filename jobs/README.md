@@ -6,13 +6,23 @@ for shared limits and resumable parser state, and return signed results to the
 Server webhook API. Celery has no result backend; PostgreSQL-owned jobs and
 signed callbacks are the durable state contract.
 
-Personal-host background tasks set `SCHOLENS_WORKER_ONE_SHOT=1` and consume one
-queue with concurrency and prefetch one. The parent cancels consumption after
-the first delivery and exits only after its broker acknowledgement or rejection;
-an empty worker exits after 30 seconds. Child `task_postrun` is not an exit signal.
-Retries and interrupted deliveries retain the existing durable job and callback
-contracts. The shared host admission controller starts the next ECS task; the
-conversation worker remains a resident service and does not enable this mode.
+Personal-host background tasks set `SCHOLENS_WORKER_ONE_SHOT=1`, concurrency
+and prefetch one. Research and maintenance retain one-delivery workers. Document
+workers set `SCHOLENS_WORKER_MAX_TASKS=5` and `SCHOLENS_WORKER_MAX_SECONDS=300`:
+they reuse the parent for up to five sequential deliveries or a five-minute
+acceptance window starting at the first delivery. At the bound they stop consuming
+and wait for the current broker acknowledgement or rejection; they never cancel
+an in-flight PDF to satisfy the window. Thirty seconds idle also exits the worker.
+A reconnect closes consumption rather than taking another delivery against an
+unresolved lease. Child `task_postrun` is not proof of broker settlement. Existing
+child-memory recycling, durable callbacks and retries remain authoritative.
+
+Platform schedules these workers in its interactive lane independently of the
+Scholight batch lane. Each lane has at most one task. The conversation worker
+remains a separate resident service. Task placement uses container reservations;
+explicit container hard memory bounds still protect the host. Document ONNX
+inference uses one thread so spare CPU helps processing without multiplying
+inference threads across concurrent workloads.
 
 ECS scale-in protection covers each active task on a single-concurrency worker.
 Normal completion, terminal failure and revocation all release protection.
