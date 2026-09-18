@@ -42,6 +42,7 @@ from scholens_job_contracts import (
 from src.audio import generate_audio
 from src.celery_app import celery_app
 from src.data_table_processor import construct_data_table
+from src.network_policy import ALLOW_NON_PUBLIC_SOURCE_ADDRESSES
 from src.pdf.models import (
     MinerUCredential,
     ParserConfigurationError,
@@ -666,14 +667,17 @@ def _validate_source_url(url: str) -> None:
         )
     except socket.gaierror as exc:
         raise SourceDownloadError("paper_source_dns_failed", retryable=True) from exc
-    try:
-        unsafe_address = not addresses or any(
-            not ipaddress.ip_address(item[4][0]).is_global for item in addresses
-        )
-    except (IndexError, KeyError, ValueError) as exc:
-        raise SourceDownloadError("paper_source_unsafe_address") from exc
-    if unsafe_address:
+    if not addresses:
         raise SourceDownloadError("paper_source_unsafe_address")
+    if not ALLOW_NON_PUBLIC_SOURCE_ADDRESSES:
+        try:
+            unsafe_address = any(
+                not ipaddress.ip_address(item[4][0]).is_global for item in addresses
+            )
+        except (IndexError, KeyError, ValueError) as exc:
+            raise SourceDownloadError("paper_source_unsafe_address") from exc
+        if unsafe_address:
+            raise SourceDownloadError("paper_source_unsafe_address")
 
 
 def _retry_after(response: httpx.Response) -> float:
@@ -741,7 +745,10 @@ def _stream_url_to_file(
                         unsafe_peer = (
                             not isinstance(peer, tuple)
                             or not peer
-                            or not ipaddress.ip_address(str(peer[0])).is_global
+                            or (
+                                not ALLOW_NON_PUBLIC_SOURCE_ADDRESSES
+                                and not ipaddress.ip_address(str(peer[0])).is_global
+                            )
                         )
                     except (IndexError, ValueError) as exc:
                         raise SourceDownloadError(

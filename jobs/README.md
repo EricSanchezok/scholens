@@ -69,6 +69,12 @@ second full download.
    timeouts, 408/425/429, and 5xx responses with bounded backoff and
    `Retry-After`; permanent HTTP, SSRF, size, and PDF validation failures are
    terminal.
+   Source and Zotero attachment downloads resolve DNS answers and revalidate
+   the connected peer address against the public-address requirement. Local
+   proxy DNS in fake-ip mode answers public hosts with synthetic non-public
+   addresses; set `ALLOW_NON_PUBLIC_SOURCE_ADDRESSES=1` in `jobs/.env` only
+   for local proxy development. Production never sets it, so the strict
+   requirement holds.
    DOI jobs first request an open-PDF URL from Server's signed, job-scoped
    `source-url` endpoint. Server owns the user's OpenAlex credential and cache;
    Jobs receives only the resolved URL and applies the same URL security checks.

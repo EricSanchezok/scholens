@@ -178,6 +178,11 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
   for AWS S3 and never point local credentials at a production bucket. The
   `dev seed-test-fixture` command enforces a `scholens-dev-*` bucket name and
   rejects custom S3 endpoints before uploading any fixture objects.
+- Local proxy DNS (for example Clash fake-ip mode) answers public hosts with
+  synthetic non-public addresses, which the Jobs egress guard rejects. Set
+  `ALLOW_NON_PUBLIC_SOURCE_ADDRESSES=1` in `jobs/.env` only to test URL,
+  arXiv, DOI, and Zotero source downloads behind such a proxy; production
+  keeps the strict public-address requirement (see ADR 0056).
 - Remote model/search providers (DeepSeek, MinerU, MOSS Voice, Scholight MCP,
   OpenAlex, and user-configured MCP connectors) are opt-in. Use them only when the feature
   under test requires them and never commit their credentials.

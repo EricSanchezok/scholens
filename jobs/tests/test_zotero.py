@@ -26,6 +26,7 @@ from src.zotero import (
     _annotations_json,
     _bounded_version_batch,
     _fetch_public_pdf,
+    _require_public_url,
     import_items,
     sync_items,
     validate_zotero_callback_payload,
@@ -805,3 +806,46 @@ def test_public_pdf_session_ignores_environment_proxy(
 
     assert session.trust_env is False
     session.close.assert_called_once_with()
+
+
+def test_require_public_url_rejects_non_public_dns_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.zotero.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("198.19.19.123", 443),
+            )
+        ],
+    )
+    monkeypatch.setattr("src.zotero.ALLOW_NON_PUBLIC_SOURCE_ADDRESSES", False)
+
+    with pytest.raises(ZoteroJobError) as raised:
+        _require_public_url("https://example.com/paper.pdf")
+
+    assert raised.value.code == "zotero_pdf_unsafe_address"
+
+
+def test_require_public_url_allows_non_public_addresses_when_opted_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.zotero.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("198.19.19.123", 443),
+            )
+        ],
+    )
+    monkeypatch.setattr("src.zotero.ALLOW_NON_PUBLIC_SOURCE_ADDRESSES", True)
+
+    _require_public_url("https://example.com/paper.pdf")

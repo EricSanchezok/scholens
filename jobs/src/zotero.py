@@ -19,6 +19,7 @@ from scholens_job_contracts import (
     ZOTERO_SYNC_AUTO_IMPORT_RESERVE_BYTES,
 )
 
+from src.network_policy import ALLOW_NON_PUBLIC_SOURCE_ADDRESSES
 from src.s3_service import s3_service
 from src.webhook_signing import encode_json_body
 
@@ -880,6 +881,8 @@ def _require_public_url(url: str) -> None:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
     except socket.gaierror as exc:
         raise ZoteroJobError("zotero_pdf_unavailable") from exc
+    if ALLOW_NON_PUBLIC_SOURCE_ADDRESSES:
+        return
     for address in addresses:
         ip = ipaddress.ip_address(address[4][0])
         if not ip.is_global:
@@ -902,7 +905,7 @@ def _require_global_peer(response: requests.Response) -> None:
         ip = ipaddress.ip_address(address)
     except (AttributeError, IndexError, TypeError, ValueError, OSError) as exc:
         raise ZoteroJobError("zotero_pdf_unsafe_address") from exc
-    if not ip.is_global:
+    if not ip.is_global and not ALLOW_NON_PUBLIC_SOURCE_ADDRESSES:
         raise ZoteroJobError("zotero_pdf_unsafe_address")
 
 

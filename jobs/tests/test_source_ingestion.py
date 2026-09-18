@@ -22,6 +22,7 @@ def _client_for(
     status: int,
     headers: dict[str, str] | None = None,
     content: bytes = b"",
+    peer: object | None = None,
 ) -> httpx.Client:
     def respond(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -29,7 +30,7 @@ def _client_for(
             headers=headers,
             stream=httpx.ByteStream(content),
             request=request,
-            extensions={"network_stream": _PublicPeer()},
+            extensions={"network_stream": peer if peer is not None else _PublicPeer()},
         )
 
     return httpx.Client(
@@ -40,6 +41,15 @@ def _client_for(
 
 def _public_dns(*_args: object, **_kwargs: object) -> list[tuple[object, ...]]:
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+
+
+class _NonPublicPeer:
+    def get_extra_info(self, name: str) -> tuple[str, int] | None:
+        return ("198.19.19.121", 443) if name == "server_addr" else None
+
+
+def _fake_ip_dns(*_args: object, **_kwargs: object) -> list[tuple[object, ...]]:
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.19.19.121", 443))]
 
 
 def test_stream_source_without_content_length_hashes_directly_to_file(
@@ -119,6 +129,53 @@ def test_stream_source_enforces_limit_without_content_length(
         )
 
     assert raised.value.error_code == "upload_too_large"
+
+
+def test_stream_source_rejects_non_public_dns_answer_by_default(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client_for(status=200)
+    monkeypatch.setattr(tasks.socket, "getaddrinfo", _fake_ip_dns)
+    monkeypatch.setattr(tasks.httpx, "Client", lambda **_kwargs: client)
+    monkeypatch.setattr(tasks, "ALLOW_NON_PUBLIC_SOURCE_ADDRESSES", False)
+
+    with pytest.raises(tasks.SourceDownloadError) as raised:
+        tasks._stream_url_to_file(
+            "https://arxiv.org/pdf/2401.12345",
+            str(tmp_path / "source.pdf"),
+            job_id="job-1",
+            attempt=1,
+        )
+
+    assert raised.value.error_code == "paper_source_unsafe_address"
+    assert raised.value.retryable is False
+
+
+def test_stream_source_allows_non_public_addresses_when_opted_in(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = b"%PDF-1.7\n" + b"x" * 2048 + b"\n%%EOF"
+    client = _client_for(
+        status=200,
+        headers={"content-type": "application/pdf"},
+        content=pdf,
+        peer=_NonPublicPeer(),
+    )
+    monkeypatch.setattr(tasks.socket, "getaddrinfo", _fake_ip_dns)
+    monkeypatch.setattr(tasks.httpx, "Client", lambda **_kwargs: client)
+    monkeypatch.setattr(tasks, "ALLOW_NON_PUBLIC_SOURCE_ADDRESSES", True)
+
+    destination = tmp_path / "source.pdf"
+    digest, size = tasks._stream_url_to_file(
+        "https://arxiv.org/pdf/2401.12345",
+        str(destination),
+        job_id="job-1",
+        attempt=1,
+    )
+
+    assert destination.read_bytes() == pdf
+    assert size == len(pdf)
+    assert digest == hashlib.sha256(pdf).hexdigest()
 
 
 def _requests_response(
