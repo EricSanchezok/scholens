@@ -8,7 +8,7 @@ from scholens_ai import (
     EMBEDDING_MODEL_REVISION,
     semantic_document_text,
     semantic_source_digest,
-    try_local_embedder,
+    configured_embedder,
 )
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -67,10 +67,16 @@ class SqlSearchEmbeddingBackfill:
             )
 
         selected = candidates[:batch_size]
-        embedder = try_local_embedder()
+        embedder = configured_embedder()
         if embedder is None:
             raise RuntimeError("local embedding model is not configured")
-        embeddings = embedder.embed_passages([item[1] for item in selected])
+        embeddings = [
+            vector
+            for start in range(0, len(selected), 8)
+            for vector in embedder.embed_passages(
+                [item[1] for item in selected[start : start + 8]]
+            )
+        ]
         now = datetime.now(timezone.utc)
         for (document_id, _semantic_text, source_digest), embedding in zip(
             selected, embeddings, strict=True

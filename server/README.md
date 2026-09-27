@@ -973,6 +973,11 @@ valid only for legacy jobs. The signature alone is not an execution lease.
 
 ### Independent document stages
 
+The configured inference socket also owns operator and metadata-projection
+embeddings. Maintenance sends at most eight texts per RPC and does not instantiate
+a second local model when a socket is configured. Standalone local development can
+still use the explicitly configured local model path.
+
 `DOCUMENT_PIPELINE_ENABLED` selects fenced deterministic PDF extraction for new
 imports. Canonical content becomes readable before independent `document_index`,
 `document_enrich` and `document_bibliography` jobs are transactionally dispatched.

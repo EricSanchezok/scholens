@@ -331,6 +331,11 @@ Parser-specific tests mirror this structure under `tests/pdf/`.
 
 ## Configuration
 
+The personal ARM64 image contains only the pinned tokenizer and requires the
+configured shared inference socket for indexing. It never downloads model weights
+at startup or loads a local fallback after a socket failure. Generic image builds
+retain an explicit full-model option for standalone deployments.
+
 The repository-level [`.env.example`](../.env.example) is the only environment
 variable catalog. Copy the values needed by Jobs into `jobs/.env`; never commit
 that file.

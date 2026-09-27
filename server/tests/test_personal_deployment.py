@@ -75,12 +75,13 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
     services = [
         r["Properties"] for r in resources.values() if r["Type"] == "AWS::ECS::Service"
     ]
-    assert len(services) == 8
+    assert len(services) == 9
     for service in services:
         assert service["LaunchType"] == "EC2"
         assert service["DesiredCount"] in (
             {"Fn::If": ["RunApplication", 1, 0]},
             {"Fn::If": ["RunResidentBackground", 1, 0]},
+            {"Fn::If": ["RunSharedInference", 1, 0]},
         )
         assert "NetworkConfiguration" not in service
         assert service["DeploymentConfiguration"]["MinimumHealthyPercent"] == 0
@@ -180,7 +181,7 @@ def test_personal_email_requires_explicit_cutover_opt_in() -> None:
         if resource["Type"] != "AWS::ECS::TaskDefinition":
             continue
         for container in resource["Properties"]["ContainerDefinitions"]:
-            if container["Name"] in {"web", "tmp-init"}:
+            if container["Name"] in {"web", "tmp-init", "inference", "inference-init"}:
                 continue
             env = {item["Name"]: item["Value"] for item in container["Environment"]}
             assert env["SCHOLENS_EMAIL_DELIVERY_ENABLED"] == {
@@ -200,8 +201,13 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
         if "TaskRoleArn" in task:
             roles.append(json.dumps(task["TaskRoleArn"]))
         else:
-            assert task["ContainerDefinitions"][0]["Name"] == "web"
-        assert task["NetworkMode"] == "bridge"
+            assert task["ContainerDefinitions"][0]["Name"] in {"web", "inference"}
+        expected_network = (
+            "none"
+            if task["ContainerDefinitions"][0]["Name"] == "inference"
+            else "bridge"
+        )
+        assert task["NetworkMode"] == expected_network
         assert task["RequiresCompatibilities"] == ["EC2"]
         assert task["RuntimePlatform"]["CpuArchitecture"] == "ARM64"
         for container in task["ContainerDefinitions"]:
@@ -211,7 +217,7 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
                 "DEEPSEEK" in s["Name"] and "KEY" in s["Name"]
                 for s in container.get("Secrets", [])
             )
-            if container["Name"] in {"web", "tmp-init"}:
+            if container["Name"] in {"web", "tmp-init", "inference", "inference-init"}:
                 continue
             env = {e["Name"]: e["Value"] for e in container["Environment"]}
             if container["Name"].endswith("-worker"):
@@ -233,6 +239,39 @@ def test_task_roles_limits_tls_and_private_callback_remain_independent() -> None
             )
             assert env["ENVIRONMENT"] == "production"
     assert len(roles) == len(set(roles))
+
+
+def test_shared_inference_has_one_owner_and_unprivileged_socket_clients():
+    resources = renderer.render("runtime")["Resources"]
+    task = resources["InferenceTaskDefinition"]["Properties"]
+    assert "TaskRoleArn" not in task
+    owner = task["ContainerDefinitions"][0]
+    assert owner["Image"] == {"Ref": "ApiImage"}
+    assert owner["EntryPoint"] == ["python", "-m", "scholens_ai.inference"]
+    assert "Secrets" not in owner
+    assert "PortMappings" not in owner
+    assert owner["Memory"] == 1024
+    assert owner["User"] == "1000:1000"
+    for prefix in (
+        "Api",
+        "ConversationWorker",
+        "DocumentWorker",
+        "DocumentIndexWorker",
+        "DocumentEnrichmentWorker",
+    ):
+        consumer = resources[prefix + "TaskDefinition"]["Properties"][
+            "ContainerDefinitions"
+        ][0]
+        env = {e["Name"]: e["Value"] for e in consumer["Environment"]}
+        assert env["SCHOLENS_EMBEDDING_SOCKET"] == {
+            "Fn::If": ["SharedInference", "/run/scholens-inference/model.sock", ""]
+        }
+        mount = next(
+            m for m in consumer["MountPoints"] if m["SourceVolume"] == "inference"
+        )
+        assert mount["ReadOnly"] is True
+        if prefix.startswith("Document"):
+            assert consumer["User"] == "65532:1000"
 
 
 def test_private_cache_enforces_tls_separate_acls_and_no_aws_runtime_role() -> None:

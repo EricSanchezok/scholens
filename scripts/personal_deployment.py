@@ -338,6 +338,123 @@ def document_stage_resources(resources: dict[str, Any]) -> None:
         resources[prefix + "WorkerService"] = service
 
 
+INFERENCE_VOLUME = {
+    "Name": "inference",
+    "Host": {"SourcePath": "/srv/sanchezcloud/scholens-inference"},
+}
+INFERENCE_SOCKET = "/run/scholens-inference/model.sock"
+
+
+def inference_resources(resources: dict[str, Any]) -> None:
+    """One warmed model, no AWS role, no TCP listener or outbound network."""
+    mount = {
+        "SourceVolume": "inference",
+        "ContainerPath": "/run/scholens-inference",
+        "ReadOnly": False,
+    }
+    resources["InferenceLogGroup"] = {
+        "Type": "AWS::Logs::LogGroup",
+        "Properties": {
+            "LogGroupName": "/sanchezcloud/scholens/inference",
+            "RetentionInDays": 7,
+        },
+    }
+    resources["InferenceTaskDefinition"] = {
+        "Type": "AWS::ECS::TaskDefinition",
+        "Properties": {
+            "Family": "sanchezcloud-scholens-inference",
+            "NetworkMode": "none",
+            "RequiresCompatibilities": ["EC2"],
+            "RuntimePlatform": {
+                "CpuArchitecture": "ARM64",
+                "OperatingSystemFamily": "LINUX",
+            },
+            "ExecutionRoleArn": {
+                "Fn::ImportValue": "sanchezcloud-scholens-task-execution-role-arn"
+            },
+            "Volumes": [copy.deepcopy(INFERENCE_VOLUME)],
+            "ContainerDefinitions": [
+                {
+                    "Name": "inference",
+                    "Image": {"Ref": "ApiImage"},
+                    "Essential": True,
+                    "User": "1000:1000",
+                    "Cpu": 128,
+                    "MemoryReservation": 512,
+                    "Memory": 1024,
+                    "ReadonlyRootFilesystem": True,
+                    "StopTimeout": 30,
+                    "EntryPoint": ["python", "-m", "scholens_ai.inference"],
+                    "Command": [],
+                    "LinuxParameters": {
+                        "InitProcessEnabled": True,
+                        "Capabilities": {"Drop": ["ALL"]},
+                    },
+                    "MountPoints": [mount],
+                    "DependsOn": [
+                        {"ContainerName": "inference-init", "Condition": "SUCCESS"}
+                    ],
+                    "Environment": [
+                        {
+                            "Name": "SCHOLENS_EMBEDDING_SOCKET",
+                            "Value": INFERENCE_SOCKET,
+                        },
+                        {"Name": "SCHOLENS_EMBEDDING_THREADS", "Value": "1"},
+                    ],
+                    "HealthCheck": {
+                        "Command": [
+                            "CMD",
+                            "python",
+                            "-m",
+                            "scholens_ai.inference",
+                            "--check",
+                        ],
+                        "Interval": 30,
+                        "Timeout": 5,
+                        "Retries": 3,
+                        "StartPeriod": 60,
+                    },
+                    "LogConfiguration": {
+                        "LogDriver": "awslogs",
+                        "Options": {
+                            "awslogs-region": {"Ref": "AWS::Region"},
+                            "awslogs-group": {"Ref": "InferenceLogGroup"},
+                            "awslogs-stream-prefix": "inference",
+                        },
+                    },
+                },
+                {
+                    "Name": "inference-init",
+                    "Image": {"Ref": "ApiImage"},
+                    "Essential": False,
+                    "User": "0",
+                    "Cpu": 0,
+                    "MemoryReservation": 32,
+                    "Memory": 64,
+                    "ReadonlyRootFilesystem": True,
+                    "EntryPoint": ["python", "-c"],
+                    "Command": [
+                        "import os; p='/run/scholens-inference'; os.chmod(p, 0o770); os.chown(p, 1000, 1000)"
+                    ],
+                    "LinuxParameters": {
+                        "Capabilities": {"Drop": ["ALL"], "Add": ["CHOWN", "FOWNER"]}
+                    },
+                    "MountPoints": [copy.deepcopy(mount)],
+                },
+            ],
+        },
+    }
+    service = copy.deepcopy(resources["DocumentWorkerService"])
+    service["Properties"].update(
+        {
+            "ServiceName": "scholens-inference",
+            "TaskDefinition": {"Ref": "InferenceTaskDefinition"},
+            "DesiredCount": {"Fn::If": ["RunSharedInference", 1, 0]},
+        }
+    )
+    resources["InferenceService"] = service
+
+
 def runtime(template: dict[str, Any]) -> dict[str, Any]:
     kept_types = {
         "AWS::IAM::Role",
@@ -372,6 +489,17 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "Type": "String",
         "Default": "resident",
         "AllowedValues": ["resident", "admitted"],
+    }
+    template["Parameters"]["SharedInferenceEnabled"] = {
+        "Type": "String",
+        "Default": "false",
+        "AllowedValues": ["false", "true"],
+    }
+    template["Conditions"]["SharedInference"] = {
+        "Fn::Equals": [{"Ref": "SharedInferenceEnabled"}, "true"]
+    }
+    template["Conditions"]["RunSharedInference"] = {
+        "Fn::And": [{"Condition": "RunApplication"}, {"Condition": "SharedInference"}]
     }
     template["Conditions"]["AdmittedBackground"] = {
         "Fn::Equals": [{"Ref": "BackgroundMode"}, "admitted"]
@@ -439,6 +567,12 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             props.setdefault("Volumes", []).append(
                 {"Name": "trust", "Host": {"SourcePath": "/srv/sanchezcloud/trust"}}
             )
+            if name not in {
+                "WebTaskDefinition",
+                "MigrationTaskDefinition",
+                "SchedulerTaskDefinition",
+            }:
+                props["Volumes"].append(copy.deepcopy(INFERENCE_VOLUME))
             containers = [
                 c for c in props["ContainerDefinitions"] if c["Name"] != "adot"
             ]
@@ -463,6 +597,17 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     port.pop("AppProtocol", None)
                 if container["Name"] == "web":
                     continue
+                shared_client = any(v["Name"] == "inference" for v in props["Volumes"])
+                if shared_client:
+                    container.setdefault("MountPoints", []).append(
+                        {
+                            "SourceVolume": "inference",
+                            "ContainerPath": "/run/scholens-inference",
+                            "ReadOnly": True,
+                        }
+                    )
+                    if container["Name"] in background:
+                        container["User"] = "65532:1000"
                 container.setdefault("MountPoints", []).append(
                     {
                         "SourceVolume": "trust",
@@ -489,6 +634,10 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                         "TRUST_CLOUDFLARE_CLIENT_IP": "false",
                     }
                 )
+                if shared_client:
+                    env["SCHOLENS_EMBEDDING_SOCKET"] = {
+                        "Fn::If": ["SharedInference", INFERENCE_SOCKET, ""]
+                    }
                 if container["Name"].endswith("-worker"):
                     env["SCHOLENS_WORKER_HEARTBEAT_FILE"] = "/tmp/worker-heartbeat"
                     container["HealthCheck"] = {
@@ -527,6 +676,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 container["Environment"] = [
                     {"Name": k, "Value": v} for k, v in env.items()
                 ]
+    inference_resources(resources)
     template["Outputs"] = {
         name: {"Value": {"Ref": name}}
         for name, r in resources.items()

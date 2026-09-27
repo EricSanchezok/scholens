@@ -56,10 +56,22 @@ short product outage to avoid static-port conflicts and doubled memory use.
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
 worker has a 2,560 MiB hard limit; its original 1,280 MiB limit killed a PDF
-postprocessing child while loading the model. Passage inference uses batches
-of eight to avoid the larger activation peak of a 128-window batch. Soft
-reservations, worker concurrency and the host size remain unchanged; verify
-aggregate host memory under representative simultaneous work after rollout.
+postprocessing child while loading the model. With shared inference enabled,
+application processes use a private Unix socket instead of loading ONNX weights.
+The single inference owner uses the same API image, one compute thread, one-text
+microbatches and a 1,024 MiB hard limit. It has no task role, secrets, TCP ports or
+external network. Its model is warmed before the socket health check succeeds.
+A host directory owned by `1000:1000`, mode `0770`, holds the `0660` socket; Jobs
+uses its existing non-root UID with group `1000` and a read-only mount. The owner
+stops before replacement and holds an exclusive file lock before model loading.
+Client failure never starts a second model: queries can degrade to lexical search
+while deterministic indexing retries.
+
+The reviewed native ARM64 fixture measured a 761 MiB peak with the pinned INT8
+model, within the 1,024 MiB ceiling after 25% headroom and rounding. This does not
+replace final API/parser/index mixed-load acceptance or prove limits for every
+input. Keep the existing API/document ceilings until those process peaks are
+measured; the host size and worker concurrency remain unchanged.
 
 The maintenance worker reserves 256 MiB with a 512 MiB hard limit: the shared Jobs
 imports exceed the original 256 MiB limit before it can consume a task. Every
@@ -91,6 +103,15 @@ OCI index. The existing release manifest format records `linux/arm64` in each im
 all components must agree. The legacy CLI default is `linux/amd64`; production
 verification requires explicit `--expected-platform linux/arm64`.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
+
+The personal publisher selects `arm64-int8` for both Python images. Jobs packages
+only the digest-verified tokenizer; the API image carries the registered model
+artifact for the independent owner. Native image smoke tests execute that model
+offline and assert that Jobs has no model weight file. Control planning enables
+shared inference when the selected immutable source contains its owner module.
+Ordinary rollback rejects older images without that module after shared inference
+has been enabled; a legacy rollback requires a separate complete stage drain and
+restoration of the prior topology. Compatible newer releases retain the socket contract.
 
 The personal renderer defaults `EmailDeliveryEnabled` to `false`. This suppresses
 both identity email senders and the project-invitation delivery supervisor, even if

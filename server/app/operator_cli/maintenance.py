@@ -7,7 +7,7 @@ from typing import cast
 from uuid import UUID
 
 import click
-from scholens_ai import EMBEDDING_MODEL_REVISION, try_local_embedder
+from scholens_ai import EMBEDDING_MODEL_REVISION, configured_embedder
 
 from app.modules.reading_activity.application import ReadingActivityRetentionResult
 from app.modules.papers.application.maintenance import PassageEmbeddingWrite
@@ -121,12 +121,16 @@ def backfill_passage_embeddings(
         )
         return
     confirm("Backfill local passage-search embeddings?", yes=yes)
-    embedder = try_local_embedder()
+    embedder = configured_embedder()
     if embedder is None:
         raise click.ClickException("Local embedding model is not configured.")
-    embeddings = embedder.embed_passages(
-        [candidate.content for candidate in snapshot.items]
-    )
+    embeddings = [
+        vector
+        for start in range(0, len(snapshot.items), 8)
+        for vector in embedder.embed_passages(
+            [candidate.content for candidate in snapshot.items[start : start + 8]]
+        )
+    ]
     records = tuple(
         PassageEmbeddingWrite(
             passage_id=candidate.passage_id,

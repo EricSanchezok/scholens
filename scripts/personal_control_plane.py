@@ -182,6 +182,9 @@ def main() -> None:
     }:
         raise ValueError("Existing stack must be stable before planning")
     previous = {x["ParameterKey"] for x in stack["Parameters"]}
+    previous_values = {
+        x["ParameterKey"]: x["ParameterValue"] for x in stack["Parameters"]
+    }
     overrides = {"ExpectedAccountId": ACCOUNT}
     manifest_hash = ""
     if args.background_mode != "preserve":
@@ -219,12 +222,27 @@ def main() -> None:
                     str(archive),
                     sha,
                     "server",
+                    "packages/scholens_ai",
                     "deploy/ecs/scholens-production.yml",
                 ],
                 check=True,
             )
             with tarfile.open(archive) as tar:
                 tar.extractall(source, filter="data")
+            shared_inference = (
+                source / "packages/scholens_ai/src/scholens_ai/inference.py"
+            ).is_file()
+            if (
+                not shared_inference
+                and previous_values.get("SharedInferenceEnabled") == "true"
+            ):
+                raise ValueError(
+                    "Pre-inference rollback requires the documented complete stage drain; "
+                    "choose a compatible release for ordinary rollback"
+                )
+            overrides["SharedInferenceEnabled"] = (
+                "true" if shared_inference else "false"
+            )
             aws(
                 "s3api",
                 "get-object",

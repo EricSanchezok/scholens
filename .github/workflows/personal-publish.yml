@@ -160,6 +160,7 @@ jobs:
           outputs: type=image,name=${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-api,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             SANCHEZCLOUD_IDENTITY_REVISION=${{ steps.identity.outputs.revision }}
+            SCHOLENS_EMBEDDING_VARIANT=arm64-int8
           provenance: mode=max
           sbom: true
           secrets: |
@@ -174,6 +175,9 @@ jobs:
           target: runtime
           platforms: linux/arm64
           outputs: type=image,name=${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-jobs,push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            SCHOLENS_EMBEDDING_VARIANT=arm64-int8
+            SCHOLENS_EMBEDDING_TOKENIZER_ONLY=true
           provenance: mode=max
           sbom: true
       - name: Smoke native ARM64 images
@@ -188,6 +192,8 @@ jobs:
           docker run --rm --entrypoint node "$REGISTRY/sanchezcloud-scholens-web@$WEB_DIGEST" --version
           docker run --rm --entrypoint /app/.venv/bin/python "$REGISTRY/sanchezcloud-scholens-api@$API_DIGEST" -c 'import platform, asyncpg, onnxruntime, sanchezcloud_identity; assert platform.machine() == "aarch64"'
           docker run --rm --entrypoint /app/.venv/bin/python "$REGISTRY/sanchezcloud-scholens-jobs@$JOBS_DIGEST" -c 'import platform, pymupdf, onnxruntime, celery; assert platform.machine() == "aarch64"'
+          docker run --rm --network none --entrypoint /app/.venv/bin/python "$REGISTRY/sanchezcloud-scholens-api@$API_DIGEST" -c 'from scholens_ai import LocalOnnxTextEmbedder; model=LocalOnnxTextEmbedder(); assert model.revision == "multilingual-e5-small-onnx-arm64-int8-v1"; assert len(model.embed_query("release smoke")) == 384'
+          docker run --rm --network none --entrypoint /app/.venv/bin/python "$REGISTRY/sanchezcloud-scholens-jobs@$JOBS_DIGEST" -c 'from pathlib import Path; from scholens_ai.token_passages import load_passage_tokenizer; assert not Path("/app/models/search/model.onnx").exists(); assert load_passage_tokenizer().encode("tokenizer smoke").ids'
       - name: Wait for digest-bound ECR vulnerability scans
         if: steps.existing.outputs.exists == 'false'
         env:
