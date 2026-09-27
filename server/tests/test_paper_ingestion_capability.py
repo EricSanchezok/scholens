@@ -545,6 +545,75 @@ async def test_safe_pdf_source_preserves_actionable_error_codes(
 
 
 @pytest.mark.asyncio
+async def test_upload_replay_returns_durable_receipt_without_reclaiming_or_storage_io():
+    accepted = _accepted(replayed=True)
+    capabilities = MagicMock()
+    capabilities.paper_ingestion.replay_upload.return_value = accepted
+    capabilities.paper_uploads.claim.side_effect = AppError(
+        code="paper_upload_consumed",
+        message="Already consumed",
+        kind=FailureKind.CONFLICT,
+    )
+    executor = MagicMock()
+    executor.command.side_effect = lambda operation: operation(capabilities)
+    workflow = PaperIngestionWorkflow(
+        executor=executor,
+        url_source=MagicMock(),
+        source_resolver=MagicMock(),
+        operation_factory=OperationContextFactory(),
+        jobs=MagicMock(),
+    )
+    with patch(
+        "app.bootstrap.workflows.paper_ingestion.s3_service.staging_object_metadata"
+    ) as storage:
+        response = await workflow.from_upload_session(
+            actor=_actor(),
+            operation=_operation(),
+            upload_id=uuid4(),
+            project_id=None,
+            idempotency_key="same-request",
+            ip_address="127.0.0.1",
+        )
+    assert response == accepted.ingestion
+    capabilities.paper_uploads.claim.assert_not_called()
+    capabilities.paper_ingestion.accept_source.assert_not_called()
+    storage.assert_not_called()
+
+
+def test_upload_receipt_rechecks_current_project_permission():
+    from app.bootstrap.adapters import paper_ingestion as module
+
+    gateway = SqlPaperIngestionGateway(MagicMock())
+    project_id = uuid4()
+    with (
+        patch.object(module, "find_reserved_upload", return_value=MagicMock()),
+        patch.object(
+            module,
+            "require_project_permission_for_update",
+            side_effect=AppError(
+                code="project_access_denied",
+                message="Access revoked",
+                kind=FailureKind.PERMISSION_DENIED,
+            ),
+        ) as permission,
+    ):
+        with pytest.raises(AppError, match="project_access_denied"):
+            gateway.replay_upload(
+                actor=_actor(),
+                upload_id=uuid4(),
+                project_id=project_id,
+                add_to_library=True,
+                idempotency_key="same-request",
+            )
+    permission.assert_called_once_with(
+        gateway._db,
+        project_id=project_id,
+        user_id=_actor().id,
+        permission="manage_papers",
+    )
+
+
+@pytest.mark.asyncio
 async def test_upload_session_rejects_a_different_ingestion_project() -> None:
     executor = MagicMock()
     prepared_project_id = uuid4()

@@ -572,6 +572,62 @@ def reassign_project_quota_owner(
     )
 
 
+def upload_idempotency_key(
+    *, requester_id: int, project_id: UUID | None, key: str
+) -> str:
+    return f"pdf-ingestion:{requester_id}:{project_id or 'library'}:{key}"
+
+
+def find_reserved_upload(
+    db: Session,
+    *,
+    requester: Actor,
+    project_id: UUID | None,
+    add_to_library: bool,
+    content_sha256: str | None,
+    source: dict[str, JsonValue] | None,
+    key: str,
+) -> UploadReservation | None:
+    """Compare immutable request intent, not later source materialization facts."""
+    job = job_repository.find_by_idempotency_key(db, idempotency_key=key)
+    if job is None:
+        return None
+    same_request = job.requested_by_id == requester.id and job.project_id == project_id
+    if source is None:
+        same_request = (
+            same_request and job.payload.get("content_sha256") == content_sha256
+        )
+    else:
+        existing_source = job.payload.get("source")
+        same_request = (
+            same_request
+            and isinstance(existing_source, dict)
+            and existing_source.get("fingerprint") == source.get("fingerprint")
+        )
+    reservation = db.get(UploadReservation, job.id)
+    if reservation is not None:
+        same_request = (
+            same_request
+            and resolve_add_to_library(
+                reservation.add_to_library, project_id=job.project_id
+            )
+            == add_to_library
+        )
+    if not same_request or reservation is None:
+        raise AppError(
+            code="idempotency_key_reused",
+            message="The idempotency key was already used for another request",
+            kind=FailureKind.CONFLICT,
+        )
+    if job.status == JobStatus.CANCELLED.value:
+        raise AppError(
+            code="paper_ingestion_cancelled",
+            message="This paper ingestion was cancelled",
+            kind=FailureKind.CONFLICT,
+        )
+    return reservation
+
+
 def reserve_upload(
     db: Session,
     *,
@@ -635,50 +691,23 @@ def reserve_upload(
         lock_account_resource_quota(db, user_id=lock_id)
 
     resolved_idempotency_key = durable_idempotency_key or (
-        f"pdf-ingestion:{requester.id}:{project_id or 'library'}:{idempotency_key}"
+        upload_idempotency_key(
+            requester_id=requester.id, project_id=project_id, key=idempotency_key
+        )
         if idempotency_key is not None
         else None
     )
     if resolved_idempotency_key is not None:
-        existing_job = job_repository.find_by_idempotency_key(
+        existing_reservation = find_reserved_upload(
             db,
-            idempotency_key=resolved_idempotency_key,
+            requester=requester,
+            project_id=project_id,
+            add_to_library=add_to_library,
+            content_sha256=content_sha256,
+            source=source,
+            key=resolved_idempotency_key,
         )
-        if existing_job is not None:
-            same_request = (
-                existing_job.requested_by_id == requester.id
-                and existing_job.project_id == project_id
-                and existing_job.payload.get("content_sha256") == content_sha256
-            )
-            if source is not None:
-                existing_source = existing_job.payload.get("source")
-                same_request = (
-                    same_request
-                    and isinstance(existing_source, dict)
-                    and existing_source.get("fingerprint") == source.get("fingerprint")
-                )
-            existing_reservation = db.get(UploadReservation, existing_job.id)
-            if existing_reservation is not None:
-                same_request = (
-                    same_request
-                    and resolve_add_to_library(
-                        existing_reservation.add_to_library,
-                        project_id=existing_job.project_id,
-                    )
-                    == add_to_library
-                )
-            if not same_request or existing_reservation is None:
-                raise AppError(
-                    code="idempotency_key_reused",
-                    message="The idempotency key was already used for another request",
-                    kind=FailureKind.CONFLICT,
-                )
-            if existing_job.status == JobStatus.CANCELLED.value:
-                raise AppError(
-                    code="paper_ingestion_cancelled",
-                    message="This paper ingestion was cancelled",
-                    kind=FailureKind.CONFLICT,
-                )
+        if existing_reservation is not None:
             return UploadReservationResult(
                 reservation=existing_reservation,
                 created=False,
