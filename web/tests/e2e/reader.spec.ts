@@ -4,6 +4,7 @@ import { mockBillingUsage } from "./billing-fixture";
 import { focusThroughTab } from "./focus";
 import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 import path from "node:path";
+import { attachReaderPerformanceProbe } from "./reader-performance-probe";
 
 import { libraryPapers } from "../../src/features/library/api/fixtures";
 import {
@@ -1179,7 +1180,11 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
 test("bounds PDF bitmap residency across repeated long-document navigation", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
+  const performanceProbe =
+    process.env.SCHOLENS_READER_PERFORMANCE === "1"
+      ? await attachReaderPerformanceProbe(page)
+      : undefined;
   await page.goto(`/reader/${paperDocument.document_id}`);
   await waitForPdfTextLayer(page, 1);
   const pageCount = await page.locator("[data-pdf-page-number]").count();
@@ -1197,41 +1202,55 @@ test("bounds PDF bitmap residency across repeated long-document navigation", asy
   destinations.push(1);
   let peakPixels = 0;
   let peakResidentPages = 0;
-  for (const number of destinations) {
-    await page
-      .locator(`[data-pdf-page-number="${number}"]`)
-      .scrollIntoViewIfNeeded();
-    await waitForPdfTextLayer(page, number);
-    await expect
-      .poll(async () =>
-        page
-          .locator("[data-pdf-page-number] > canvas")
-          .evaluateAll(
-            (elements) =>
-              elements.filter(
-                (element) => (element as HTMLCanvasElement).width > 0,
-              ).length,
-          ),
-      )
-      .toBeLessThanOrEqual(8);
-    const pixels = await page
-      .locator("[data-pdf-page-number] > canvas")
-      .evaluateAll((elements) =>
-        elements.map((element) => {
-          const canvas = element as HTMLCanvasElement;
-          return canvas.width * canvas.height;
-        }),
+  for (let cycle = 0; cycle < (performanceProbe ? 3 : 1); cycle++) {
+    for (const number of destinations) {
+      await page
+        .locator(`[data-pdf-page-number="${number}"]`)
+        .scrollIntoViewIfNeeded();
+      await waitForPdfTextLayer(page, number);
+      await expect
+        .poll(async () =>
+          page
+            .locator("[data-pdf-page-number] > canvas")
+            .evaluateAll(
+              (elements) =>
+                elements.filter(
+                  (element) => (element as HTMLCanvasElement).width > 0,
+                ).length,
+            ),
+        )
+        .toBeLessThanOrEqual(8);
+      const pixels = await page
+        .locator("[data-pdf-page-number] > canvas")
+        .evaluateAll((elements) =>
+          elements.map((element) => {
+            const canvas = element as HTMLCanvasElement;
+            return canvas.width * canvas.height;
+          }),
+        );
+      expect(Math.max(...pixels)).toBeLessThanOrEqual(4_000_000);
+      peakPixels = Math.max(
+        peakPixels,
+        pixels.reduce((sum, value) => sum + value, 0),
       );
-    expect(Math.max(...pixels)).toBeLessThanOrEqual(4_000_000);
-    peakPixels = Math.max(
-      peakPixels,
-      pixels.reduce((sum, value) => sum + value, 0),
-    );
-    peakResidentPages = Math.max(
-      peakResidentPages,
-      pixels.filter(Boolean).length,
-    );
-    expect(peakPixels).toBeLessThanOrEqual(32_000_000);
+      peakResidentPages = Math.max(
+        peakResidentPages,
+        pixels.filter(Boolean).length,
+      );
+      expect(peakPixels).toBeLessThanOrEqual(32_000_000);
+    }
+    if (performanceProbe) {
+      await page
+        .getByRole("button", { name: "Search PDF", exact: true })
+        .click();
+      const search = page.getByRole("textbox", { name: "Search PDF" });
+      await search.pressSequentially("reasoning");
+      await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
+      await page.getByRole("button", { name: "Close PDF search" }).click();
+      await page.locator('[data-pdf-page-number="1"]').scrollIntoViewIfNeeded();
+      await waitForPdfTextLayer(page, 1);
+      await performanceProbe.checkpoint();
+    }
   }
   expect(
     await page
@@ -1242,6 +1261,17 @@ test("bounds PDF bitmap residency across repeated long-document navigation", asy
     type: "bounded-pdf-residency",
     description: JSON.stringify({ pageCount, peakResidentPages, peakPixels }),
   });
+  if (performanceProbe) {
+    const result = await performanceProbe.finish();
+    await test.info().attach("reader-performance.json", {
+      body: JSON.stringify(result),
+      contentType: "application/json",
+    });
+    test.info().annotations.push({
+      type: "reader-performance",
+      description: JSON.stringify(result),
+    });
+  }
 });
 
 test("keeps the PDF zoom percentage synchronized with the rendered page", async ({

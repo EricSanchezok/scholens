@@ -92,9 +92,25 @@ first-token time and tool pauses remain separately observable service latency.
 
 ## Verification
 
+PDF pages measure their scroll viewport in a layout effect before first paint.
+Rendering waits for a nonzero viewport, and resize observations with unchanged
+dimensions preserve state. This prevents the initial minimum-scale placeholders
+from painting many tiny pages and then expanding the entire document. Page
+geometry stays reserved while offscreen canvases and text layers are released.
+
 Performance changes retain deterministic unit, Storybook, and Playwright
 behavior. Production bundle comparisons use the procedure in
 [`testing.md`](./testing.md); local development timings are evidence for
 regression diagnosis, not production acceptance. Do not add arbitrary sleeps,
 route transitions, raw timing tokens, or speculative caching to make a test or
 demo appear faster.
+
+The Reader residency browser test supports an opt-in production-build acceptance
+probe: `SCHOLENS_READER_PERFORMANCE=1 pnpm exec playwright test reader.spec.ts
+--project chromium --grep "bounds PDF bitmap residency" --workers 1`. It traverses
+the document three times, searches with real keyboard events, and records canvas
+pixels, post-GC JavaScript heap/DOM counts, CLS session windows and the longest
+observed interaction. Equivalent second/third traversals must plateau within
+8 MiB heap and 2,000 DOM nodes; CLS is at most 0.1 and the longest measured
+interaction at most 200 ms. The attached JSON is controlled desktop fixture
+evidence, never a replacement for cohort-specific production INP or RUM.

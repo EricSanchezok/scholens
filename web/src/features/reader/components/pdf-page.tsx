@@ -362,9 +362,11 @@ function PdfPageSurface({
   const page =
     pageState?.pageNumber === pageNumber ? pageState.page : undefined;
   const shouldRender =
-    renderEnabled ||
-    pageNumber === currentPageNumber ||
-    (keepRendered && Boolean(renderedKey));
+    containerSize.width > 0 &&
+    containerSize.height > 0 &&
+    (renderEnabled ||
+      pageNumber === currentPageNumber ||
+      (keepRendered && Boolean(renderedKey)));
 
   React.useEffect(() => {
     if (searchMatches.length > 0) return;
@@ -995,15 +997,31 @@ export function PdfPage({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [clearActiveSelection]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const updateSize = (width: number, height: number) => {
+      setContainerSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
+    };
+    // Reserve the actual viewport before the first paint. A zero-width render
+    // shrinks every placeholder to 10%, paints many pages, then shifts the whole
+    // document when the asynchronous ResizeObserver delivers its first entry.
+    const style = getComputedStyle(container);
+    updateSize(
+      container.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight),
+      container.clientHeight -
+        parseFloat(style.paddingTop) -
+        parseFloat(style.paddingBottom),
+    );
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
-      setContainerSize({
-        height: entry.contentRect.height,
-        width: entry.contentRect.width,
-      });
+      updateSize(entry.contentRect.width, entry.contentRect.height);
     });
     observer.observe(container);
     return () => observer.disconnect();
