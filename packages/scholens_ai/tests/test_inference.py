@@ -1,6 +1,7 @@
 """Real Unix-socket proofs for priority, deadlines, isolation and bounds."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 import tempfile
@@ -124,6 +125,12 @@ def test_timed_out_client_drops_queued_work_and_never_starts_local_fallback():
 
 def test_query_burst_gives_waiting_index_work_a_bounded_turn():
     async def scenario():
+        # All fourteen socket clients must reach the server before releasing
+        # the model barrier. A small CI host's default executor has fewer
+        # threads and deadlocks the test harness before it can test fairness.
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(max_workers=16)
+        )
         model = Model(blocking=True)
         async with running(model) as (path, service):
             client = SocketTextEmbedder(path, revision=model.revision, query_timeout=2)
