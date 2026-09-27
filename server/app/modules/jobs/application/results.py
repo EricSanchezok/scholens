@@ -25,6 +25,7 @@ class ReservedJobResult:
 
 
 class JobResultStore(Protocol):
+    def require_transport(self, *, job_id: UUID, generation: int | None) -> None: ...
     def claim(self, *, job_id: UUID, claim_token: UUID) -> JobExecutionClaim: ...
     def heartbeat(
         self, *, job_id: UUID, generation: int, progress_code: str | None = None
@@ -39,11 +40,16 @@ class JobResultStore(Protocol):
     ) -> JobResultReceipt: ...
     def lock_application(self, reservation: ReservedJobResult) -> bool: ...
     def applied(self, reservation: ReservedJobResult) -> None: ...
+    def terminal(self, job_id: UUID) -> bool: ...
+    def retry(self, reservation: ReservedJobResult, *, error_code: str) -> bool: ...
 
 
 class JobResults:
     def __init__(self, store: JobResultStore, callbacks: JobCallbacks) -> None:
         self._store, self._callbacks = store, callbacks
+
+    def require_transport(self, *, job_id: UUID, generation: int | None = None) -> None:
+        self._store.require_transport(job_id=job_id, generation=generation)
 
     def claim(self, *, job_id: UUID, claim_token: UUID) -> JobExecutionClaim:
         return self._store.claim(job_id=job_id, claim_token=claim_token)
@@ -85,11 +91,41 @@ class JobResults:
         # share the caller's transaction. A restart cannot apply effects twice.
         if not self._store.lock_application(reservation):
             return JobCompletionResult(value={"accepted": False})
-        result = self._callbacks.complete(
+        if reservation.manifest.failure_code is not None:
+            result = self._callbacks.fail_result(
+                actor=actor,
+                operation=operation,
+                job_id=reservation.job_id,
+                error_code=reservation.manifest.failure_code,
+            )
+        else:
+            result = self._callbacks.complete(
+                actor=actor,
+                operation=operation,
+                job_id=reservation.job_id,
+                payload=payload,
+            )
+        if not self._store.terminal(reservation.job_id):
+            raise RuntimeError("job_result_not_applied")
+        self._store.applied(reservation)
+        return result
+
+    def retry(
+        self,
+        *,
+        reservation: ReservedJobResult,
+        actor: Actor | None,
+        operation: OperationContext,
+        error_code: str,
+    ) -> JobCompletionResult:
+        if not self._store.retry(reservation, error_code=error_code):
+            return JobCompletionResult(value={"accepted": False})
+        result = self._callbacks.fail_result(
             actor=actor,
             operation=operation,
             job_id=reservation.job_id,
-            payload=payload,
+            error_code="job_result_application_failed",
         )
-        self._store.applied(reservation)
+        if not self._store.terminal(reservation.job_id):
+            raise RuntimeError("job_result_failure_not_applied")
         return result

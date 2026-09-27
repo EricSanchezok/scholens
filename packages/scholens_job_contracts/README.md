@@ -24,6 +24,12 @@ Jobs must interpret identically:
   encoded key-payload ceiling enforced by both the Server producer and Jobs
   consumer.
 
+`results` owns the fenced execution claim, immutable result manifest, and receipt
+DTOs. Claims include a bounded busy retry delay and a checkpoint-only recovery
+instruction. Manifests may describe a terminal failure code, so failure delivery
+uses the same durable generation fence as success. No document text belongs in
+the receipt itself.
+
 The common callback values live in `callbacks`, Zotero-specific values live in
 `zotero`, the repair envelope lives in `pdf_repair`, the pure comparison policy
 lives in `pdf_quality`, generated-object deletion payload rules live in

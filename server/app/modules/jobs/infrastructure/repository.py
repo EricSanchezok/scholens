@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 
 from app.database.models import (
     DurableJob,
@@ -25,6 +25,7 @@ from app.modules.jobs.domain import (
     can_fail_job,
     can_recover_job,
 )
+from app.modules.jobs.infrastructure.models import JobExecution
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -62,6 +63,7 @@ class EnqueueJob(CreateJob):
     queue: str = ""
     task_kwargs: dict[str, JsonValue] = field(default_factory=dict)
     available_at: datetime | None = None
+    execution_replay: Literal["deterministic", "checkpoint_only"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +244,16 @@ class JobRepository:
         queue: str,
         kwargs: dict[str, JsonValue],
         available_at: datetime | None = None,
+        execution_replay: Literal["deterministic", "checkpoint_only"] | None = None,
     ) -> JobDispatch:
+        if execution_replay is not None:
+            db.add(JobExecution(job_id=job.id))
+            job.payload = {
+                **job.payload,
+                "delivery_protocol": "manifest-v1",
+                "execution_replay": execution_replay,
+            }
+            kwargs = {**kwargs, "delivery_protocol": "manifest-v1"}
         dispatch = JobDispatch(
             job_id=job.id,
             task_name=task_name,
@@ -265,6 +276,7 @@ class JobRepository:
                 queue=request.queue,
                 kwargs=request.task_kwargs,
                 available_at=request.available_at,
+                execution_replay=request.execution_replay,
             )
         return persisted
 

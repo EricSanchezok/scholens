@@ -221,3 +221,128 @@ def test_n_minus_one_job_can_claim_and_complete_on_expanded_schema(database):
             db, job_id=job_id, result={"legacy": True}
         )
         assert changed and job.status == "completed"
+
+
+def test_expired_owner_cannot_resurrect_lease_or_deliver_before_reclaim(database):
+    engine, job_id = database
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(
+            job_id=job_id,
+            claim_token=uuid4(),
+            now=datetime.now(UTC) - timedelta(seconds=181),
+        )
+        assert not repo.heartbeat(job_id=job_id, generation=1)
+        assert not repo.accept(
+            job_id=job_id,
+            manifest=_manifest(job_id),
+            request_id=uuid4(),
+            delivery_ref="b" * 64,
+        ).accepted
+
+
+def test_transport_fence_rejects_unfenced_and_stale_source_mutations(database):
+    from app.shared.domain import AppError
+
+    engine, job_id = database
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(job_id=job_id, claim_token=uuid4())
+        repo.require_transport(job_id=job_id, generation=1)
+        for generation in (None, 2):
+            with pytest.raises(AppError, match="job_execution_fence_rejected"):
+                repo.require_transport(job_id=job_id, generation=generation)
+        db.get(DurableJob, job_id).status = "cancelled"
+        with pytest.raises(AppError, match="job_execution_fence_rejected"):
+            repo.require_transport(job_id=job_id, generation=1)
+
+
+def test_paid_recovery_is_checkpoint_only_and_busy_owner_has_bounded_retry(database):
+    engine, job_id = database
+    now = datetime.now(UTC)
+    token = uuid4()
+    with Session(engine) as db, db.begin():
+        db.get(DurableJob, job_id).payload = {"execution_replay": "checkpoint_only"}
+        repo = JobResultRepository(db)
+        first = repo.claim(job_id=job_id, claim_token=token, now=now)
+        assert first.claimed and not first.recover_only
+        busy = repo.claim(job_id=job_id, claim_token=uuid4(), now=now)
+        assert not busy.claimed and busy.retry_after_seconds == 180
+        second = repo.claim(
+            job_id=job_id, claim_token=uuid4(), now=now + timedelta(seconds=181)
+        )
+        assert second.claimed and second.recover_only and second.claim_generation == 2
+
+
+def test_nonterminal_handler_cannot_acknowledge_inbox(database):
+    from unittest.mock import MagicMock
+    from app.modules.jobs.application.results import JobResults
+    from app.modules.jobs.infrastructure.models import JobResultInbox
+
+    engine, job_id = database
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(job_id=job_id, claim_token=uuid4())
+        repo.accept(
+            job_id=job_id,
+            manifest=_manifest(job_id),
+            request_id=uuid4(),
+            delivery_ref="b" * 64,
+        )
+        reservation = repo.reserve_next(now=datetime.now(UTC) + timedelta(seconds=1))
+    with pytest.raises(RuntimeError, match="not_applied"):
+        with Session(engine) as db, db.begin():
+            JobResults(JobResultRepository(db), MagicMock()).apply(
+                reservation=reservation, actor=None, operation=MagicMock(), payload={}
+            )
+    with Session(engine) as db:
+        assert db.get(JobResultInbox, (job_id, 1)).status == "applying"
+        assert db.get(DurableJob, job_id).status == "running"
+
+
+def test_exhaustion_runs_domain_compensation_and_inbox_rejection_atomically(database):
+    from unittest.mock import MagicMock
+    from app.modules.jobs.application.callbacks import JobCompletionResult
+    from app.modules.jobs.application.results import JobResults
+    from app.modules.jobs.infrastructure.models import JobResultInbox
+
+    engine, job_id = database
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(job_id=job_id, claim_token=uuid4())
+        repo.accept(
+            job_id=job_id,
+            manifest=_manifest(job_id),
+            request_id=uuid4(),
+            delivery_ref="b" * 64,
+        )
+        reservation = repo.reserve_next(now=datetime.now(UTC) + timedelta(seconds=1))
+        db.get(JobResultInbox, (job_id, 1)).attempt_count = 8
+    with pytest.raises(RuntimeError, match="compensation interrupted"):
+        with Session(engine) as db, db.begin():
+            callbacks = MagicMock()
+            callbacks.fail_result.side_effect = RuntimeError("compensation interrupted")
+            JobResults(JobResultRepository(db), callbacks).retry(
+                reservation=reservation,
+                actor=None,
+                operation=MagicMock(),
+                error_code="InvalidArtifact",
+            )
+    with Session(engine) as db, db.begin():
+        assert db.get(JobResultInbox, (job_id, 1)).status == "applying"
+        callbacks = MagicMock()
+
+        def compensate(**_kwargs):
+            db.get(DurableJob, job_id).status = "failed"
+            return JobCompletionResult(value={"accepted": True})
+
+        callbacks.fail_result.side_effect = compensate
+        JobResults(JobResultRepository(db), callbacks).retry(
+            reservation=reservation,
+            actor=None,
+            operation=MagicMock(),
+            error_code="InvalidArtifact",
+        )
+        assert db.get(JobResultInbox, (job_id, 1)).status == "rejected"
+        assert db.get(DurableJob, job_id).status == "failed"
+        callbacks.fail_result.assert_called_once()

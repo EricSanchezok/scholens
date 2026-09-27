@@ -74,10 +74,26 @@ class S3Service:
             response = self.s3_client.get_object(
                 Bucket=self.bucket_name, Key=object_key
             )
-            return response["Body"].read()
+            try:
+                return response["Body"].read()
+            finally:
+                response["Body"].close()
         except (BotoCoreError, ClientError):
             logger.exception("s3.object.download_failed")
             raise
+
+    def download_bounded_bytes(self, object_key: str, *, max_bytes: int) -> bytes:
+        """Read at most the declared bound plus one byte and always release HTTP."""
+        if max_bytes < 1:
+            raise ValueError("s3_object_bound_invalid")
+        response = self.s3_client.get_object(Bucket=self.bucket_name, Key=object_key)
+        try:
+            data = response["Body"].read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise ValueError("s3_object_too_large")
+            return data
+        finally:
+            response["Body"].close()
 
     def download_file_to_path(
         self,
@@ -93,15 +109,18 @@ class S3Service:
                 Bucket=self.bucket_name, Key=object_key
             )
             body = response["Body"]
-            with Path(file_path).open("wb") as destination:
-                while True:
-                    chunk = body.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    destination.write(chunk)
-                    written += len(chunk)
-                    if max_bytes is not None and written > max_bytes:
-                        raise ValueError("s3_object_too_large")
+            try:
+                with Path(file_path).open("wb") as destination:
+                    while True:
+                        chunk = body.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        written += len(chunk)
+                        if max_bytes is not None and written > max_bytes:
+                            raise ValueError("s3_object_too_large")
+                        destination.write(chunk)
+            finally:
+                body.close()
             return written
         except (BotoCoreError, ClientError, OSError):
             logger.exception("s3.object.download_failed")

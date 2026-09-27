@@ -21,6 +21,7 @@ from app.modules.jobs.application.contracts import (
     JobSourceUrlResponse,
     SourceReadyCallback,
 )
+from app.modules.papers.application.ingestion import SourceReadyResult
 from app.modules.jobs.application.callbacks import (
     JobCompletionResult,
     JobPostCommitAction,
@@ -131,6 +132,25 @@ class JobCompletionProcessor:
         # Async clients remain on the Server event loop that owns their lifetime.
         await self._run_post_commit(result)
 
+    def retry_inbox(
+        self, reservation: ReservedJobResult, *, error_code: str
+    ) -> JobCompletionResult:
+        facts = self._causality(job_id=reservation.job_id)
+        resumed = self._resume(
+            facts=facts,
+            verified=VerifiedJobCallback(
+                request_id=reservation.request_id, delivery_ref=reservation.delivery_ref
+            ),
+        )
+        return self._executor.command(
+            lambda capabilities: capabilities.job_results.retry(
+                reservation=reservation,
+                actor=resumed.actor,
+                operation=resumed.operation,
+                error_code=error_code,
+            )
+        )
+
     async def resolve_source_url(
         self,
         *,
@@ -172,6 +192,12 @@ class JobCompletionProcessor:
         payload: dict[str, object],
         verified: VerifiedJobCallback,
     ) -> object:
+        await asyncio.to_thread(
+            self._executor.command,
+            lambda capabilities: capabilities.job_results.require_transport(
+                job_id=job_id
+            ),
+        )
         facts = await asyncio.to_thread(self._causality, job_id=job_id)
         resumed = await asyncio.to_thread(self._resume, facts=facts, verified=verified)
         context = (
@@ -276,8 +302,12 @@ class JobCompletionProcessor:
         if resumed.actor is None:
             raise RuntimeError("source_ready_job_owner_missing")
         actor = resumed.actor
-        result = self._executor.command(
-            lambda capabilities: capabilities.paper_ingestion.source_ready(
+
+        def apply_source(capabilities: ApplicationCapabilities) -> SourceReadyResult:
+            capabilities.job_results.require_transport(
+                job_id=job_id, generation=callback.claim_generation
+            )
+            return capabilities.paper_ingestion.source_ready(
                 actor=actor,
                 operation=resumed.operation,
                 job_id=job_id,
@@ -287,7 +317,8 @@ class JobCompletionProcessor:
                 filename=callback.filename,
                 attempt=callback.attempt,
             )
-        )
+
+        result = self._executor.command(apply_source)
         return asdict(result)
 
     async def _release_terminal_failure_leases(
@@ -330,6 +361,11 @@ class JobCompletionProcessor:
         callback: JobFailureCallback,
         verified: VerifiedJobCallback,
     ) -> JobClaimResponse:
+        self._executor.command(
+            lambda capabilities: capabilities.job_results.require_transport(
+                job_id=job_id
+            )
+        )
         facts = self._causality(job_id=job_id)
         resumed = self._resume(facts=facts, verified=verified)
         return self._executor.command(

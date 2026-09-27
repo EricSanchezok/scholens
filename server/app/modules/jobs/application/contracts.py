@@ -160,6 +160,8 @@ class SourceReadyCallback(JobCallbackIdentity):
 
     model_config = ConfigDict(extra="forbid")
 
+    claim_generation: int | None = Field(default=None, ge=1)
+
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size_bytes: int = Field(gt=0, le=30 * 1024 * 1024)
     staging_object_key: str = Field(min_length=1, max_length=512)

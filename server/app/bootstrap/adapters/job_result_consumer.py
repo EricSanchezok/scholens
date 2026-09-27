@@ -59,19 +59,18 @@ class JobResultConsumer:
             payload = load_result(self._reader, reservation.manifest)
             return self._processor.apply_inbox(reservation, payload)
         except Exception as exc:
-            with self._sessions() as db, db.begin():
-                JobResultRepository(db).retry(
-                    reservation, error_code=type(exc).__name__
-                )
+            result = self._processor.retry_inbox(
+                reservation, error_code=type(exc).__name__
+            )
             log_event(
                 logger,
                 logging.ERROR,
                 "jobs.result.apply_failed",
                 job_id=str(reservation.job_id),
                 claim_generation=reservation.generation,
-                exc_info=exc,
+                error_code=type(exc).__name__,
             )
-            return JobCompletionResult(value={"accepted": False})
+            return result
 
     async def run(self, stop: asyncio.Event) -> None:
         # At most one artifact and transaction per process; the database fence
@@ -91,7 +90,7 @@ class JobResultConsumer:
                         logger,
                         logging.ERROR,
                         "jobs.result.consumer_failed",
-                        exc_info=exc,
+                        error_code=type(exc).__name__,
                     )
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=1)

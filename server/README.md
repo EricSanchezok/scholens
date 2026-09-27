@@ -200,6 +200,13 @@ Server process downloads one bounded artifact outside a database session, then
 commits the execution fence, business effects and inbox acknowledgement together.
 A restarted consumer takes over an expired 180-second apply lease with a fresh
 nonce. Duplicated and superseded applications cannot commit effects twice.
+Expired workers cannot renew leases or submit new results. Existing execution
+rows reject unfenced legacy mutations; source materialization checks its optional
+generation inside the mutation transaction. Inbox acknowledgement requires a
+terminal business result. After eight failed applies, operation-owned failure
+compensation and the rejection commit together, including journal changes and
+the normal post-commit concurrency release. Apply lock/statement deadlines are
+five/thirty seconds. Consumer diagnostics contain error classes, not artifacts.
 
 This is a consumer-first expansion: `JOB_RESULT_INBOX_ENABLED` defaults to false,
 and existing dispatch producers retain their accepted callback protocol. Enable

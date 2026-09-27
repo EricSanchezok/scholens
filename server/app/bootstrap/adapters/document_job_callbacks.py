@@ -1212,6 +1212,13 @@ def handle_paper_processing_webhook(
                     post_commit=success_post_commit,
                 )
         except Exception:
+            if (
+                isinstance(durable_job.payload, dict)
+                and durable_job.payload.get("delivery_protocol") == "manifest-v1"
+            ):
+                # The durable inbox owns retry and exhaustion compensation.
+                # A rolled-back transient apply must retain its known result.
+                raise
             logger.exception(
                 "paper.pdf_callback.application_failed",
                 extra={"job_id": normalized_job_id},

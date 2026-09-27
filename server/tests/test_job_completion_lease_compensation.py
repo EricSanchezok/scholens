@@ -40,7 +40,7 @@ def _processor(
     executor = MagicMock()
     executor.command_async = AsyncMock(side_effect=completion_error)
     executor.command.side_effect = lambda operation: operation(
-        SimpleNamespace(job_callbacks=callbacks)
+        SimpleNamespace(job_callbacks=callbacks, job_results=MagicMock())
     )
     processor = JobCompletionProcessor(
         session_factory=MagicMock(),

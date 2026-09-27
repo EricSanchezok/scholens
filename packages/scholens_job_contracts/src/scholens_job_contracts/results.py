@@ -16,6 +16,8 @@ class JobExecutionClaim(BaseModel):
     claimed: bool
     claim_generation: int | None = Field(default=None, ge=1)
     lease_seconds: int = EXECUTION_LEASE_SECONDS
+    retry_after_seconds: int | None = Field(default=None, ge=1, le=180)
+    recover_only: bool = False
 
 
 class JobResultManifest(BaseModel):
@@ -25,6 +27,7 @@ class JobResultManifest(BaseModel):
     storage_key: str = Field(min_length=1, max_length=256)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     byte_size: int = Field(gt=0, le=MAX_JOBS_CALLBACK_BODY_BYTES)
+    failure_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,79}$")
 
     @model_validator(mode="after")
     def validate_immutable_key(self) -> "JobResultManifest":

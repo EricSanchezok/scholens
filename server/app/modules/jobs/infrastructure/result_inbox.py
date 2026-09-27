@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
 from scholens_job_contracts import (
     EXECUTION_LEASE_SECONDS,
@@ -27,6 +27,33 @@ TERMINAL = {"completed", "failed", "cancelled"}
 class JobResultRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def require_transport(self, *, job_id: UUID, generation: int | None) -> None:
+        job = self.db.scalar(
+            select(DurableJob).where(DurableJob.id == job_id).with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        execution = self.db.get(JobExecution, job_id)
+        if execution is None and generation is None:
+            return
+        if (
+            execution is not None
+            and generation == execution.claim_generation
+            and job.status == "running"
+            and job.lease_expires_at is not None
+            and job.lease_expires_at > datetime.now(UTC)
+        ):
+            return
+        raise AppError(
+            code="job_execution_fence_rejected",
+            message="Job execution is no longer current",
+            kind=FailureKind.CONFLICT,
+        )
 
     def _lock(self, job_id: UUID) -> tuple[DurableJob, JobExecution]:
         # Every writer takes the job before the execution/result row.
@@ -63,6 +90,15 @@ class JobResultRepository:
                 claim_generation=execution.claim_generation
                 if execution.claim_token == claim_token
                 else None,
+                retry_after_seconds=(
+                    max(1, min(180, int((job.lease_expires_at - now).total_seconds())))
+                    if execution.claim_token != claim_token
+                    else None
+                ),
+                recover_only=(
+                    execution.claim_generation > 1
+                    and job.payload.get("execution_replay") == "checkpoint_only"
+                ),
             )
         execution.claim_generation += 1
         execution.claim_token = claim_token
@@ -72,7 +108,12 @@ class JobResultRepository:
         job.attempt_count += 1
         self.db.flush()
         return JobExecutionClaim(
-            claimed=True, claim_generation=execution.claim_generation
+            claimed=True,
+            claim_generation=execution.claim_generation,
+            recover_only=(
+                execution.claim_generation > 1
+                and job.payload.get("execution_replay") == "checkpoint_only"
+            ),
         )
 
     def heartbeat(
@@ -83,14 +124,16 @@ class JobResultRepository:
         progress_code: str | None = None,
         now: datetime | None = None,
     ) -> bool:
+        now = now or datetime.now(UTC)
         job, execution = self._lock(job_id)
         if (
             job.status != "running"
             or execution.claim_generation != generation
             or job.lease_expires_at is None
+            or job.lease_expires_at <= now
         ):
             return False
-        job.lease_expires_at = (now or datetime.now(UTC)) + LEASE
+        job.lease_expires_at = now + LEASE
         if progress_code is not None:
             job.progress_code = progress_code
         return True
@@ -114,8 +157,12 @@ class JobResultRepository:
             )
         existing = self.db.get(JobResultInbox, (job_id, manifest.claim_generation))
         if existing is not None:
-            accepted = existing.manifest == manifest.model_dump(mode="json")
-        elif job.status == "running":
+            accepted = JobResultManifest.model_validate(existing.manifest) == manifest
+        elif (
+            job.status == "running"
+            and job.lease_expires_at is not None
+            and job.lease_expires_at > datetime.now(UTC)
+        ):
             self.db.add(
                 JobResultInbox(
                     job_id=job_id,
@@ -174,6 +221,8 @@ class JobResultRepository:
         )
 
     def lock_application(self, reservation: ReservedJobResult) -> bool:
+        self.db.execute(text("SET LOCAL lock_timeout = '5s'"))
+        self.db.execute(text("SET LOCAL statement_timeout = '30s'"))
         job, execution = self._lock(reservation.job_id)
         row = self.db.scalar(
             select(JobResultInbox)
@@ -189,6 +238,8 @@ class JobResultRepository:
             and row is not None
             and row.status == "applying"
             and row.apply_claim_id == reservation.claim_id
+            and row.apply_lease_expires_at is not None
+            and row.apply_lease_expires_at > datetime.now(UTC)
         )
 
     def applied(self, reservation: ReservedJobResult) -> None:
@@ -199,11 +250,22 @@ class JobResultRepository:
         row.apply_claim_id = None
         row.apply_lease_expires_at = None
 
-    def retry(self, reservation: ReservedJobResult, *, error_code: str) -> None:
+    def terminal(self, job_id: UUID) -> bool:
+        job = self.db.get(DurableJob, job_id)
+        return job is None or job.status in TERMINAL
+
+    def retry(self, reservation: ReservedJobResult, *, error_code: str) -> bool:
         job, execution = self._lock(reservation.job_id)
-        row = self.db.get(JobResultInbox, (reservation.job_id, reservation.generation))
+        row = self.db.scalar(
+            select(JobResultInbox)
+            .where(
+                JobResultInbox.job_id == reservation.job_id,
+                JobResultInbox.claim_generation == reservation.generation,
+            )
+            .with_for_update()
+        )
         if row is None or row.apply_claim_id != reservation.claim_id:
-            return
+            return False
         terminal = (
             job.status in TERMINAL
             or execution.claim_generation != reservation.generation
@@ -216,8 +278,6 @@ class JobResultRepository:
         row.available_at = datetime.now(UTC) + timedelta(
             seconds=min(60, 2**row.attempt_count)
         )
-        if exhausted and not terminal:
-            job.status = "failed"
-            job.error_code = "job_result_application_failed"
-            job.completed_at = datetime.now(UTC)
-            job.lease_expires_at = None
+        # The application invokes the operation's failure handler in this same
+        # transaction, including domain compensation and journal changes.
+        return exhausted and not terminal

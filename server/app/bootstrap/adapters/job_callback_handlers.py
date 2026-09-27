@@ -18,6 +18,7 @@ from app.modules.jobs.application.contracts import (
     DocumentReflowWebhookData,
     JobCallbackIdentity,
     PdfProcessingWebhookData,
+    PDFProcessingResult,
     StorageDeleteCallback,
 )
 from app.bootstrap.adapters import document_job_callbacks
@@ -26,6 +27,7 @@ from app.bootstrap.adapters.document_reflow_callbacks import (
     complete_document_reflow,
 )
 from app.modules.jobs.infrastructure.repository import job_repository
+from app.modules.jobs.infrastructure.result_inbox import JobResultRepository
 from app.shared.application import Actor, OperationContext
 from app.shared.domain.enums import JobOperation, JobStatus
 from pydantic import BaseModel
@@ -43,12 +45,15 @@ class SqlAlchemyJobLifecycle:
         return JobStatus(job_repository.require(self._db, job_id=job_id).status)
 
     def claim(self, *, job_id: UUID) -> bool:
+        JobResultRepository(self._db).require_transport(job_id=job_id, generation=None)
         return job_repository.claim(self._db, job_id=job_id) is not None
 
     def heartbeat(self, *, job_id: UUID) -> bool:
+        JobResultRepository(self._db).require_transport(job_id=job_id, generation=None)
         return job_repository.heartbeat(self._db, job_id=job_id)
 
     def progress(self, *, job_id: UUID, progress_code: str) -> bool:
+        JobResultRepository(self._db).require_transport(job_id=job_id, generation=None)
         return job_repository.progress(
             self._db,
             job_id=job_id,
@@ -75,6 +80,27 @@ class SqlAlchemyJobLifecycle:
 class PdfProcessCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
+
+    def fail(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        error_code: str,
+    ) -> JobHandlerResult:
+        return self.complete(
+            actor=actor,
+            operation=operation,
+            job_id=job_id,
+            callback=PdfProcessingWebhookData(
+                task_id=str(job_id),
+                status="failed",
+                result=PDFProcessingResult(
+                    success=False, job_id=str(job_id), error=error_code
+                ),
+            ),
+        )
 
     def complete(
         self,

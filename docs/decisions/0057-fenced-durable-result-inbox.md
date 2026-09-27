@@ -32,6 +32,28 @@ Roll out consumer-first behind a disabled producer. Existing job payloads remain
 accepted throughout drain and rollback. The owning jobs transport/persistence
 adapters own this overlap; remove it only after the last legacy job is terminal
 and the supported rollback release understands the replacement protocol.
+Retirement also requires at least 90 days of compatibility and 30 consecutive
+days without legacy traffic; removal is a later reviewed contract stage.
+
+The worker transport persists a checkpoint pointer after uploading the hashed
+result and before requesting a receipt. Recovery validates both and resubmits
+the identical bytes under its new generation. Celery transport retries retain
+the claim token; broker redelivery gets a new owner. A `checkpoint_only` job
+cannot repeat an unknown paid outcome after takeover: it replays a known result
+or records `provider_outcome_unknown`. Deterministic work may recompute when no
+checkpoint exists. PDF workers accept an additive `delivery_protocol` argument;
+`manifest-v1` always skips inline AI extraction. Existing envelopes retain their
+legacy behavior at the transport adapter until staged producers are enabled.
+
+Expired owners cannot resurrect leases, submit first results, or mutate source
+materialization. Legacy claim/progress/complete/fail routes reject jobs with an
+execution record. Source materialization validates the generation in the same
+transaction as mutation. A nonterminal business handler cannot acknowledge an
+inbox row. Exhausted application retries invoke the operation's failure handler,
+domain compensation, and journal in the inbox rejection transaction; post-commit
+concurrency release retains the normal owner policy. Apply transactions have a
+five-second lock timeout and thirty-second statement timeout. Consumer logs
+record bounded error classes without exception payloads.
 
 ## Alternatives considered
 
@@ -56,3 +78,8 @@ reclaimed execution, repeated result acceptance, cancelled jobs, consumer
 restart, atomic business-effect rollback and duplicate application. An N-1 job
 still claims and completes on the expanded schema. Payload tests reject changed
 bytes, digests, cross-job paths and oversize manifests before application.
+Worker tests cover receipt loss, replay without paid work, lost claim identity,
+corrupt checkpoints, generation loss, failed outcomes, bounded storage stream
+closure, and readable PDF completion without metadata. PostgreSQL tests also
+exercise expired leases before takeover, unfenced source mutation, nonterminal
+handler acknowledgement, and compensation rollback.

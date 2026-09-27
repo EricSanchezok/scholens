@@ -41,6 +41,18 @@ The failure handler also runs in the parent when a child is killed, where
 until the protection expires. Releasing protection does not acknowledge a
 message or change the durable job lease, so ordinary recovery remains intact.
 
+The PDF entrypoints also accept `delivery_protocol=manifest-v1`. This selects a
+generation-fenced lease, skips inline AI metadata, writes an immutable hashed
+result plus a recovery pointer, and submits a metadata-only receipt. Heartbeats
+stop work cooperatively after ownership loss; source-ready mutations carry the
+generation. A delivery retry reuses persisted bytes and retains its claim token.
+Takeover of `checkpoint_only` work replays a known result or reports an unknown
+provider outcome instead of calling the provider again. Legacy task envelopes
+continue to use their existing transport. Producer activation follows schema,
+consumer, cleanup, and staged-pipeline acceptance; this argument alone does not
+enable production dispatch. S3 readers always close their response stream, and
+result/checkpoint reads have explicit byte ceilings.
+
 Before doing provider or storage work, every task claims its durable Server
 job. Transient claim transport failures use bounded exponential Celery retry
 instead of being acknowledged as terminal worker failures. In production the

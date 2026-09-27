@@ -66,6 +66,18 @@ class JobCompletionHandler(Protocol):
     ) -> JobHandlerResult: ...
 
 
+@runtime_checkable
+class JobFailureHandler(Protocol):
+    def fail(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        error_code: str,
+    ) -> JobHandlerResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class PdfPostprocessResolution:
     doi: str | None = None
@@ -348,6 +360,35 @@ class JobCallbacks:
         return JobCompletionResult(
             value=handler_result.value,
             post_commit=handler_result.post_commit,
+        )
+
+    def fail_result(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        error_code: str,
+    ) -> JobCompletionResult:
+        """Compensate the owning domain before acknowledging a rejected result."""
+        job_operation = self._lifecycle.operation(job_id=job_id)
+        before = self._lifecycle.status(job_id=job_id)
+        if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            return JobCompletionResult(value={"accepted": False})
+        handler = self._registration(job_operation).handler
+        if isinstance(handler, JobFailureHandler):
+            result = handler.fail(
+                actor=actor, operation=operation, job_id=job_id, error_code=error_code
+            )
+        else:
+            changed = self._lifecycle.fail(job_id=job_id, error_code=error_code)
+            result = JobHandlerResult(value={"accepted": changed})
+        return self._record_completion(
+            actor=actor,
+            operation=operation,
+            job_id=job_id,
+            before=before,
+            handler_result=result,
         )
 
     def fail(
