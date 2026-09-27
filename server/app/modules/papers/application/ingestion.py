@@ -135,6 +135,16 @@ class PaperIngestionLimits(Protocol):
 
 
 class PaperIngestionGateway(Protocol):
+    def replay_upload(
+        self,
+        *,
+        actor: Actor,
+        upload_id: UUID,
+        project_id: UUID | None,
+        add_to_library: bool,
+        idempotency_key: str,
+    ) -> AcceptedIngestion | None: ...
+
     def accept(
         self,
         *,
@@ -226,6 +236,24 @@ class IngestPaper:
         self._limits = limits
         self._gateway = gateway
         self._journal = journal
+
+    def replay_upload(
+        self,
+        *,
+        actor: Actor,
+        upload_id: UUID,
+        project_id: UUID | None,
+        add_to_library: bool,
+        idempotency_key: str,
+    ) -> AcceptedIngestion | None:
+        return self._gateway.replay_upload(
+            actor=actor,
+            upload_id=upload_id,
+            project_id=project_id,
+            add_to_library=add_to_library,
+            idempotency_key=normalize_idempotency_key(idempotency_key)
+            or f"upload-session:{upload_id}",
+        )
 
     async def prepare_bytes(
         self,

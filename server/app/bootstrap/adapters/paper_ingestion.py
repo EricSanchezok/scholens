@@ -13,7 +13,11 @@ from uuid import UUID
 from app.bootstrap.adapters.document_submission import finalize_reserved_document
 from app.bootstrap.document_rollout import in_document_rollout
 from app.bootstrap.adapters.upload_repository import upload_reservation_repository
-from app.bootstrap.adapters.upload_reservations import reserve_upload
+from app.bootstrap.adapters.upload_reservations import (
+    find_reserved_upload,
+    reserve_upload,
+    upload_idempotency_key,
+)
 from app.database.models import (
     DurableJob,
     JobOperation,
@@ -56,6 +60,9 @@ from app.modules.papers.application.upload_intent import (
     resolve_created_memberships,
 )
 from app.modules.papers.domain import content_sha256, normalize_doi
+from app.modules.projects.infrastructure.access import (
+    require_project_permission_for_update,
+)
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind, JsonValue
 from sqlalchemy import delete, func, select
@@ -288,6 +295,53 @@ class SqlPaperIngestionGateway:
     def _use_document_stages(self, user_id: int) -> bool:
         return self._staged_processing and in_document_rollout(
             user_id, self._staged_percentage
+        )
+
+    def replay_upload(
+        self,
+        *,
+        actor: Actor,
+        upload_id: UUID,
+        project_id: UUID | None,
+        add_to_library: bool,
+        idempotency_key: str,
+    ) -> AcceptedIngestion | None:
+        # Both claim and acceptance take this lock before the session row. A
+        # retry racing the acceptance commit observes its receipt before claim.
+        self._db.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    func.hashtextextended(
+                        f"paper-upload-ingestion:v1:{actor.id}:{upload_id}", 0
+                    )
+                )
+            )
+        )
+        reservation = find_reserved_upload(
+            self._db,
+            requester=actor,
+            project_id=project_id,
+            add_to_library=add_to_library,
+            content_sha256=None,
+            source={"fingerprint": f"upload:{upload_id}"},
+            key=upload_idempotency_key(
+                requester_id=actor.id, project_id=project_id, key=idempotency_key
+            ),
+        )
+        if reservation is None:
+            return None
+        if project_id is not None:
+            require_project_permission_for_update(
+                self._db,
+                project_id=project_id,
+                user_id=actor.id,
+                permission="manage_papers",
+            )
+        return AcceptedIngestion(
+            ingestion=self.response(reservation),
+            replayed=True,
+            processing_required=reservation.job.status
+            in {JobStatus.PENDING.value, JobStatus.RUNNING.value},
         )
 
     @staticmethod

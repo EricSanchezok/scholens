@@ -974,8 +974,18 @@ minutes with a generation-specific lease token, rechecks Project access and the
 `add_to_library` intent, and verifies stored size and the S3 checksum by HEAD.
 The document worker then streams and hashes the bounded object before the
 metadata-only materialization callback. A stale worker cannot
-consume or release a newer claim. Success consumes the session and removes its
-staging object; validation failure makes it non-reusable, transient failure
+consume or release a newer claim. Acceptance consumes the session in the same
+transaction as its reservation, durable job, journal and dispatch outbox. A
+transaction-scoped lock serializes receipt lookup with both claim and acceptance;
+an identical request racing the acceptance commit receives the existing receipt.
+Before claiming or reading storage, retries look up the caller's durable
+idempotency key and compare the immutable source fingerprint and destination
+intent. This still works after source materialization changes the job's digest,
+after completion, or after temporary session cleanup. Project permission is
+revalidated; changed requests and cancelled ingestions remain conflicts. A
+retry during uncommitted storage validation may still receive the retryable
+`paper_upload_in_use` response. The worker removes staging objects after
+processing; validation failure makes the session non-reusable, transient failure
 releases it for retry, bounded request-time cleanup removes expired database
 rows, and bucket lifecycle removes abandoned staging objects.
 

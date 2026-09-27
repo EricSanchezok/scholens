@@ -18,11 +18,17 @@ from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.papers.application.ingestion import (
+    AcceptedIngestion,
     PdfUrlSource,
     PreparedPaperInput,
     PreparedPaperSource,
 )
-from app.modules.papers.domain import content_sha256, normalize_doi
+from app.modules.papers.application.upload_sessions import PaperUploadRecord
+from app.modules.papers.domain import (
+    content_sha256,
+    normalize_doi,
+    normalize_idempotency_key,
+)
 from app.shared.application import (
     Actor,
     ApplicationExecutor,
@@ -187,12 +193,27 @@ class PaperIngestionWorkflow:
     ) -> LibraryPaperIngestionResponse:
         """Validate staged metadata and let the document worker read the object."""
         del ip_address
-        record = self._executor.command(
-            lambda capabilities: capabilities.paper_uploads.claim(
+        durable_key = (
+            normalize_idempotency_key(idempotency_key) or f"upload-session:{upload_id}"
+        )
+
+        def claim_or_replay(
+            capabilities: ApplicationCapabilities,
+        ) -> PaperUploadRecord | AcceptedIngestion:
+            replay = capabilities.paper_ingestion.replay_upload(
                 actor=actor,
                 upload_id=upload_id,
+                project_id=project_id,
+                add_to_library=add_to_library,
+                idempotency_key=durable_key,
             )
-        )
+            if replay is not None:
+                return replay
+            return capabilities.paper_uploads.claim(actor=actor, upload_id=upload_id)
+
+        record = self._executor.command(claim_or_replay)
+        if isinstance(record, AcceptedIngestion):
+            return record.ingestion
         lease_token = record.lease_token
         assert lease_token is not None
         try:
@@ -253,15 +274,9 @@ class PaperIngestionWorkflow:
                 upload_object_key=record.object_key,
                 project_id=record.project_id,
                 add_to_library=record.add_to_library,
-                idempotency_key=idempotency_key or f"upload-session:{upload_id}",
+                idempotency_key=durable_key,
                 expected_sha256=record.sha256,
-            )
-            self._executor.command(
-                lambda capabilities: capabilities.paper_uploads.consume(
-                    actor=actor,
-                    upload_id=upload_id,
-                    lease_token=lease_token,
-                )
+                upload_lease_token=lease_token,
             )
         except AppError as exc:
             failed = exc.kind in {
@@ -442,10 +457,30 @@ class PaperIngestionWorkflow:
         canonical_object_key: str | None = None,
         expected_sha256: str | None = None,
         retry_of: UUID | None = None,
+        upload_lease_token: UUID | None = None,
     ) -> LibraryPaperIngestionResponse:
         proposed_job_id = uuid4()
-        accepted = self._executor.command(
-            lambda capabilities: capabilities.paper_ingestion.accept_source(
+
+        def accept(capabilities: ApplicationCapabilities) -> AcceptedIngestion:
+            if upload_lease_token is not None:
+                assert upload_id is not None and idempotency_key is not None
+                replay = capabilities.paper_ingestion.replay_upload(
+                    actor=actor,
+                    upload_id=upload_id,
+                    project_id=project_id,
+                    add_to_library=add_to_library,
+                    idempotency_key=idempotency_key,
+                )
+                if replay is not None:
+                    return replay
+                # Session consumption, reservation, journal and outbox share the
+                # executor's transaction. A lost lease cannot create durable work.
+                capabilities.paper_uploads.consume(
+                    actor=actor,
+                    upload_id=upload_id,
+                    lease_token=upload_lease_token,
+                )
+            return capabilities.paper_ingestion.accept_source(
                 actor=actor,
                 operation=operation,
                 project_id=project_id,
@@ -464,7 +499,8 @@ class PaperIngestionWorkflow:
                 job_id=proposed_job_id,
                 retry_of=retry_of,
             )
-        )
+
+        accepted = self._executor.command(accept)
         if not accepted.processing_required:
             return accepted.ingestion
         track_event(

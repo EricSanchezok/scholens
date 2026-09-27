@@ -174,8 +174,12 @@ user's private Library metadata is never a fallback.
 exists: actor, optional Project, plain filename, declared size and SHA-256,
 `add_to_library` intent, private staging object key, expiry, and ingestion
 lease state. It never stores a client filesystem path. A consumed session
-cannot be reused, and abandoned objects are also bounded by the content bucket
-lifecycle. The canonical Document and Library/Project memberships remain owned
+cannot create new work. Its original durable ingestion receipt can be replayed
+without the temporary session or object; the requester's idempotency key,
+immutable source fingerprint and destination intent remain authoritative.
+Session consumption and durable acceptance share one transaction. Abandoned
+objects are also bounded by the content bucket lifecycle. The canonical
+Document and Library/Project memberships remain owned
 by the normal ingestion transaction; staging is not a second paper record.
 
 Ingestion attaches memberships atomically: the uploader's personal Library
