@@ -32,6 +32,8 @@ change what the accepted record decided.
 
 ## Accepted decisions
 
+- [ADR 0061: Fair bounded job publication](./0061-fair-bounded-job-publication.md)
+
 - [ADR 0053: Explicit single-host runtime endpoints](./0053-explicit-single-host-runtime.md)
 - [ADR 0054: Admit background workers on the shared host](./0054-admitted-background-workers.md)
 - [ADR 0055: Independent interactive and batch admission](./0055-independent-background-lanes.md)

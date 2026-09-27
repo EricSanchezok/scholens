@@ -990,3 +990,21 @@ SQL transactions, with a 25-second deadline and execution checks before and afte
 provider work. Application rechecks access, source and citation identity, then
 fills gaps without replacing current values. Independent index results follow
 the same source/access fencing. Failure leaves the readable document intact.
+
+### Fair outbox admission
+
+`JOB_DISPATCH_FAIRNESS_ENABLED=true` enables database admission before broker
+publication. It defaults off for consumer-first rollout. Each queue admits at
+most two unfinished jobs and at most one per requester. Other accepted work stays
+in the durable outbox. Requesters rotate by a persisted cursor, independently per
+queue, rather than by the oldest bulk upload's timestamp. A short nonblocking
+PostgreSQL advisory lock serializes reservations across API processes; broker I/O
+runs after commit. Terminal or cancelled jobs release their slots, and expired
+publisher claims reuse the original job without spending another slot. The cursor
+stores only ordering state and never owns completion or broker acknowledgement.
+
+Migration `2026_09_27_1400` adds cursors and dispatch indexes without rewriting
+accepted jobs. Enabling the flag with an existing oversized broker backlog stops
+new publication until it drains under the bound. N-1 publishers remain executable
+with the flag disabled, but the bound requires all active publishers to adopt it.
+See [ADR 0061](../docs/decisions/0061-fair-bounded-job-publication.md).

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    text,
     UUID,
     BigInteger,
     CheckConstraint,
@@ -47,6 +48,11 @@ class DurableJob(Base):
         Index("ix_jobs_requester_activity", "requested_by_id", "created_at"),
         Index("ix_jobs_project_status", "project_id", "status"),
         Index("ix_jobs_document_status", "document_id", "status"),
+        Index(
+            "ix_jobs_live_dispatch",
+            "id",
+            postgresql_where=text("status IN ('pending', 'running')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -139,6 +145,7 @@ class JobDispatch(Base):
             "status IN ('pending', 'publishing', 'published')",
             name="ck_job_dispatches_status",
         ),
+        Index("ix_job_dispatches_queue_status", "queue", "status", "available_at"),
         Index(
             "ix_job_dispatches_pending",
             "status",
@@ -191,6 +198,16 @@ class JobDispatch(Base):
     job: Mapped["DurableJob"] = relationship(
         "DurableJob",
         back_populates="dispatch",
+    )
+
+
+class JobDispatchCursor(Base):
+    """Durable requester rotation; independent of message and execution identity."""
+
+    __tablename__ = "job_dispatch_cursors"
+    queue: Mapped[str] = mapped_column(String(80), primary_key=True)
+    last_requester_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0"
     )
 
 

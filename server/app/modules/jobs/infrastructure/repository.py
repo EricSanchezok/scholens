@@ -806,29 +806,38 @@ class JobRepository:
         *,
         limit: int,
         lease: timedelta,
+        fair: bool = False,
     ) -> tuple[ReservedJobDispatch, ...]:
         now = datetime.now(UTC)
-        dispatches = list(
-            db.scalars(
-                select(JobDispatch)
-                .options(selectinload(JobDispatch.job))
-                .where(
-                    or_(
-                        and_(
-                            JobDispatch.status == JobDispatchStatus.PENDING.value,
-                            JobDispatch.available_at <= now,
-                        ),
-                        and_(
-                            JobDispatch.status == JobDispatchStatus.PUBLISHING.value,
-                            JobDispatch.available_at <= now,
-                        ),
+        if fair:
+            from app.modules.jobs.infrastructure.fair_dispatch import (
+                select_fair_dispatches,
+            )
+
+            dispatches = select_fair_dispatches(db, limit=limit, now=now)
+        else:
+            dispatches = list(
+                db.scalars(
+                    select(JobDispatch)
+                    .options(selectinload(JobDispatch.job))
+                    .where(
+                        or_(
+                            and_(
+                                JobDispatch.status == JobDispatchStatus.PENDING.value,
+                                JobDispatch.available_at <= now,
+                            ),
+                            and_(
+                                JobDispatch.status
+                                == JobDispatchStatus.PUBLISHING.value,
+                                JobDispatch.available_at <= now,
+                            ),
+                        )
                     )
-                )
-                .order_by(JobDispatch.available_at, JobDispatch.id)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
-            ).all()
-        )
+                    .order_by(JobDispatch.available_at, JobDispatch.id)
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
+                ).all()
+            )
         reserved: list[ReservedJobDispatch] = []
         for dispatch in dispatches:
             job = dispatch.job
