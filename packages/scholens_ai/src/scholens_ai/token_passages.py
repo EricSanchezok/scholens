@@ -107,8 +107,16 @@ def iter_token_passages(
         # Re-encoding a substring can add a boundary token for some tokenizers.
         # Enforce the actual model input bound, not an estimated character ratio.
         actual = tokenizer.encode(segment[start:end], add_special_tokens=False).offsets
-        if len(actual) > TOKEN_WINDOW:
-            end = start + actual[TOKEN_WINDOW - 1][1]
+        while len(actual) > TOKEN_WINDOW:
+            bounded_end = start + actual[TOKEN_WINDOW - 1][1]
+            if bounded_end >= end:
+                # Several byte-fallback tokens can describe one Unicode
+                # character. Its end still includes the overflowing tokens;
+                # exclude that whole character rather than cutting a token.
+                bounded_end = start + actual[TOKEN_WINDOW][0]
+            if not start < bounded_end < end:
+                raise ValueError("Tokenizer cannot produce a bounded canonical passage")
+            end = bounded_end
             count = bisect_right([value[1] for value in offsets], end)
             actual = tokenizer.encode(
                 segment[start:end], add_special_tokens=False

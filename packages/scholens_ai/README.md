@@ -148,6 +148,11 @@ An 8,192-character rolling lookahead bounds tokenizer memory. The caller supplie
 the pinned tokenizer with padding and truncation disabled. Exceeding 10,000
 passages raises explicitly, leaving adoption of a partial index to the caller;
 old searchable content must not be replaced by a silently truncated projection.
+When several tokens share one Unicode character offset, a window retreats to
+the preceding character boundary and rechecks the encoded substring. Every
+retreat strictly shortens the window; the original text and complete coverage
+remain unchanged. This corrects previously rejected inputs without changing
+the projection format or the boundaries of already valid windows.
 
 `scripts/benchmark_embeddings.py` compares offline variants using a labeled
 synthetic bilingual engineering fixture. Provision model artifacts separately;

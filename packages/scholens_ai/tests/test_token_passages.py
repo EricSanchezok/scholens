@@ -21,6 +21,20 @@ class CharacterTokenizer:
         )
 
 
+class UnicodeExpansionTokenizer(CharacterTokenizer):
+    """Byte fallback and normalization can share one character across tokens."""
+
+    def encode(self, sequence, *, add_special_tokens):
+        encoded = super().encode(sequence, add_special_tokens=add_special_tokens)
+        return SimpleNamespace(
+            offsets=[
+                offset
+                for offset in encoded.offsets
+                for _ in range(3 if sequence[offset[0]] == "💠" else 1)
+            ]
+        )
+
+
 def test_multilingual_windows_preserve_exact_offsets_lines_and_overlap():
     text = ("Evidence 中文证据 café ﬁ ﬂ\n" * 15 + "\n") * 20
     tokenizer = CharacterTokenizer()
@@ -62,3 +76,23 @@ def test_whitespace_has_no_fake_passages_and_trailing_space_does_not_loop():
     assert (
         len(list(iter_token_passages("text" + " " * 10_000, CharacterTokenizer()))) == 1
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["a" * 255 + "💠" * 300, "💠" * 900],
+    ids=["boundary-expansion", "repeated-expansion"],
+)
+def test_shared_unicode_offsets_never_split_a_character_across_token_budget(text):
+    tokenizer = UnicodeExpansionTokenizer()
+    passages = list(iter_token_passages(text, tokenizer))
+    assert len(passages) > 1
+    covered = 0
+    for passage in passages:
+        assert passage.start_offset <= covered < passage.end_offset
+        assert passage.content == text[passage.start_offset : passage.end_offset]
+        actual = tokenizer.encode(passage.content, add_special_tokens=False).offsets
+        assert passage.token_count == len(actual) <= 256
+        covered = passage.end_offset
+    assert covered == len(text)
+    assert passages == list(iter_token_passages(text, tokenizer))
