@@ -205,6 +205,36 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
         assert service["DeploymentConfiguration"]["MaximumPercent"] == 100
 
 
+def test_admitted_topology_preserves_a_shared_host_background_slot() -> None:
+    resources = renderer.render("runtime")["Resources"]
+    resident_cpu = 0
+    admitted_cpu = []
+    for resource in resources.values():
+        if resource["Type"] != "AWS::ECS::Service":
+            continue
+        service = resource["Properties"]
+        task = resources[service["TaskDefinition"]["Ref"]]["Properties"]
+        # ECS reserves task-level CPU when specified, otherwise all containers,
+        # including nonessential initializers. Idle services still need their
+        # desired placement budget; deployment gaps are not spare capacity.
+        cpu = int(
+            task.get("Cpu") or sum(c["Cpu"] for c in task["ContainerDefinitions"])
+        )
+        condition, enabled, disabled = service["DesiredCount"]["Fn::If"]
+        assert enabled == 1 and disabled == 0
+        if condition == "RunResidentBackground":
+            admitted_cpu.append(cpu)
+        else:
+            assert condition in {"RunApplication", "RunSharedInference"}
+            resident_cpu += cpu
+    # Product-owned ceiling on the 2,048-unit shared host. Keep 896 units for
+    # other resident services and a 512-unit slot for any registered background
+    # task, including another product's worker, at total concurrency one.
+    assert resident_cpu <= 640
+    assert admitted_cpu and max(admitted_cpu) <= 512
+    assert resident_cpu + max(512, *admitted_cpu) + 896 <= 2048
+
+
 def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat() -> (
     None
 ):
