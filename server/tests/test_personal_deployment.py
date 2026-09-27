@@ -58,6 +58,11 @@ def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
         Loader=renderer.CloudFormationLoader,
     )
     resources = template["Resources"]
+    log_groups = {
+        r["Properties"]["LogGroupName"]
+        for r in renderer.render("runtime")["Resources"].values()
+        if r["Type"] == "AWS::Logs::LogGroup"
+    }
     assert {r["Type"] for r in resources.values()} == {
         "AWS::Logs::MetricFilter",
         "AWS::CloudWatch::Alarm",
@@ -66,7 +71,7 @@ def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
     for resource in resources.values():
         props = resource["Properties"]
         if resource["Type"] == "AWS::Logs::MetricFilter":
-            assert props["LogGroupName"].startswith("/sanchezcloud/scholens/")
+            assert props["LogGroupName"] in log_groups
             assert "$.event" in props["FilterPattern"]
             for metric in props["MetricTransformations"]:
                 assert metric["MetricNamespace"] == "Scholens/Personal"
