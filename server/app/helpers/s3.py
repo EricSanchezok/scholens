@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from uuid import UUID
 from typing import Any, TYPE_CHECKING, Literal, cast
 
 import boto3
@@ -266,10 +267,13 @@ class S3Service:
             body = response.get("Body")
             if body is None:
                 raise RuntimeError("s3_object_body_missing")
-            data = body.read()
-            if not isinstance(data, bytes):
-                raise TypeError("s3_object_body_invalid")
-            return data
+            try:
+                data = body.read()
+                if not isinstance(data, bytes):
+                    raise TypeError("s3_object_body_invalid")
+                return data
+            finally:
+                body.close()
         except ClientError as exc:
             logger.error("s3.object.download_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_download_failed") from exc
@@ -290,6 +294,29 @@ class S3Service:
             return data
         finally:
             body.close()
+
+    def delete_job_result_artifacts(self, job_id: UUID) -> bool:
+        """One bounded page per owned namespace; never accept caller-supplied keys."""
+        remaining = False
+        for namespace in ("results", "checkpoints"):
+            prefix = f"jobs/{namespace}/{UUID(str(job_id))}/"
+            page = self.s3_client.list_objects_v2(
+                Bucket=self._require_bucket(), Prefix=prefix, MaxKeys=100
+            )
+            keys = [
+                entry["Key"] for entry in page.get("Contents", []) if "Key" in entry
+            ]
+            if any(not key.startswith(prefix) for key in keys):
+                raise ValueError("job_artifact_namespace_mismatch")
+            if keys:
+                response = self.s3_client.delete_objects(
+                    Bucket=self._require_bucket(),
+                    Delete={"Objects": [{"Key": key} for key in keys], "Quiet": True},
+                )
+                if response.get("Errors"):
+                    raise RuntimeError("job_artifact_deletion_failed")
+            remaining = remaining or bool(page.get("IsTruncated"))
+        return not remaining
 
     def object_size_bytes(self, object_key: str) -> int:
         try:

@@ -346,3 +346,90 @@ def test_exhaustion_runs_domain_compensation_and_inbox_rejection_atomically(data
         assert db.get(JobResultInbox, (job_id, 1)).status == "rejected"
         assert db.get(DurableJob, job_id).status == "failed"
         callbacks.fail_result.assert_called_once()
+
+
+def test_post_commit_effect_survives_restart_and_lost_acknowledgement(database):
+    from unittest.mock import MagicMock
+    from app.modules.jobs.application.callbacks import (
+        JobCompletionResult,
+        ReleaseJobConcurrency,
+    )
+    from app.modules.jobs.application.results import JobResults
+    from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
+
+    engine, job_id = database
+    action = ReleaseJobConcurrency(user_id=7, category="background", job_id=job_id)
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(job_id=job_id, claim_token=uuid4())
+        repo.accept(
+            job_id=job_id,
+            manifest=_manifest(job_id),
+            request_id=uuid4(),
+            delivery_ref="b" * 64,
+        )
+        reservation = repo.reserve_next(now=datetime.now(UTC) + timedelta(seconds=1))
+    with Session(engine) as db, db.begin():
+        callbacks = MagicMock()
+
+        def complete(**_kwargs):
+            db.get(DurableJob, job_id).status = "completed"
+            return JobCompletionResult(value={"accepted": True}, post_commit=(action,))
+
+        callbacks.complete.side_effect = complete
+        result = JobResults(JobResultRepository(db), callbacks).apply(
+            reservation=reservation, actor=None, operation=MagicMock(), payload={}
+        )
+        assert result.post_commit == ()
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        first = JobEffectRepository(db).reserve(now=now)
+        assert first.action == action
+    with Session(engine) as db, db.begin():
+        repo = JobEffectRepository(db)
+        assert repo.reserve(now=now + timedelta(seconds=10)) is None
+        second = repo.reserve(now=now + timedelta(seconds=181))
+        assert second.claim_id != first.claim_id
+        assert not repo.finish(first)
+        assert repo.finish(second)
+    with Session(engine) as db, db.begin():
+        assert JobEffectRepository(db).reserve(now=now + timedelta(seconds=400)) is None
+
+
+def test_cleanup_waits_for_terminal_retention_and_pending_effects(database):
+    from app.modules.jobs.application.callbacks import (
+        DeleteJobResultArtifacts,
+        ReleaseJobConcurrency,
+    )
+    from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
+
+    engine, job_id = database
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        repo = JobEffectRepository(db)
+        repo.enqueue(
+            job_id=job_id,
+            generation=0,
+            actions=(DeleteJobResultArtifacts(job_id),),
+            available_at=now - timedelta(days=8),
+        )
+        assert repo.reserve(now=now) is None
+        job = db.get(DurableJob, job_id)
+        job.status, job.completed_at = "cancelled", now
+        assert repo.reserve(now=now) is None
+        job.completed_at = now - timedelta(days=8)
+        repo.enqueue(
+            job_id=job_id,
+            generation=1,
+            actions=(
+                ReleaseJobConcurrency(user_id=7, category="background", job_id=job_id),
+            ),
+            available_at=now - timedelta(seconds=1),
+        )
+        effect = repo.reserve(now=now)
+        assert isinstance(effect.action, ReleaseJobConcurrency)
+        assert repo.reserve(now=now) is None
+        repo.finish(effect)
+        cleanup = repo.reserve(now=now)
+        assert isinstance(cleanup.action, DeleteJobResultArtifacts)
+        repo.finish(cleanup)

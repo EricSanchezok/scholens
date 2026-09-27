@@ -208,6 +208,21 @@ compensation and the rejection commit together, including journal changes and
 the normal post-commit concurrency release. Apply lock/statement deadlines are
 five/thirty seconds. Consumer diagnostics contain error classes, not artifacts.
 
+Post-commit actions for fenced results are persisted in `job_result_effects` in
+the result transaction. The consumer delivers up to four effects between result
+applications and retries dependency failures with backoff capped at five minutes.
+Redis concurrency removal is idempotent and propagates failures to this outbox;
+existing legacy best-effort callers are unchanged. BYOK usage settlement remains
+a no-op. Analytics keeps its existing best-effort transport semantics.
+
+Every fenced dispatch reserves a cleanup effect, including work that later gets
+cancelled without submitting a result. It runs seven days after termination,
+once all other effects complete, and deletes only that UUID's `jobs/results/`
+and `jobs/checkpoints/` prefixes in pages of at most 100 keys each. Incomplete
+deletion remains retryable. Canonical document and research objects are outside
+this cleanup scope. Migration `2026_09_27_1200` adds the effects table without
+rewriting existing jobs; older applications ignore it while new consumers drain.
+
 This is a consumer-first expansion: `JOB_RESULT_INBOX_ENABLED` defaults to false,
 and existing dispatch producers retain their accepted callback protocol. Enable
 only after the matching staged producers, cleanup and failure recovery are

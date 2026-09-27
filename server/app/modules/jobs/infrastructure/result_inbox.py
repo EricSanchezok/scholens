@@ -18,6 +18,8 @@ from app.modules.jobs.infrastructure.models import (
     JobResultInbox,
 )
 from app.modules.jobs.application.results import ReservedJobResult
+from app.modules.jobs.application.callbacks import JobPostCommitAction
+from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
 from app.shared.domain import AppError, FailureKind
 
 LEASE = timedelta(seconds=EXECUTION_LEASE_SECONDS)
@@ -242,13 +244,31 @@ class JobResultRepository:
             and row.apply_lease_expires_at > datetime.now(UTC)
         )
 
-    def applied(self, reservation: ReservedJobResult) -> None:
+    def applied(
+        self,
+        reservation: ReservedJobResult,
+        *,
+        actions: tuple[JobPostCommitAction, ...] = (),
+    ) -> None:
         row = self.db.get(JobResultInbox, (reservation.job_id, reservation.generation))
         if row is None or row.apply_claim_id != reservation.claim_id:
             raise RuntimeError("result_application_fence_lost")
         row.status = "applied"
         row.apply_claim_id = None
         row.apply_lease_expires_at = None
+        self.enqueue_effects(reservation, actions=actions)
+
+    def enqueue_effects(
+        self,
+        reservation: ReservedJobResult,
+        *,
+        actions: tuple[JobPostCommitAction, ...],
+    ) -> None:
+        JobEffectRepository(self.db).enqueue(
+            job_id=reservation.job_id,
+            generation=reservation.generation,
+            actions=actions,
+        )
 
     def terminal(self, job_id: UUID) -> bool:
         job = self.db.get(DurableJob, job_id)

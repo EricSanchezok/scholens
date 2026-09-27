@@ -251,6 +251,40 @@ class JobResultInbox(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
 
 
+class JobResultEffect(Base):
+    """Recoverable, idempotent external effects after a result transaction."""
+
+    __tablename__ = "job_result_effects"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'applying', 'applied')", name="ck_job_effect_status"
+        ),
+        CheckConstraint(
+            "(claim_id IS NULL) = (lease_expires_at IS NULL)",
+            name="ck_job_effect_lease_pair",
+        ),
+        Index("ix_job_effect_pending", "status", "available_at"),
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
 class JobsWebhookNonce(Base):
     """Consumed Jobs request nonce; the primary key prevents replay."""
 

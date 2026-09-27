@@ -10,7 +10,11 @@ from scholens_job_contracts import (
     JobResultReceipt,
 )
 
-from app.modules.jobs.application.callbacks import JobCallbacks, JobCompletionResult
+from app.modules.jobs.application.callbacks import (
+    JobCallbacks,
+    JobCompletionResult,
+    JobPostCommitAction,
+)
 from app.shared.application import Actor, OperationContext
 
 
@@ -39,7 +43,18 @@ class JobResultStore(Protocol):
         delivery_ref: str,
     ) -> JobResultReceipt: ...
     def lock_application(self, reservation: ReservedJobResult) -> bool: ...
-    def applied(self, reservation: ReservedJobResult) -> None: ...
+    def applied(
+        self,
+        reservation: ReservedJobResult,
+        *,
+        actions: tuple[JobPostCommitAction, ...] = (),
+    ) -> None: ...
+    def enqueue_effects(
+        self,
+        reservation: ReservedJobResult,
+        *,
+        actions: tuple[JobPostCommitAction, ...],
+    ) -> None: ...
     def terminal(self, job_id: UUID) -> bool: ...
     def retry(self, reservation: ReservedJobResult, *, error_code: str) -> bool: ...
 
@@ -107,8 +122,8 @@ class JobResults:
             )
         if not self._store.terminal(reservation.job_id):
             raise RuntimeError("job_result_not_applied")
-        self._store.applied(reservation)
-        return result
+        self._store.applied(reservation, actions=result.post_commit)
+        return JobCompletionResult(value=result.value)
 
     def retry(
         self,
@@ -128,4 +143,5 @@ class JobResults:
         )
         if not self._store.terminal(reservation.job_id):
             raise RuntimeError("job_result_failure_not_applied")
-        return result
+        self._store.enqueue_effects(reservation, actions=result.post_commit)
+        return JobCompletionResult(value=result.value)

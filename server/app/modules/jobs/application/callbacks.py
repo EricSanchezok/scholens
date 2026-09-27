@@ -149,7 +149,17 @@ class RecordJobTelemetry:
     properties: tuple[tuple[str, JsonValue], ...]
 
 
-type JobPostCommitAction = ReleaseJobConcurrency | SettleJobUsage | RecordJobTelemetry
+@dataclass(frozen=True, slots=True)
+class DeleteJobResultArtifacts:
+    job_id: UUID
+
+
+type JobPostCommitAction = (
+    ReleaseJobConcurrency
+    | SettleJobUsage
+    | RecordJobTelemetry
+    | DeleteJobResultArtifacts
+)
 
 
 @dataclass(frozen=True, slots=True)

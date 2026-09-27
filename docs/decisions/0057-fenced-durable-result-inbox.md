@@ -55,6 +55,22 @@ concurrency release retains the normal owner policy. Apply transactions have a
 five-second lock timeout and thirty-second statement timeout. Consumer logs
 record bounded error classes without exception payloads.
 
+Persist post-commit actions alongside the acknowledged/rejected result. An
+independent nonce and leased reservation recover a Server killed after SQL
+commit but before releasing user concurrency. External effects are at-least-once;
+Redis member removal is idempotent and strict delivery propagates dependency
+errors for bounded-backoff retry. Existing BYOK usage settlement remains a no-op;
+this change does not create new usage accounting. Product analytics retains its
+existing best-effort delivery semantics. Drain at most four effects between
+result applications so neither backlog monopolizes the consumer.
+
+Each fenced dispatch also creates a generation-zero cleanup effect. It becomes
+eligible only seven days after a terminal job and after all that job's other
+effects finish. Cleanup enumerates at most 100 keys per owned result/checkpoint
+namespace per attempt; it accepts a UUID, never arbitrary object keys. Truncated
+or failed deletion is retried idempotently. This covers rejected and orphaned
+attempt artifacts, including cancellation without an accepted result.
+
 ## Alternatives considered
 
 Increasing the callback timeout retains coupled failure domains and does not
@@ -83,3 +99,7 @@ corrupt checkpoints, generation loss, failed outcomes, bounded storage stream
 closure, and readable PDF completion without metadata. PostgreSQL tests also
 exercise expired leases before takeover, unfenced source mutation, nonterminal
 handler acknowledgement, and compensation rollback.
+Real PostgreSQL tests prove commit-before-effect restart recovery, lost effect
+acknowledgement, stale effect-owner rejection, and cleanup retention/effect
+dependencies. A Redis failure test proves strict delivery cannot acknowledge a
+failed release; namespace tests prevent cleanup crossing a job boundary.

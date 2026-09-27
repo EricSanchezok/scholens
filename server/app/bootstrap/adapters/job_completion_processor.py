@@ -25,6 +25,7 @@ from app.modules.papers.application.ingestion import SourceReadyResult
 from app.modules.jobs.application.callbacks import (
     JobCompletionResult,
     JobPostCommitAction,
+    DeleteJobResultArtifacts,
     RecordJobTelemetry,
     ReleaseJobConcurrency,
     SettleJobUsage,
@@ -131,6 +132,9 @@ class JobCompletionProcessor:
     async def finish_inbox(self, result: JobCompletionResult) -> None:
         # Async clients remain on the Server event loop that owns their lifetime.
         await self._run_post_commit(result)
+
+    async def execute_effect(self, action: JobPostCommitAction) -> None:
+        await _execute_post_commit(action, strict=True)
 
     def retry_inbox(
         self, reservation: ReservedJobResult, *, error_code: str
@@ -416,13 +420,24 @@ class JobCompletionProcessor:
             await _execute_post_commit(action)
 
 
-async def _execute_post_commit(action: JobPostCommitAction) -> None:
+async def _execute_post_commit(
+    action: JobPostCommitAction, *, strict: bool = False
+) -> None:
     try:
+        if isinstance(action, DeleteJobResultArtifacts):
+            from app.helpers.s3 import s3_service
+
+            if not await asyncio.to_thread(
+                s3_service.delete_job_result_artifacts, action.job_id
+            ):
+                raise RuntimeError("job_artifact_cleanup_incomplete")
+            return
         if isinstance(action, ReleaseJobConcurrency):
             await release_concurrency_by_id(
                 user_id=action.user_id,
                 category=action.category,
                 operation_id=str(action.job_id),
+                raise_on_error=strict,
             )
             return
         if isinstance(action, SettleJobUsage):
@@ -441,6 +456,8 @@ async def _execute_post_commit(action: JobPostCommitAction) -> None:
             return
         raise TypeError(f"unsupported Job post-commit action: {type(action).__name__}")
     except Exception:
+        if strict:
+            raise
         logger.exception(
             "jobs.post_commit_action.failed",
             extra={"action_type": type(action).__name__},

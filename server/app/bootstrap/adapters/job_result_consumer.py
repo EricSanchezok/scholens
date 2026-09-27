@@ -13,6 +13,10 @@ from scholens_observability import log_event
 from app.bootstrap.adapters.job_completion_processor import JobCompletionProcessor
 from app.modules.jobs.application.callbacks import JobCompletionResult
 from app.modules.jobs.infrastructure.result_inbox import JobResultRepository
+from app.modules.jobs.infrastructure.result_effects import (
+    JobEffectRepository,
+    ReservedJobEffect,
+)
 from scholens_job_contracts import JobResultManifest
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,37 @@ class JobResultConsumer:
     ) -> None:
         self._sessions, self._processor, self._reader = sessions, processor, reader
 
+    def _reserve_effect(self) -> ReservedJobEffect | None:
+        with self._sessions() as db, db.begin():
+            return JobEffectRepository(db).reserve()
+
+    def _finish_effect(
+        self, reservation: ReservedJobEffect, error_code: str | None
+    ) -> None:
+        with self._sessions() as db, db.begin():
+            JobEffectRepository(db).finish(reservation, error_code=error_code)
+
+    async def _drain_effect(self, pool: ThreadPoolExecutor) -> bool:
+        loop = asyncio.get_running_loop()
+        reservation = await loop.run_in_executor(pool, self._reserve_effect)
+        if reservation is None:
+            return False
+        error_code = None
+        try:
+            async with asyncio.timeout(60):
+                await self._processor.execute_effect(reservation.action)
+        except Exception as exc:
+            error_code = type(exc).__name__
+            log_event(
+                logger,
+                logging.ERROR,
+                "jobs.result.effect_failed",
+                job_id=str(reservation.job_id),
+                error_code=error_code,
+            )
+        await loop.run_in_executor(pool, self._finish_effect, reservation, error_code)
+        return True
+
     def drain_once(self) -> JobCompletionResult | None:
         with self._sessions() as db, db.begin():
             reservation = JobResultRepository(db).reserve_next()
@@ -81,6 +116,9 @@ class JobResultConsumer:
             loop = asyncio.get_running_loop()
             while not stop.is_set():
                 try:
+                    for _ in range(4):
+                        if stop.is_set() or not await self._drain_effect(pool):
+                            break
                     result = await loop.run_in_executor(pool, self.drain_once)
                     if result is not None:
                         await self._processor.finish_inbox(result)

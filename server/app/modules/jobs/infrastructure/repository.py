@@ -26,6 +26,8 @@ from app.modules.jobs.domain import (
     can_recover_job,
 )
 from app.modules.jobs.infrastructure.models import JobExecution
+from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
+from app.modules.jobs.application.callbacks import DeleteJobResultArtifacts
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -248,6 +250,12 @@ class JobRepository:
     ) -> JobDispatch:
         if execution_replay is not None:
             db.add(JobExecution(job_id=job.id))
+            JobEffectRepository(db).enqueue(
+                job_id=job.id,
+                generation=0,
+                actions=(DeleteJobResultArtifacts(job.id),),
+                available_at=datetime.now(UTC) + timedelta(days=7),
+            )
             job.payload = {
                 **job.payload,
                 "delivery_protocol": "manifest-v1",
