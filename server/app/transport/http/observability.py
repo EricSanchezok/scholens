@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from app.shared.application import OperationContext
 from app.transport.client_ip import apply_trusted_proxy_scheme, resolve_scope_client_ip
+from app.transport.http.route_templates import matched_route_template
 from scholens_observability import (
     ObservabilityContext,
     build_snapshot,
@@ -312,7 +313,7 @@ def safe_http_route_template(scope: Scope) -> str:
     """Return a bounded route label without resource identifiers or query data."""
 
     route: Any = scope.get("route")
-    path = getattr(route, "path", None)
+    path = matched_route_template(scope) or getattr(route, "path", None)
     raw = str(path) if path else str(scope.get("path", "unknown"))
     reading_route = _reading_activity_route_template(raw)
     if reading_route is not None:
