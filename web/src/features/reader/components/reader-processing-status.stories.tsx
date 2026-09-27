@@ -65,6 +65,9 @@ export const Failed: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText("Details"));
     await expect(
+      canvas.getByText("Connect or update DeepSeek to continue"),
+    ).toBeVisible();
+    await expect(
       canvas.getByText(/even if the previous result was lost/),
     ).toBeVisible();
     await userEvent.click(

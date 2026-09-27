@@ -1022,7 +1022,13 @@ the completed basic processing state. The parent result references stage job IDs
 and retains bounded audit fields, excluding duplicate body/page-map/AI payloads.
 
 Enrichment has a source digest and the requester's credential scope. Missing AI
-credentials do not prevent import. It fills only absent metadata, except an
+credentials do not prevent import. Before dispatch, the canonical enrichment
+producer verifies that the requester's enabled credential can be decrypted,
+without contacting the provider. Missing or invalid credentials create one
+durable failed prerequisite receipt with the existing connection-and-retry
+contract, but no execution, outbox entry, or worker. Explicit retry rechecks the
+credential before creating new work; the worker revalidates it at use time.
+It fills only absent metadata, except an
 untouched filename placeholder explicitly marked by provenance. Human and Zotero
 values remain authoritative; personal annotations and summary citations require
 verbatim evidence from the current source. Zotero imports do not automatically

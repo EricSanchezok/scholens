@@ -940,7 +940,8 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         ),
     )
     stage_jobs = tuple(
-        PersistedJob(job=SimpleNamespace(id=uuid4()), created=True) for _ in range(3)
+        PersistedJob(job=SimpleNamespace(id=uuid4(), status=status), created=True)
+        for status in ("pending", "failed", "pending")
     )
     enqueue_stages = MagicMock(return_value=stage_jobs)
     monkeypatch.setattr(
@@ -1017,6 +1018,13 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         assert durable_job.result["stage_job_ids"] == [
             str(stage.job.id) for stage in stage_jobs
         ]
+        failed_changes = [
+            change
+            for change in handled.changes
+            if change.action == document_job_callbacks.JOB_FAILED
+        ]
+        assert len(failed_changes) == 1
+        assert failed_changes[0].resources[0].id == str(stage_jobs[1].job.id)
     else:
         enqueue_stages.assert_not_called()
         document_job_callbacks._enqueue_pdf_postprocess.assert_called_once()

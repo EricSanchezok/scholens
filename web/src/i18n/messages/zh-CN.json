@@ -1180,6 +1180,7 @@
       "retry": "重试此阶段",
       "retryPaid": "接受供应商费用并重试 AI",
       "connect": "连接 DeepSeek",
+      "connectionRequired": "连接或更新 DeepSeek 后可继续",
       "paidNotice": "重试 AI 信息会使用你的 DeepSeek 连接发起新请求，可能再次产生供应商费用，即使上一次的结果未能保存。",
       "retryFailed": "未能确认重试结果，请刷新状态或再次尝试。",
       "changed": "此阶段的状态已变化，请查看刷新后的状态再重试。",

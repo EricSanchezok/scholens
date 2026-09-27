@@ -14,11 +14,14 @@ from app.modules.jobs.infrastructure.repository import (
     PersistedJob,
     job_repository,
 )
+from app.modules.integrations.connections.infrastructure.deepseek import (
+    require_deepseek_key,
+)
 from app.modules.papers.domain.citations import fields_from_paper
 from app.modules.papers.infrastructure.models import Document
 from app.shared.application import Actor, OperationContext
 from app.shared.domain.enums import JobOperation
-from app.shared.domain import JsonValue
+from app.shared.domain import AppError, JsonValue
 
 
 def enqueue_document_bibliography(
@@ -142,22 +145,35 @@ def enqueue_document_stage(
     is_index = kind is JobOperation.DOCUMENT_INDEX
     if is_index:
         payload["model_revision"] = kwargs["model_revision"] = EMBEDDING_MODEL_REVISION
-    return job_repository.enqueue(
-        db,
-        request=EnqueueJob(
-            job_id=job_id,
-            operation=kind,
-            requested_by_id=actor.id,
-            correlation_id=operation.trace.correlation_id,
-            origin_operation_id=operation.trace.operation_id,
-            document_id=document.id,
-            idempotency_key=f"document-stage-retry:{source_id}"
-            if retry
-            else f"{kind.value}:{source_id}",
-            payload=payload,
-            task_name="index_document" if is_index else "enrich_document",
-            queue=JobQueue.DOCUMENT_INDEX if is_index else JobQueue.DOCUMENT_ENRICHMENT,
-            task_kwargs=kwargs,
-            execution_replay="deterministic" if is_index else "checkpoint_only",
-        ),
+    request = EnqueueJob(
+        job_id=job_id,
+        operation=kind,
+        requested_by_id=actor.id,
+        correlation_id=operation.trace.correlation_id,
+        origin_operation_id=operation.trace.operation_id,
+        document_id=document.id,
+        idempotency_key=f"document-stage-retry:{source_id}"
+        if retry
+        else f"{kind.value}:{source_id}",
+        payload=payload,
+        task_name="index_document" if is_index else "enrich_document",
+        queue=JobQueue.DOCUMENT_INDEX if is_index else JobQueue.DOCUMENT_ENRICHMENT,
+        task_kwargs=kwargs,
+        execution_replay="deterministic" if is_index else "checkpoint_only",
     )
+    if not is_index:
+        try:
+            require_deepseek_key(db, user_id=actor.id)
+        except AppError as error:
+            if retry or error.code not in {
+                "deepseek_credential_required",
+                "deepseek_credential_invalid",
+            }:
+                raise
+            # Preserve the existing connection-and-retry contract, but do not
+            # allocate an execution, outbox entry or worker for unmet prerequisites.
+            persisted = job_repository.create(db, request=request)
+            if persisted.created:
+                job_repository.fail(db, job_id=persisted.job.id, error_code=error.code)
+            return persisted
+    return job_repository.enqueue(db, request=request)
