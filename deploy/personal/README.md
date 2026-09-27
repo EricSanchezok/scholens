@@ -187,6 +187,17 @@ credentials and database passwords never appear in workflow inputs or artifacts.
 
 ### Queue alerts
 
+Deploy `application-monitoring.yml` as `scholens-personal-application-monitoring`
+after the runtime log groups exist, passing the confirmed shared alert topic as
+`AlertTopicArn`. Create and review its exact CloudFormation change set before
+execution. It owns only 20 log metric filters and six alarms: 12 fixed custom
+metrics in `Scholens/Personal`, with no dynamic dimensions or exporter containers.
+The runtime retains logs for 30 days. Metric filters and alarms have CloudWatch
+charges. Follow the actual-ingestion verification and signal limitations in the
+[observability runbook](../../docs/operations/AWS_OBSERVABILITY_SETUP.md).
+Rollback of this monitoring stack does not change application tasks or stored
+data; application rollback does not require removing additive filters.
+
 Deploy `queue-monitoring.yml` once for each conversation, document, document-index,
 document-enrichment, research, and
 maintenance queue, supplying its queue/DLQ names from the destination foundation and

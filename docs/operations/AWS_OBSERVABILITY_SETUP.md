@@ -1,8 +1,57 @@
 # AWS observability operations
 
-Scholens production observability is part of the canonical ECS stacks; there is
-no separately installed host agent or EC2 observability stack. The current
-architecture and release runbook live in
+Scholens currently runs on the shared personal EC2 host. Its topology and release
+runbook live in [`deploy/personal/README.md`](../../deploy/personal/README.md).
+The personal adapter removes the managed topology's ALB, ADOT sidecars, X-Ray
+export and dashboard. In-process OpenTelemetry calls alone do not establish a
+working metrics export. A missing `Scholens/Production` series is unavailable
+evidence, not zero failures.
+
+## Personal production
+
+Application stdout reaches CloudWatch through ECS `awslogs`. Runtime log groups
+retain 30 days for incident review and the contract retirement observation
+window. The separately reviewed `application-monitoring.yml` stack derives
+12 fixed metrics in `Scholens/Personal` from these existing logs, without an
+exporter process or additional application permissions. Metric dimensions never
+contain users, jobs, documents, model revisions, or request references. These
+custom metrics and six alarms have CloudWatch charges; they add no host tier.
+
+| Signal | Source and interpretation |
+|---|---|
+| `HttpRequests`, `HttpServerErrors`, `HttpStreamFailures` | Logged HTTP completions; privacy-suppressed reading endpoints are not included. Counts are not a universal request denominator. |
+| `HttpHealthChecks` | Successful `/livez` completions. Five consecutive missing minutes alert on either API availability or broken log delivery. |
+| `McpInternalErrors`, `McpResultBudgetErrors` | Typed MCP error envelopes, including failures returned over HTTP 200. Authentication/permission mistakes are excluded from the internal-error alarm. |
+| `ResultReceiptDuration` | Successful normalized `/internal/v1/jobs/{job_id}/results` requests, in milliseconds. p95 above one second for two populated five-minute periods alerts; sparse percentiles do not trigger it. |
+| `ResultConsumerFailures` | Result application, durable effect or consumer failures. Three failures within five minutes alert; the count is attempts, not unique failed jobs. |
+| `JobExecutions`, `JobFailures` | Exactly one `job.task.completed` record per execution in the five admitted worker groups. Retries/redeliveries are executions, not unique document imports. Three failures within five minutes alert. |
+| `InferenceQueryDuration`, `InferenceFailedResponses` | Completed socket responses. Health probes are excluded; disconnected clients produce no completion, so these metrics cannot measure all client-side fallbacks. |
+
+HTTP server errors and internal/unavailable MCP errors each alert on one event
+within five minutes. All error alarms treat idle missing data as non-breaching.
+Only the health-log silence alarm treats missing data as a failure. Counter
+filters publish zero when other logs arrive without a matching event; duration
+filters never insert synthetic zeros or negative samples. Metric filters process
+new log ingestion only, not retained history. See
+[AWS metric-filter semantics](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/MonitoringLogData.html).
+
+After deployment, verify every filter with `aws logs test-metric-filter` using
+synthetic positive and negative events; this tests patterns without publishing
+fake failures or notifying subscribers. Then confirm actual successful health,
+result-receipt and worker events produce samples through `get-metric-statistics`.
+Metric listings can lag ingestion. Check the real queue delay/DLQ alarms, host
+admission status, available memory, ECS health, and public Web/API together.
+Do not interpret an `OK` error alarm with no business traffic as an end-to-end
+acceptance result. Use Logs Insights for task names, error codes, stage timings,
+and request references; retain private content outside routine logs.
+
+The managed-ECS procedures below apply only if that topology is explicitly
+deployed again; they are not evidence that personal production has ALB, ADOT,
+WAF or X-Ray resources.
+
+## Managed ECS topology
+
+The reference architecture and runbook live in
 [`deploy/ecs/README.md`](../../deploy/ecs/README.md).
 
 The foundation stack retains the encrypted diagnostic bucket and KMS key, SNS

@@ -39,6 +39,67 @@ def test_foundation_excludes_managed_compute_and_preserves_durable_storage() -> 
     )
 
 
+def test_personal_logs_cover_the_thirty_day_contract_observation_window():
+    resources = renderer.render("runtime")["Resources"]
+    logs = [
+        r["Properties"]
+        for r in resources.values()
+        if r["Type"] == "AWS::Logs::LogGroup"
+    ]
+    assert logs
+    assert all(p["RetentionInDays"] >= 30 for p in logs)
+
+
+def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
+    import yaml
+
+    template = yaml.load(
+        (ROOT / "deploy/personal/application-monitoring.yml").read_text(),
+        Loader=renderer.CloudFormationLoader,
+    )
+    resources = template["Resources"]
+    assert {r["Type"] for r in resources.values()} == {
+        "AWS::Logs::MetricFilter",
+        "AWS::CloudWatch::Alarm",
+    }
+    metrics = set()
+    for resource in resources.values():
+        props = resource["Properties"]
+        if resource["Type"] == "AWS::Logs::MetricFilter":
+            assert props["LogGroupName"].startswith("/sanchezcloud/scholens/")
+            assert "$.event" in props["FilterPattern"]
+            for metric in props["MetricTransformations"]:
+                assert metric["MetricNamespace"] == "Scholens/Personal"
+                assert "Dimensions" not in metric
+                metrics.add(metric["MetricName"])
+                if metric["Unit"] == "Milliseconds":
+                    assert metric["MetricValue"] == "$.duration_ms"
+                    assert "$.duration_ms >= 0" in props["FilterPattern"]
+                    assert "DefaultValue" not in metric
+                else:
+                    assert metric["MetricValue"] == "1"
+                    assert metric["DefaultValue"] == 0
+        else:
+            assert props["AlarmActions"] == [{"Ref": "AlertTopicArn"}]
+            if resource is resources["HttpHealthMissingAlarm"]:
+                assert props["TreatMissingData"] == "breaching"
+                assert props["EvaluationPeriods"] * props["Period"] >= 300
+            else:
+                assert props["TreatMissingData"] == "notBreaching"
+    assert len(metrics) <= 12
+    assert (
+        resources["ResultReceiptLatencyAlarm"]["Properties"][
+            "EvaluateLowSampleCountPercentile"
+        ]
+        == "ignore"
+    )
+    # AWS accepts '= true' syntactically but it matches no JSON boolean values.
+    assert (
+        "$.stream_failed IS TRUE"
+        in resources["HttpStreamFailuresFilter"]["Properties"]["FilterPattern"]
+    )
+
+
 def test_preview_uses_separate_oidc_subjects_and_account_guard() -> None:
     template = renderer.render("bootstrap")
     text = json.dumps(template)

@@ -356,7 +356,7 @@ def inference_resources(resources: dict[str, Any]) -> None:
         "Type": "AWS::Logs::LogGroup",
         "Properties": {
             "LogGroupName": "/sanchezcloud/scholens/inference",
-            "RetentionInDays": 7,
+            "RetentionInDays": 30,
         },
     }
     resources["InferenceTaskDefinition"] = {
@@ -591,7 +591,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             if not props["ManagedPolicyArns"]:
                 props.pop("ManagedPolicyArns")
         elif kind == "AWS::Logs::LogGroup":
-            props["RetentionInDays"] = 7
+            props["RetentionInDays"] = 30
         elif kind == "AWS::ECS::Service":
             for key in (
                 "CapacityProviderStrategy",
