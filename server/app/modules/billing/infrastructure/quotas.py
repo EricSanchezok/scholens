@@ -308,16 +308,12 @@ def get_user_usage_info(
     resolution = get_user_entitlements(db, user)
     plan = resolution.plan
     limits = resolution.limits
-    current_paper_count = resource_usage_repository.completed_reference_count(
-        db, user_id=user.id
-    )
+    usage = resource_usage_repository.current_usage(db, user_id=user.id)
+    current_paper_count = usage.paper_count
     paper_limit = limits.paper_uploads
-    total_size = resource_usage_repository.completed_storage_kb(db, user_id=user.id)
+    total_size = usage.storage_kb
     total_size_allowed = limits.knowledge_base_size_kb
-    current_project_count = int(
-        db.scalar(select(func.count(Project.id)).where(Project.owner_id == user.id))
-        or 0
-    )
+    current_project_count = usage.project_count
     project_limit = limits.projects
     assert isinstance(period, UsagePeriod)
 

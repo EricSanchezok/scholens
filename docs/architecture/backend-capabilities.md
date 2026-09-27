@@ -1146,6 +1146,11 @@ is persisted and returned in KiB; public fields therefore use the explicit
 `knowledge_base_size_kb` and `knowledge_base_size_remaining_kb` names. Clients
 must convert those quantities from KiB rather than treating them as bytes.
 Only the deprecated usage response retains date-window fields for old clients.
+Current paper count, total storage and owned Project count come from one SQL
+statement snapshot. Completed documents shared by Library and owned Projects
+are deduplicated before count and storage aggregation; storage rounds the total
+bytes up to KiB once. These live reads do not cache authorization, entitlements
+or usage, and the mutation paths retain their account quota locks.
 
 Capacity and its deprecated usage adapter are the only mounted billing HTTP routes.
 Checkout, customer portal, subscription refresh/mutation, and Stripe webhook
