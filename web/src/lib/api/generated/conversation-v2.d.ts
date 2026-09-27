@@ -4038,8 +4038,13 @@ export interface components {
              */
             index: number;
             /**
+             * Segment Id
+             * @description The supplied evidence segment ID containing this verbatim quote.
+             */
+            segment_id?: string | null;
+            /**
              * Text
-             * @description The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.
+             * @description An exact verbatim quote from the source. Never paraphrase evidence.
              */
             text: string;
         };

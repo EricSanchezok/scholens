@@ -41,8 +41,22 @@ from scholens_ai.token_passages import (
     PassageLimitExceeded,
     iter_token_passages,
 )
+from scholens_ai.evidence import (
+    EVIDENCE_REVISION,
+    EvidenceAnchor,
+    EvidenceResolution,
+    EvidenceSegment,
+    evidence_segments,
+    resolve_evidence,
+)
 
 __all__ = [
+    "EVIDENCE_REVISION",
+    "EvidenceAnchor",
+    "EvidenceResolution",
+    "EvidenceSegment",
+    "evidence_segments",
+    "resolve_evidence",
     "TOKEN_PASSAGE_REVISION",
     "TokenPassage",
     "PassageLimitExceeded",

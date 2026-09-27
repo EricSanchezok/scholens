@@ -11011,8 +11011,21 @@
             "title": "Index",
             "type": "integer"
           },
+          "segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The supplied evidence segment ID containing this verbatim quote.",
+            "title": "Segment Id"
+          },
           "text": {
-            "description": "The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.",
+            "description": "An exact verbatim quote from the source. Never paraphrase evidence.",
             "title": "Text",
             "type": "string"
           }

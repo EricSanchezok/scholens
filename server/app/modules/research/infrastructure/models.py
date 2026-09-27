@@ -236,6 +236,47 @@ class AnnotationThread(Base):
     )
 
 
+class AiAnnotationEvidence(Base):
+    """Personal evidence receipts survive annotation deletion as tombstones."""
+
+    __tablename__ = "ai_annotation_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "start_offset >= 0 AND end_offset > start_offset",
+            name="ck_ai_evidence_offsets",
+        ),
+        CheckConstraint(
+            "execution_generation IS NULL OR execution_generation > 0",
+            name="ck_ai_evidence_generation",
+        ),
+        Index("ix_ai_evidence_research_item", "research_item_id"),
+        Index("ix_ai_evidence_source_job", "source_job_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("auth.users.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    evidence_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    research_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("research_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    execution_generation: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    segment_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class AnnotationComment(Base):
     __tablename__ = "annotation_comments"
     __table_args__ = (

@@ -421,3 +421,12 @@ process and do not load a private model on service failure. The exact protocol,
 deadlines and microbatch policy live in the
 [AI package](../packages/scholens_ai/README.md). Model/queue deployment remains a
 separate activation step; existing postprocess envelopes remain accepted.
+
+Metadata extraction supplies complete bounded evidence segments to the model.
+Highlights and summary citations request the source segment ID and a verbatim
+quote; interpretation belongs in the annotation/summary. The input budget ends
+at a complete segment boundary. Optional `segment_id` fields are additive to
+existing result contracts. Server verifies source identity, quote uniqueness and
+canonical offsets before materializing highlights; it reports partial coverage
+without failing basic readability. See
+[ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md).

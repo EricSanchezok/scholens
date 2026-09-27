@@ -68,6 +68,18 @@ and sets inter-op threads to one. Unset retains ONNX defaults. Personal document
 workers set one; Server behavior is unchanged. This execution setting changes no
 model revision, dimensions, normalized-vector contract or stored artifact format.
 
+## Verbatim evidence
+
+`evidence_segments` emits bounded 2,400-character source segments with a
+400-character overlap and IDs bound to canonical content and exact bounds.
+`resolve_evidence` requires a unique quote within its segment and returns the
+original source slice and offsets. Reversible Unicode compatibility decomposition
+and whitespace normalization are allowed; case folding, punctuation repair and
+fuzzy matching are not. Unsegmented legacy results are scanned in bounded blocks
+and require source-wide uniqueness. The package never persists annotations or
+makes authorization decisions. Server owns personal evidence receipts and
+Jobs owns prompt construction. See [ADR 0060](../../docs/decisions/0060-personal-verbatim-evidence.md).
+
 ## Shared host inference
 
 `SCHOLENS_EMBEDDING_SOCKET` selects a private Unix socket client for both Server

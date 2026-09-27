@@ -1103,6 +1103,7 @@ def handle_paper_processing_webhook(
                             document_id=paper.id,
                             metadata=metadata,
                             user=actor,
+                            source_job_id=job_uuid,
                         )
                         created_annotation_thread_ids = created_annotations.thread_ids
                         created_comment_ids = created_annotations.comment_ids

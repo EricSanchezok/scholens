@@ -128,3 +128,4 @@ How will we know the decision works, and when should it be revisited?
 - [ADR 0057: Fenced durable result inbox](./0057-fenced-durable-result-inbox.md)
 - [ADR 0058: Provider event-loop ownership](./0058-provider-event-loop-ownership.md)
 - [ADR 0059: Shared host inference and token projections](./0059-shared-host-inference-and-token-projections.md)
+- [ADR 0060: Personal verbatim evidence receipts](./0060-personal-verbatim-evidence.md)

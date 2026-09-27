@@ -894,3 +894,18 @@ Inference unavailability leaves the authorized lexical/full-text lanes available
 `SCHOLENS_EMBEDDING_SOCKET` selects the shared host service described in the
 [AI package](../packages/scholens_ai/README.md); it is not enabled by the current
 consumer-only rollout. Existing public HTTP and MCP shapes are unchanged.
+
+## Personal AI evidence
+
+AI highlights use source-bound segment IDs and verbatim quotes with reversible
+Unicode/whitespace normalization. Ambiguous or stale evidence produces no
+annotation. The stored quote is always the canonical source slice. Legacy
+callbacks without segments require a unique quote across the document.
+`ai_annotation_evidence` receipts make delivery idempotent per user, document,
+content and anchor. Partial retries add missing evidence, retain existing
+comments and respect deletion tombstones. Access is rechecked under the document
+lock before creating personal annotations. Coverage logs report candidate,
+anchored, existing, created and skipped counts without source text.
+Deploy additive migration `2026_09_27_1100` before this consumer. See
+[ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md) for legacy adoption
+and the retirement condition.
