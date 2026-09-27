@@ -206,7 +206,6 @@ def build_workspace_tool_catalog(
     write = WorkspacePermission.WRITE
     manage = WorkspacePermission.MANAGE
     delete = WorkspacePermission.DELETE
-    query = ToolExecutionKind.QUERY
     async_query = ToolExecutionKind.ASYNC_QUERY
     command = ToolExecutionKind.COMMAND
     workflow = ToolExecutionKind.WORKFLOW
@@ -237,8 +236,8 @@ def build_workspace_tool_catalog(
             input_model=wc.SearchKnowledgeInput,
             output_model=wc.KnowledgeSearchOutput,
             permission=read,
-            handler=handlers.search_knowledge,
-            execution=query,
+            handler=handlers.search_knowledge_workflow,
+            execution=async_query,
             subject="query",
         ),
         _tool(

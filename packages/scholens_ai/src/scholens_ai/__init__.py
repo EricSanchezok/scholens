@@ -17,6 +17,7 @@ from scholens_ai.embeddings import (
     LocalOnnxTextEmbedder,
     TextEmbedder,
     embed_text,
+    configured_embedder,
     semantic_document_text,
     semantic_source_digest,
     try_local_embedder,
@@ -34,7 +35,18 @@ from scholens_ai.passages import (
     encode_passage_embedding_artifact,
 )
 
+from scholens_ai.token_passages import (
+    TOKEN_PASSAGE_REVISION,
+    TokenPassage,
+    PassageLimitExceeded,
+    iter_token_passages,
+)
+
 __all__ = [
+    "TOKEN_PASSAGE_REVISION",
+    "TokenPassage",
+    "PassageLimitExceeded",
+    "iter_token_passages",
     "EMBEDDING_DIMENSION",
     "EMBEDDING_MODEL_ID",
     "EMBEDDING_MODEL_REVISION",
@@ -47,6 +59,7 @@ __all__ = [
     "TextEmbedder",
     "build_model",
     "embed_text",
+    "configured_embedder",
     "profile_model_settings",
     "resolve_profile",
     "semantic_document_text",

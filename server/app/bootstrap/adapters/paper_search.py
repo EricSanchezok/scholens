@@ -14,7 +14,7 @@ from uuid import UUID
 
 from scholens_ai import (
     EMBEDDING_MODEL_REVISION,
-    try_local_embedder,
+    semantic_source_digest,
 )
 
 from app.helpers.s3 import s3_service
@@ -574,10 +574,16 @@ class PostgresPaperSearch:
         semantic_candidates: list[tuple[UUID, float]] = []
         passage_candidates: list[tuple[UUID, int, int, str, float]] = []
         semantic_available = False
-        embedder = try_local_embedder() if self._semantic and plan.hybrid else None
-        if embedder is not None:
+        prepared = request.embedding
+        if (
+            self._semantic
+            and plan.hybrid
+            and prepared is not None
+            and prepared.model_revision == EMBEDDING_MODEL_REVISION
+            and prepared.query_digest == semantic_source_digest(request.query.strip())
+        ):
             try:
-                query_embedding = embedder.embed_query(request.query)
+                query_embedding = list(prepared.vector)
                 distance = DocumentSearchEmbedding.embedding.cosine_distance(
                     query_embedding
                 )

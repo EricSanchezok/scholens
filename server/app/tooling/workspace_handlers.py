@@ -14,6 +14,8 @@ from typing import cast
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.workflows.search_embedding import prepare_search_embedding
+from app.modules.papers.application.contracts.search import PaperSearchEmbedding
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.action_confirmations.application import confirmation_digest
@@ -871,11 +873,35 @@ class WorkspaceToolHandlers:
             resource_links=links,
         )
 
+    async def search_knowledge_workflow(
+        self,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+        invocation_key: str,
+        finalize_outcome: ToolOutcomeFinalizer,
+    ) -> ToolOutcome:
+        del invocation_key, finalize_outcome
+        parsed = wc.SearchKnowledgeInput.model_validate(arguments)
+        embedding = (
+            await prepare_search_embedding(parsed.query)
+            if not parsed.kinds or {"paper", "paper_passage"}.intersection(parsed.kinds)
+            else None
+        )
+        result: ToolOutcome = await asyncio.to_thread(
+            self._executor.query,
+            lambda capabilities: self.search_knowledge(
+                capabilities, context, parsed, embedding=embedding
+            ),
+        )
+        return result
+
     def search_knowledge(
         self,
         capabilities: ApplicationCapabilities,
         context: ToolExecutionContext,
         arguments: BaseModel,
+        *,
+        embedding: PaperSearchEmbedding | None = None,
     ) -> ToolOutcome:
         parsed = wc.SearchKnowledgeInput.model_validate(arguments)
         fingerprint = knowledge_cursor_fingerprint(
@@ -932,6 +958,7 @@ class WorkspaceToolHandlers:
                     capabilities=capabilities,
                     context=context,
                     request=paper_request,
+                    embedding=embedding,
                     scope=parsed.scope,
                     producer="paper",
                     position=cursor_state.paper,
@@ -944,6 +971,7 @@ class WorkspaceToolHandlers:
                     capabilities=capabilities,
                     context=context,
                     request=paper_request,
+                    embedding=embedding,
                     scope=parsed.scope,
                     producer="paper_passage",
                     position=cursor_state.paper_passage,
@@ -1128,6 +1156,7 @@ class WorkspaceToolHandlers:
         capabilities: ApplicationCapabilities,
         context: ToolExecutionContext,
         request: PaperSearchRequest,
+        embedding: PaperSearchEmbedding | None,
         scope: wc.KnowledgeScope,
         producer: KnowledgeProducer,
         position: KnowledgeProducerPosition,
@@ -1146,6 +1175,7 @@ class WorkspaceToolHandlers:
                 actor=context.actor,
                 request=request,
                 offset=position.offset,
+                embedding=embedding,
             )
             source_pages[source_key] = response
         papers = response.items[:KNOWLEDGE_SEARCH_PRODUCER_CANDIDATE_LIMIT]

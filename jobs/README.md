@@ -414,3 +414,10 @@ claim. Keys never enter queue payloads. Optional PDF metadata skips absent
 connections; explicit AI generation is gated before enqueue. No platform model
 key or token billing is used. Server must support this route before workers
 roll forward; existing queue envelopes need no migration.
+
+Postprocess embedding consumers use `configured_embedder` from `scholens_ai`.
+When `SCHOLENS_EMBEDDING_SOCKET` is set, they use the shared host inference
+process and do not load a private model on service failure. The exact protocol,
+deadlines and microbatch policy live in the
+[AI package](../packages/scholens_ai/README.md). Model/queue deployment remains a
+separate activation step; existing postprocess envelopes remain accepted.

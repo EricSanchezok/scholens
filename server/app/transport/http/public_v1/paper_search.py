@@ -1,4 +1,7 @@
+import asyncio
+
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.workflows.search_embedding import prepare_search_embedding
 from app.bootstrap.execution import get_application_executor
 from app.database.product_analytics import track_event
 from app.modules.papers.application.contracts.search import (
@@ -35,11 +38,14 @@ async def search_papers_endpoint(
     Results are organized by paper, with matching threads and comments
     sub-referenced under each paper's metadata.
     """
-    results = executor.query(
+    embedding = await prepare_search_embedding(request.query)
+    results: PaperSearchResponse = await asyncio.to_thread(
+        executor.query,
         lambda capabilities: capabilities.paper_search(
             actor=current_user,
             request=request,
-        )
+            embedding=embedding,
+        ),
     )
     track_event(
         "knowledge_base_search",
@@ -67,6 +73,8 @@ async def get_search_stats(
 
     Returns counts of papers, annotation threads, and comments.
     """
-    return executor.query(
-        lambda capabilities: capabilities.paper_search_stats(actor=current_user)
+    result: PaperSearchStats = await asyncio.to_thread(
+        executor.query,
+        lambda capabilities: capabilities.paper_search_stats(actor=current_user),
     )
+    return result

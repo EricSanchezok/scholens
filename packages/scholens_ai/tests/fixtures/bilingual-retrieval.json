@@ -1,0 +1,391 @@
+{
+  "description": "Synthetic bilingual engineering regression fixture. Labels are authored topic matches; not a production relevance sample.",
+  "documents": [
+    {
+      "id": "0-en",
+      "text": "Attention mechanisms\nTransformers use self attention to compare tokens and aggregate contextual representations. Multihead attention assigns separate learned projections to different relationships. Positional encodings carry sequence order without recurrence."
+    },
+    {
+      "id": "0-zh",
+      "text": "Attention mechanisms\n自注意力比较序列中的词元并聚合上下文表示。多头注意力利用不同投影学习不同关系，位置编码提供顺序信息，无需循环网络。"
+    },
+    {
+      "id": "1-en",
+      "text": "Retrieval augmented generation\nRetrieval augmented generation searches an external document collection before producing an answer. Retrieved passages ground language model responses in source evidence. Citations link generated claims to the supporting documents."
+    },
+    {
+      "id": "1-zh",
+      "text": "Retrieval augmented generation\n检索增强生成先从外部文档集合寻找相关段落，再让语言模型回答。检索证据为答案提供依据，引用将结论连接到原始文献。"
+    },
+    {
+      "id": "2-en",
+      "text": "Database transactions\nSerializable transactions isolate concurrent database updates. Commit records atomic changes, while rollback discards partial writes. Write conflicts are detected so that failed attempts can be retried without violating invariants."
+    },
+    {
+      "id": "2-zh",
+      "text": "Database transactions\n可串行化事务隔离并发数据库更新。提交原子地保存更改，回滚丢弃部分写入。检测写冲突并重试能保持约束与数据一致性。"
+    },
+    {
+      "id": "3-en",
+      "text": "Distributed consensus\nConsensus protocols replicate an ordered log across servers. A leader proposes entries and a majority quorum acknowledges them. Election terms prevent an obsolete leader from committing conflicting changes."
+    },
+    {
+      "id": "3-zh",
+      "text": "Distributed consensus\n共识协议在多个服务器间复制有序日志。领导者提议日志项，多数派确认后提交，选举任期阻止旧领导者写入冲突更改。"
+    },
+    {
+      "id": "4-en",
+      "text": "Model quantization\nInteger quantization compresses neural network weights from floating point to eight bit values. Per channel scales reduce numerical error. CPU inference trades small accuracy changes for lower memory bandwidth and latency."
+    },
+    {
+      "id": "4-zh",
+      "text": "Model quantization\n整数量化把神经网络浮点权重压缩为八位整数。逐通道缩放减少数值误差，在较小精度变化下减少CPU推理的内存带宽和时延。"
+    },
+    {
+      "id": "5-en",
+      "text": "Reinforcement learning\nA reinforcement learning agent chooses actions and observes delayed rewards. Policy gradients optimize expected return from sampled trajectories. Exploration discovers useful actions that a greedy policy might miss."
+    },
+    {
+      "id": "5-zh",
+      "text": "Reinforcement learning\n强化学习智能体选择动作并观察延迟奖励。策略梯度用采样轨迹优化期望回报，探索可以发现贪心策略遗漏的有效动作。"
+    },
+    {
+      "id": "6-en",
+      "text": "Graph neural networks\nGraph neural networks propagate messages between neighboring nodes. Aggregating local neighborhoods yields representations of network structure. Permutation invariant pooling permits node order to change without changing the graph prediction."
+    },
+    {
+      "id": "6-zh",
+      "text": "Graph neural networks\n图神经网络在相邻节点之间传播消息，聚合局部邻域以表示网络结构。置换不变池化使节点排序变化不会改变图的预测结果。"
+    },
+    {
+      "id": "7-en",
+      "text": "Contrastive embeddings\nContrastive learning brings semantically related texts closer in embedding space and separates unrelated examples. Multilingual encoders align meanings across languages. Cosine similarity ranks normalized vectors for semantic retrieval."
+    },
+    {
+      "id": "7-zh",
+      "text": "Contrastive embeddings\n对比学习拉近语义相关文本的向量，分离不相关样本。多语言编码器对齐不同语言的含义，用余弦相似度对归一化向量排序以进行语义检索。"
+    },
+    {
+      "id": "8-en",
+      "text": "Diffusion models\nDiffusion image generation gradually corrupts training images with noise. A neural denoiser learns to reverse each corruption step. Sampling begins with random noise and iteratively reconstructs a coherent image."
+    },
+    {
+      "id": "8-zh",
+      "text": "Diffusion models\n扩散模型训练时逐步向图像加入噪声，神经网络学习逆向去噪过程。采样从随机噪声开始，迭代重建连贯图像。"
+    },
+    {
+      "id": "9-en",
+      "text": "PDF text extraction\nPDF text extraction reconstructs reading order from glyph coordinates and page geometry. Multicolumn layouts and ligatures can corrupt naive extraction. Exact source offsets allow highlights to point back to the original passage."
+    },
+    {
+      "id": "9-zh",
+      "text": "PDF text extraction\nPDF文本提取根据字形坐标和页面几何重建阅读顺序。多栏排版与连字会干扰简单提取，准确的原文偏移使高亮能够定位回证据段落。"
+    },
+    {
+      "id": "10-en",
+      "text": "Work queue scheduling\nA scheduler admits background work according to available memory and CPU. Interactive tasks receive reserved capacity. Aging gives a waiting batch a bounded opportunity while preventing repeated launch and preemption cycles."
+    },
+    {
+      "id": "10-zh",
+      "text": "Work queue scheduling\n调度器根据可用内存和CPU接纳后台任务，为交互任务保留容量。等待老化让批处理获得有界机会，避免反复启动又抢占的循环。"
+    },
+    {
+      "id": "11-en",
+      "text": "Durable job results\nA worker uploads an immutable result artifact and submits a small manifest. A database inbox accepts it atomically. Execution generations reject stale workers and replaying the receipt avoids recomputing paid external work."
+    },
+    {
+      "id": "11-zh",
+      "text": "Durable job results\n工作进程上传不可变结果文件并提交小型清单，数据库收件箱原子接收。执行代次拒绝过期工作进程，重放回执避免重复执行付费外部工作。"
+    },
+    {
+      "id": "12-en",
+      "text": "Browser virtualization\nA virtualized document reader keeps nearby pages rendered and releases distant canvases. Stable placeholders preserve scroll geometry. Protecting selected text and cancelling obsolete searches reduces memory growth without breaking interaction."
+    },
+    {
+      "id": "12-zh",
+      "text": "Browser virtualization\n文档阅读器虚拟化只保留邻近页面并释放远处画布，稳定占位维持滚动几何。保护所选文本和取消过期搜索可控制内存增长且不破坏交互。"
+    },
+    {
+      "id": "13-en",
+      "text": "Async HTTP lifetimes\nAn asynchronous HTTP client reuses connections owned by one event loop. Reusing the pool from another closed loop causes failures. Database transactions should finish before network I/O and client shutdown should use the owning loop."
+    },
+    {
+      "id": "13-zh",
+      "text": "Async HTTP lifetimes\n异步HTTP客户端复用属于同一事件循环的连接。跨已关闭的循环使用连接池会失败，网络请求前应结束数据库事务，并在原循环关闭客户端。"
+    },
+    {
+      "id": "14-en",
+      "text": "Statistical evaluation\nRetrieval evaluation ranks candidate documents against graded relevance judgments. Recall measures whether relevant documents are found within the first results. Discounted cumulative gain rewards placing highly relevant evidence earlier."
+    },
+    {
+      "id": "14-zh",
+      "text": "Statistical evaluation\n检索评估利用分级相关性标注检验候选文档排序。召回率衡量前若干结果是否找回相关文档，折损累计增益奖励把高度相关证据排在前面。"
+    },
+    {
+      "id": "15-en",
+      "text": "Access isolation\nAuthorization filters restrict documents to their permitted readers before semantic ranking. Private annotations remain scoped to their creator. Changing group membership must invalidate stale access without exposing hidden content through search."
+    },
+    {
+      "id": "15-zh",
+      "text": "Access isolation\n授权过滤在语义排序前把文档限制为读者可访问范围，私人批注保持作者隔离。成员关系变化必须使旧权限失效，避免搜索泄露隐藏内容。"
+    }
+  ],
+  "queries": [
+    {
+      "id": "0-en",
+      "text": "How do attention based networks encode word order without recurrent layers?",
+      "relevant": [
+        "0-en",
+        "0-zh"
+      ]
+    },
+    {
+      "id": "0-zh",
+      "text": "不用循环网络如何表示句子里的词序和上下文关系？",
+      "relevant": [
+        "0-en",
+        "0-zh"
+      ]
+    },
+    {
+      "id": "1-en",
+      "text": "How can a language model ground its answer in retrieved external evidence?",
+      "relevant": [
+        "1-en",
+        "1-zh"
+      ]
+    },
+    {
+      "id": "1-zh",
+      "text": "怎样让语言模型依据外部文档回答并提供可核查引用？",
+      "relevant": [
+        "1-en",
+        "1-zh"
+      ]
+    },
+    {
+      "id": "2-en",
+      "text": "How can concurrent database writes preserve atomicity after a failed update?",
+      "relevant": [
+        "2-en",
+        "2-zh"
+      ]
+    },
+    {
+      "id": "2-zh",
+      "text": "数据库并发写入失败后怎样保证事务原子性和数据一致性？",
+      "relevant": [
+        "2-en",
+        "2-zh"
+      ]
+    },
+    {
+      "id": "3-en",
+      "text": "How does a replicated log reject writes from an outdated elected leader?",
+      "relevant": [
+        "3-en",
+        "3-zh"
+      ]
+    },
+    {
+      "id": "3-zh",
+      "text": "分布式复制日志如何阻止过期领导者继续提交写入？",
+      "relevant": [
+        "3-en",
+        "3-zh"
+      ]
+    },
+    {
+      "id": "4-en",
+      "text": "How does eight bit weight compression change CPU inference memory and accuracy?",
+      "relevant": [
+        "4-en",
+        "4-zh"
+      ]
+    },
+    {
+      "id": "4-zh",
+      "text": "八位权重量化如何影响CPU推理内存、速度和精度？",
+      "relevant": [
+        "4-en",
+        "4-zh"
+      ]
+    },
+    {
+      "id": "5-en",
+      "text": "How do policy gradients learn from trajectories with delayed rewards?",
+      "relevant": [
+        "5-en",
+        "5-zh"
+      ]
+    },
+    {
+      "id": "5-zh",
+      "text": "策略梯度如何利用轨迹和延迟奖励学习行动策略？",
+      "relevant": [
+        "5-en",
+        "5-zh"
+      ]
+    },
+    {
+      "id": "6-en",
+      "text": "Which model represents network structure by aggregating neighbor messages?",
+      "relevant": [
+        "6-en",
+        "6-zh"
+      ]
+    },
+    {
+      "id": "6-zh",
+      "text": "哪类模型通过聚合邻居消息学习网络结构且不依赖节点顺序？",
+      "relevant": [
+        "6-en",
+        "6-zh"
+      ]
+    },
+    {
+      "id": "7-en",
+      "text": "How can normalized text vectors retrieve the same concept in another language?",
+      "relevant": [
+        "7-en",
+        "7-zh"
+      ]
+    },
+    {
+      "id": "7-zh",
+      "text": "归一化文本向量怎样检索另一种语言表达的相同概念？",
+      "relevant": [
+        "7-en",
+        "7-zh"
+      ]
+    },
+    {
+      "id": "8-en",
+      "text": "Which image generator reverses a gradual noise corruption process?",
+      "relevant": [
+        "8-en",
+        "8-zh"
+      ]
+    },
+    {
+      "id": "8-zh",
+      "text": "哪类图像生成模型通过反转逐步加噪过程从噪声生成图像？",
+      "relevant": [
+        "8-en",
+        "8-zh"
+      ]
+    },
+    {
+      "id": "9-en",
+      "text": "How can multicolumn PDFs preserve reading order and exact highlight locations?",
+      "relevant": [
+        "9-en",
+        "9-zh"
+      ]
+    },
+    {
+      "id": "9-zh",
+      "text": "多栏PDF如何保留正确阅读顺序并精确定位高亮证据？",
+      "relevant": [
+        "9-en",
+        "9-zh"
+      ]
+    },
+    {
+      "id": "10-en",
+      "text": "How can resource admission prevent starvation without repeated task preemption?",
+      "relevant": [
+        "10-en",
+        "10-zh"
+      ]
+    },
+    {
+      "id": "10-zh",
+      "text": "资源准入怎样避免任务饥饿以及反复启动抢占？",
+      "relevant": [
+        "10-en",
+        "10-zh"
+      ]
+    },
+    {
+      "id": "11-en",
+      "text": "How can a worker recover a lost result receipt without repeating paid computation?",
+      "relevant": [
+        "11-en",
+        "11-zh"
+      ]
+    },
+    {
+      "id": "11-zh",
+      "text": "工作进程丢失结果回执后怎样恢复而不重复付费计算？",
+      "relevant": [
+        "11-en",
+        "11-zh"
+      ]
+    },
+    {
+      "id": "12-en",
+      "text": "How does a long document reader limit canvas memory while preserving selection?",
+      "relevant": [
+        "12-en",
+        "12-zh"
+      ]
+    },
+    {
+      "id": "12-zh",
+      "text": "长文档阅读器如何限制画布内存同时保留文字选择？",
+      "relevant": [
+        "12-en",
+        "12-zh"
+      ]
+    },
+    {
+      "id": "13-en",
+      "text": "Why do reused asynchronous clients fail when each call creates a fresh event loop?",
+      "relevant": [
+        "13-en",
+        "13-zh"
+      ]
+    },
+    {
+      "id": "13-zh",
+      "text": "每次调用新建事件循环为什么会让复用的异步客户端失效？",
+      "relevant": [
+        "13-en",
+        "13-zh"
+      ]
+    },
+    {
+      "id": "14-en",
+      "text": "How do recall and discounted gain evaluate a ranked retrieval list?",
+      "relevant": [
+        "14-en",
+        "14-zh"
+      ]
+    },
+    {
+      "id": "14-zh",
+      "text": "召回率和折损累计增益怎样评价检索结果排序？",
+      "relevant": [
+        "14-en",
+        "14-zh"
+      ]
+    },
+    {
+      "id": "15-en",
+      "text": "How can semantic search avoid leaking private documents when membership changes?",
+      "relevant": [
+        "15-en",
+        "15-zh"
+      ]
+    },
+    {
+      "id": "15-zh",
+      "text": "成员权限变化后语义搜索如何避免泄露私人文档与批注？",
+      "relevant": [
+        "15-en",
+        "15-zh"
+      ]
+    }
+  ]
+}

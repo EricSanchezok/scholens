@@ -11,6 +11,7 @@ from app.modules.papers.application.contracts.search import (
     PaperSearchRequest,
     PaperSearchResponse,
     PaperSearchStats,
+    PaperSearchEmbedding,
 )
 from app.shared.application import Actor, SignedCursorCodec
 from app.shared.domain import AppError, FailureKind
@@ -76,6 +77,7 @@ class SearchPapers:
         *,
         actor: Actor,
         request: PaperSearchRequest,
+        embedding: PaperSearchEmbedding | None = None,
     ) -> PaperSearchResponse:
         normalized = request.model_copy(update={"query": request.query.strip()})
         fingerprint = json.dumps(
@@ -104,6 +106,7 @@ class SearchPapers:
                 sort=normalized.sort,
                 limit=normalized.limit,
                 offset=offset,
+                embedding=embedding,
             ),
         )
         consumed = offset + len(response.items)
@@ -120,6 +123,7 @@ class SearchPapers:
         actor: Actor,
         request: PaperSearchRequest,
         offset: int,
+        embedding: PaperSearchEmbedding | None = None,
     ) -> PaperSearchCandidatePage:
         """Return one bounded, authorized window for a composing search capability.
 
@@ -156,6 +160,7 @@ class SearchPapers:
                 sort=normalized.sort,
                 limit=normalized.limit,
                 offset=offset,
+                embedding=embedding,
             ),
         )
 

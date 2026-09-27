@@ -883,3 +883,14 @@ reported by `/api/v1/billing/capacity`; token billing is retired. See
 explicitly isolated rehearsals: Identity email senders and project-invitation delivery
 supervision are then absent even if provider credentials are present. The normal
 production path continues to require a complete Aliyun DirectMail configuration.
+
+## Search inference isolation
+
+Private paper search and the stored-knowledge MCP workflow prepare an optional
+query vector before opening the search transaction. The PostgreSQL adapter only
+consumes a prepared vector whose normalized query digest and model revision
+match. It never calls an embedding model while holding a Session transaction.
+Inference unavailability leaves the authorized lexical/full-text lanes available.
+`SCHOLENS_EMBEDDING_SOCKET` selects the shared host service described in the
+[AI package](../packages/scholens_ai/README.md); it is not enabled by the current
+consumer-only rollout. Existing public HTTP and MCP shapes are unchanged.

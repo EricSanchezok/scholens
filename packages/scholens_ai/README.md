@@ -14,7 +14,8 @@ Import the supported surface from `scholens_ai`:
 - `AIThinkingMode`, `AIThinkingEffort`
 - `ProviderConfigurationError`
 - `resolve_profile`, `profile_model_settings`, `build_model`
-- `LocalOnnxTextEmbedder`, `TextEmbedder`, `embed_text`
+- `LocalOnnxTextEmbedder`, `TextEmbedder`, `embed_text`, `configured_embedder`
+- `TokenPassage`, `iter_token_passages`, `TOKEN_PASSAGE_REVISION`
 - `semantic_document_text`, `semantic_source_digest`
 - `EMBEDDING_MODEL_REVISION`, `EMBEDDING_DIMENSION`
 - `build_document_passages`, `DocumentPassageWindow`
@@ -66,3 +67,45 @@ is never the product fallback path.
 and sets inter-op threads to one. Unset retains ONNX defaults. Personal document
 workers set one; Server behavior is unchanged. This execution setting changes no
 model revision, dimensions, normalized-vector contract or stored artifact format.
+
+## Shared host inference
+
+`SCHOLENS_EMBEDDING_SOCKET` selects a private Unix socket client for both Server
+and Jobs. Failure, overload or deadline expiry never falls back to loading a
+second model. Without this setting, explicitly provisioned local environments
+retain local model support. Run the owner with
+`python -m scholens_ai.inference --socket /run/scholens-inference/model.sock`;
+`--check` verifies readiness and exact model revision. The socket directory must
+be private to the participating containers and writable by the owner. An
+exclusive process lock is acquired before loading weights; the socket has mode
+`0660`. No TCP listener or provider credential is involved.
+
+The owner has one inference thread, at most 64 connections and queued requests,
+256 KiB frames, eight texts of at most 24,000 characters per request, and a
+validated 384-dimensional normalized-vector response. It serves index work in
+two-text microbatches. Queries take priority between batches; after eight query
+batches one waiting index batch can run. Client deadlines are 750 ms for queries
+and 30 seconds for indexing. Disconnection cancels queued work. Low-cardinality
+JSON logs include kind, revision, duration, count, queue depth and status, never
+query text or vectors. Production resource bounds must be set from measured
+native-host peaks, not model file size.
+
+Server prepares query vectors before opening search transactions and preserves
+lexical search when inference is unavailable. Vectors carry the query digest and
+model revision; mismatches never join stored semantic projections.
+
+`iter_token_passages` is an additive projection primitive, not a silent change to
+legacy five-line indexing. It yields paragraph-aware windows of at most 256
+tokens with 32-token overlap and unchanged canonical character/line coordinates.
+An 8,192-character rolling lookahead bounds tokenizer memory. The caller supplies
+the pinned tokenizer with padding and truncation disabled. Exceeding 10,000
+passages raises explicitly, leaving adoption of a partial index to the caller;
+old searchable content must not be replaced by a silently truncated projection.
+
+`scripts/benchmark_embeddings.py` compares offline variants using a labeled
+synthetic bilingual engineering fixture. Provision model artifacts separately;
+set `SCHOLENS_EMBEDDING_THREADS=1`, pass `--model-dir`, `--variant` and `--output`,
+and run on the actual target architecture before choosing a variant. The report
+includes cold start, warm query percentiles, Recall@10, NDCG@10, process peak RSS,
+model/corpus digests and repeated legacy/token index measurements. This fixture
+is a regression check, not a claim about production relevance or user latency.

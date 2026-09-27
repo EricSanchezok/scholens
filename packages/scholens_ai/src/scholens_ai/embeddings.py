@@ -145,13 +145,24 @@ def try_local_embedder() -> LocalOnnxTextEmbedder | None:
         return None
 
 
+@lru_cache(maxsize=1)
+def configured_embedder() -> TextEmbedder | None:
+    """Production clients share a host process; local mode is explicit by absence."""
+    path = os.getenv("SCHOLENS_EMBEDDING_SOCKET")
+    if path:
+        from scholens_ai.inference_client import SocketTextEmbedder
+
+        return SocketTextEmbedder(path)
+    return try_local_embedder()
+
+
 def embed_text(
     text: str,
     *,
     kind: Literal["query", "passage"],
     embedder: TextEmbedder | None = None,
 ) -> list[float] | None:
-    selected = embedder or try_local_embedder()
+    selected = embedder or configured_embedder()
     if selected is None:
         return None
     if kind == "query":

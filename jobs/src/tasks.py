@@ -30,7 +30,7 @@ from scholens_ai import (
     build_document_passages,
     embed_text,
     encode_passage_embedding_artifact,
-    try_local_embedder,
+    configured_embedder,
 )
 from scholens_job_contracts import (
     PDF_TEXT_REPAIR_TASK_NAME,
@@ -101,7 +101,7 @@ def _passage_embedding_artifact(
     passages = tuple(passages_by_digest.values())
     if not passages or len(passages) > MAX_PASSAGE_EMBEDDINGS:
         return None
-    embedder = try_local_embedder()
+    embedder = configured_embedder()
     if embedder is None:
         return None
     records: list[PassageEmbeddingRecord] = []
