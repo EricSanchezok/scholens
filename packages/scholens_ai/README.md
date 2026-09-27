@@ -119,7 +119,11 @@ exclusive process lock is acquired before loading weights; the socket has mode
 
 The owner has one inference thread, at most 64 connections and queued requests,
 256 KiB frames, eight texts of at most 24,000 characters per request, and a
-validated 384-dimensional normalized-vector response. It serves index work in
+validated 384-dimensional normalized-vector response. The client splits valid
+text batches by their actual serialized byte size, including UTF-8 and JSON
+escapes, without truncating or reordering text. All resulting requests share one
+absolute call deadline; splitting never multiplies the indexing time budget.
+It serves index work in
 single-text microbatches. Queries take priority between batches; after eight query
 batches one waiting index batch can run. Client deadlines are 750 ms for queries
 and 30 seconds for indexing. Disconnection cancels queued work. Low-cardinality
