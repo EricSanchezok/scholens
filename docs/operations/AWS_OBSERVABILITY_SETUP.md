@@ -69,6 +69,16 @@ Do not interpret an `OK` error alarm with no business traffic as an end-to-end
 acceptance result. Use Logs Insights for task names, error codes, stage timings,
 and request references; retain private content outside routine logs.
 
+For the first durable-backlog rollout, deploy the application reporter first and
+confirm actual `jobs.outbox.backlog` records for all six queues followed by
+`jobs.outbox.backlog_observed`. Then execute the reviewed monitoring change set
+and verify the new metric samples and alarms. Before rolling back to an
+application without this reporter, use a reviewed monitoring change set to
+remove its six durable-waiting alarms, snapshot-silence alarm and observation
+failure alarm. Keep the existing HTTP, receipt, worker, inference and SQS
+monitoring active. Additive filters can remain; missing reporter samples are
+unavailable evidence and must never be presented as an empty durable backlog.
+
 The managed-ECS procedures below apply only if that topology is explicitly
 deployed again; they are not evidence that personal production has ALB, ADOT,
 WAF or X-Ray resources.
