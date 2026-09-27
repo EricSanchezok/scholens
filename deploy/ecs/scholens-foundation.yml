@@ -122,7 +122,7 @@ Resources:
           AllowedMethods: [GET, HEAD, PUT, POST]
           AllowedOrigins:
           - !Sub https://${ProductionDomain}
-          ExposedHeaders: [ETag, x-amz-checksum-sha256]
+          ExposedHeaders: [ETag, x-amz-checksum-sha256, Accept-Ranges, Content-Range, Content-Encoding]
           MaxAge: 3600
       LifecycleConfiguration:
         Rules:

@@ -28,6 +28,14 @@ shared PostgreSQL process and backup/recovery configuration. Identity exclusivel
 `auth` migrations. Scholens owns its queues, storage, Valkey credentials, workload roles
 and product migrations.
 
+The private content bucket's CORS rule exposes `Accept-Ranges`, `Content-Range`,
+and `Content-Encoding` to the configured Web origin. PDF.js requires these
+browser-readable response headers to detect and validate partial PDF requests;
+S3 returning HTTP 206 alone is insufficient when CORS hides the headers. Keep
+the origin restricted and verify a signed PDF from the real Reader origin after
+storage changes. Downloads and direct uploads still require their existing
+authorization; exposing response metadata does not make objects public.
+
 The retained data foundation excludes managed ElastiCache and product security groups.
 Queues and secret paths use `preview` names. GitHub roles trust separate
 `personal-image-publish`, `personal-infrastructure`, `personal-database`, and
