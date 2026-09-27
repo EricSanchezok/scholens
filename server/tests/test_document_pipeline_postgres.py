@@ -3,6 +3,7 @@
 import hashlib
 import base64
 import os
+from unittest.mock import patch
 from uuid import uuid4
 from uuid import UUID
 
@@ -89,14 +90,19 @@ def pipeline_database():
         db.flush()
         db.add(LibraryPaper(user_id=user_id, document_id=doc_id))
         db.flush()
-        stages = enqueue_document_stages(
-            db,
-            document=document,
-            actor=actor,
-            operation=operation,
-            ingestion_job_id=parent,
-            enrich=True,
-        )
+        # This fixture represents configured AI; no provider call is performed.
+        with patch(
+            "app.bootstrap.adapters.document_stage_dispatch.require_deepseek_key",
+            return_value="fixture-key",
+        ):
+            stages = enqueue_document_stages(
+                db,
+                document=document,
+                actor=actor,
+                operation=operation,
+                ingestion_job_id=parent,
+                enrich=True,
+            )
         ids = {stage.job.operation: stage.job.id for stage in stages}
     yield engine, doc_id, parent, actor, operation, source, ids
     with Session(engine) as db, db.begin():
@@ -345,7 +351,114 @@ def test_stage_retry_rejects_changed_source_and_live_job(pipeline_database):
         assert not gateway.get(actor=actor, document_id=doc_id).stages[0].can_retry
 
 
-def test_ai_stage_retry_requires_explicit_paid_consent(pipeline_database):
+@pytest.mark.parametrize("connection", ["missing", "disabled", "invalid"])
+def test_missing_ai_connection_is_recorded_without_dispatch_or_execution(
+    pipeline_database,
+    connection,
+):
+    from app.bootstrap.adapters.document_stage_dispatch import enqueue_document_stage
+    from app.modules.jobs.infrastructure.models import JobDispatch
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from app.modules.integrations.connections.infrastructure.models import (
+        ModelConnection,
+    )
+    from app.modules.papers.application.processing import RetryDocumentStage
+    from app.shared.domain import AppError
+
+    engine, doc_id, _parent, actor, operation, _source, _ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        if connection != "missing":
+            db.add(
+                ModelConnection(
+                    user_id=actor.id,
+                    provider="deepseek",
+                    enabled=connection != "disabled",
+                    credential_ciphertext="invalid",
+                    credential_revision=uuid4(),
+                )
+            )
+            db.flush()
+        document = db.get(Document, doc_id)
+        source_id = uuid4()
+        result = enqueue_document_stage(
+            db,
+            document=document,
+            actor=actor,
+            operation=operation,
+            kind=JobOperation.DOCUMENT_ENRICH,
+            source_id=source_id,
+            digest=document.content_digest,
+        )
+        assert result.created and result.job.status == "failed"
+        error_code = (
+            "deepseek_credential_invalid"
+            if connection == "invalid"
+            else "deepseek_credential_required"
+        )
+        assert result.job.error_code == error_code
+        assert (
+            db.scalar(select(JobDispatch).where(JobDispatch.job_id == result.job.id))
+            is None
+        )
+        assert (
+            db.scalar(select(JobExecution).where(JobExecution.job_id == result.job.id))
+            is None
+        )
+        status = SqlDocumentProcessing(db, enabled=True).get(
+            actor=actor, document_id=doc_id
+        )
+        enrichment = next(
+            stage for stage in status.stages if stage.stage == "enrichment"
+        )
+        assert (
+            status.readable
+            and enrichment.required_integration == "deepseek"
+            and enrichment.can_retry
+        )
+        repeated = enqueue_document_stage(
+            db,
+            document=document,
+            actor=actor,
+            operation=operation,
+            kind=JobOperation.DOCUMENT_ENRICH,
+            source_id=source_id,
+            digest=document.content_digest,
+        )
+        assert repeated.job.id == result.job.id and not repeated.created
+        gateway = SqlDocumentProcessing(db, enabled=True)
+        request = RetryDocumentStage(
+            stage="enrichment", job_id=result.job.id, acknowledge_provider_charge=True
+        )
+        with pytest.raises(AppError, match=error_code):
+            gateway.retry(
+                actor=actor, operation=operation, document_id=doc_id, request=request
+            )
+        # A configured credential permits one explicit, charge-aware retry.
+        with patch(
+            "app.bootstrap.adapters.document_stage_dispatch.require_deepseek_key",
+            return_value="fixture-key",
+        ):
+            retried, created = gateway.retry(
+                actor=actor, operation=operation, document_id=doc_id, request=request
+            )
+        assert (
+            created and retried.status == "pending" and retried.job_id != result.job.id
+        )
+        assert (
+            db.scalar(select(JobDispatch).where(JobDispatch.job_id == retried.job_id))
+            is not None
+        )
+        assert (
+            db.scalar(select(JobExecution).where(JobExecution.job_id == retried.job_id))
+            is not None
+        )
+
+
+@patch(
+    "app.bootstrap.adapters.document_stage_dispatch.require_deepseek_key",
+    return_value="fixture-key",
+)
+def test_ai_stage_retry_requires_explicit_paid_consent(_credential, pipeline_database):
     from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
     from app.modules.papers.application.processing import (
         DocumentProcessing,

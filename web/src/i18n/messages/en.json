@@ -1180,6 +1180,7 @@
       "retry": "Retry stage",
       "retryPaid": "Retry AI with provider charges",
       "connect": "Connect DeepSeek",
+      "connectionRequired": "Connect or update DeepSeek to continue",
       "paidNotice": "Retrying AI information makes a new request using your DeepSeek connection and may incur another provider charge, even if the previous result was lost.",
       "retryFailed": "Retry was not confirmed. Refresh the status or try again.",
       "changed": "This stage changed. Review its refreshed status before retrying.",

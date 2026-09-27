@@ -78,7 +78,7 @@ from app.modules.integrations.zotero.application.actions import (
 from app.modules.integrations.zotero.infrastructure.import_repository import (
     zotero_import_repository,
 )
-from app.modules.jobs.application.actions import JOB_CREATED
+from app.modules.jobs.application.actions import JOB_CREATED, JOB_FAILED
 from app.modules.jobs.application.callbacks import (
     JobHandlerResult,
     JobPostCommitAction,
@@ -1216,6 +1216,14 @@ def handle_paper_processing_webhook(
                     )
                     for stage in postprocess_jobs
                     if stage.created
+                )
+                changes.extend(
+                    OperationChange(
+                        action=JOB_FAILED,
+                        resources=(ResourceRef("job", str(stage.job.id)),),
+                    )
+                    for stage in postprocess_jobs
+                    if stage.created and stage.job.status == JobStatus.FAILED.value
                 )
                 end_time = datetime.now(timezone.utc)
                 success_post_commit = _pdf_post_commit_actions(

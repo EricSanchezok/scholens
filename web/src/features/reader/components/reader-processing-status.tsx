@@ -71,7 +71,9 @@ export function ReaderProcessingStatus({
             <li className="flex flex-wrap items-center gap-2" key={stage.stage}>
               <span className="font-medium">{t(`name.${stage.stage}`)}</span>
               <span className="text-muted" role="status">
-                {t(`status.${stage.status}`)}
+                {stage.required_integration
+                  ? t("connectionRequired")
+                  : t(`status.${stage.status}`)}
               </span>
               {stage.required_integration ? (
                 <Button onClick={onConnect} size="sm" variant="secondary">

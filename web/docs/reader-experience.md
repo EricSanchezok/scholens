@@ -806,7 +806,8 @@ paper metadata and annotation queries. The PDF stays mounted throughout.
 
 The disclosed state is requester-scoped. Failed stages retry independently;
 AI retry explicitly accepts a new provider charge, while a missing DeepSeek
-connection opens the existing Connections surface. Changed source/version or
+connection is described as a connection requirement rather than a generic
+failure and opens the existing Connections surface. Changed source/version or
 ambiguous network completion refreshes state and preserves the PDF. Unknown
 failures include the request ID. Unavailable status has its own refresh action.
 
