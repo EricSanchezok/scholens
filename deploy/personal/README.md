@@ -55,8 +55,9 @@ short product outage to avoid static-port conflicts and doubled memory use.
 
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
-worker has a 2,560 MiB hard limit; its original 1,280 MiB limit killed a PDF
-postprocessing child while loading the model. With shared inference enabled,
+worker now has a 1,280 MiB hard limit and a 512 MiB reservation. Its former
+2,560 MiB limit covered a second in-process model and prevented admission on the
+shared host. With the required shared inference owner,
 application processes use a private Unix socket instead of loading ONNX weights.
 The single inference owner uses the same API image, one compute thread, one-text
 microbatches and a 1,024 MiB hard limit. It has no task role, secrets, TCP ports or
@@ -68,10 +69,15 @@ Client failure never starts a second model: queries can degrade to lexical searc
 while deterministic indexing retries.
 
 The reviewed native ARM64 fixture measured a 761 MiB peak with the pinned INT8
-model, within the 1,024 MiB ceiling after 25% headroom and rounding. This does not
-replace final API/parser/index mixed-load acceptance or prove limits for every
-input. Keep the existing API/document ceilings until those process peaks are
-measured; the host size and worker concurrency remain unchanged.
+model, within the 1,024 MiB ceiling after 25% headroom and rounding. The current ARM64 Jobs image also completed a network-isolated, 0.75-CPU fixture:
+a 29,400,304-byte / 50-page electronic PDF peaked at 742.25 MiB across parent and
+parser children; analysis plus both local parser engines and imports finished in
+75.89 seconds. A separate 9,000-passage checkpoint/serialization fixture peaked
+at 709.21 MiB (model computation measured separately). These support the 1,280 MiB
+parser and 1,024 MiB index caps with headroom. They do not prove every input or
+end-to-end online latency. API/conversation caps remain 1,536 MiB pending online
+measurements. No host resize is involved. The template prevents starting this
+release's tokenizer-only workers without the shared inference owner.
 
 The maintenance worker reserves 256 MiB with a 512 MiB hard limit: the shared Jobs
 imports exceed the original 256 MiB limit before it can consume a task. Every
@@ -261,9 +267,15 @@ Account Center, Scholight and the common edge remain outside this runtime operat
 Scholens document/research/maintenance registrations select Platform's `interactive`
 lane. Platform must first deploy the additive lane/resource contract with total
 concurrency one. Its later reviewed concurrency-two change permits Scholight batch
-work to run alongside a Scholens task. Preserve the existing 2,560/768/512 MiB
-worker container ceilings plus the 64 MiB initializer, but omit task-level memory
-and CPU so ECS placement uses the existing soft reservations and CPU shares.
+work to run alongside a Scholens task. Index/enrichment follow-up work uses the
+`batch` lane at priority zero so a long index does not occupy the import lane;
+automatic batch/backup workloads retain their bounded aging opportunities. All
+priorities satisfy Platform's 0/1 registration contract. Worker hard limits are
+1,280/1,024/1,024/768/512 MiB for document/index/enrichment/research/maintenance,
+plus the 64 MiB initializer. Omit task-level memory and CPU so ECS placement uses
+explicit soft reservations and CPU shares. Platform also reserves at least 1 GiB
+free, default 512 MiB resident growth, and active tasks' remaining hard-bound
+growth before starting another task.
 Release validation derives the hard total from all containers and rejects missing
 bounds. No database, queue or job-envelope migration is involved.
 

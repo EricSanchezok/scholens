@@ -280,7 +280,7 @@ LIMITS = {
     "web": (64, 256, 512),
     "api": (128, 768, 1536),
     "conversation-worker": (128, 512, 1536),
-    "document-worker": (256, 768, 2560),
+    "document-worker": (256, 512, 1280),
     "document-index-worker": (128, 384, 1024),
     "document-enrichment-worker": (128, 384, 1024),
     "research-worker": (128, 384, 768),
@@ -509,6 +509,19 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "Type": "Number",
         "Default": 0,
         "AllowedValues": [0, 10, 50, 100],
+    }
+    template["Rules"]["EnabledApplicationRequiresSharedInference"] = {
+        "Assertions": [
+            {
+                "Assert": {
+                    "Fn::Or": [
+                        {"Fn::Equals": [{"Ref": "ApplicationEnabled"}, "false"]},
+                        {"Fn::Equals": [{"Ref": "SharedInferenceEnabled"}, "true"]},
+                    ]
+                },
+                "AssertDescription": "Enabled tokenizer-only workers require the shared model owner and its measured memory budget.",
+            }
+        ]
     }
     template["Rules"]["DocumentStageConsumers"] = {
         "Assertions": [

@@ -422,3 +422,30 @@ def test_personal_manual_workflows_preserve_isolation_and_migration_proofs() -> 
         assert "options: [plan, apply]" in workflow
         assert "scholens-personal-control-plane" in workflow
         assert 'allowed-account-ids: "669409472143"' in workflow
+
+
+def test_measured_parser_budget_requires_owner_and_followup_stages_use_batch_lane():
+    import yaml
+
+    runtime = renderer.render("runtime")
+    task = runtime["Resources"]["DocumentWorkerTaskDefinition"]["Properties"]
+    worker = next(
+        c for c in task["ContainerDefinitions"] if c["Name"] == "document-worker"
+    )
+    assert worker["Memory"] == 1280
+    assert "EnabledApplicationRequiresSharedInference" in runtime["Rules"]
+    registrations = yaml.load(
+        (ROOT / "deploy/personal/background.yml").read_text(),
+        Loader=renderer.CloudFormationLoader,
+    )
+    for name, resource in registrations["Resources"].items():
+        if resource["Type"] != "AWS::SSM::Parameter":
+            continue
+        value = resource["Properties"]["Value"]["Fn::Sub"]
+        assert '"priority":2' not in value  # Platform permits only 0 or 1.
+        expected = (
+            "batch"
+            if name in {"DocumentIndexRegistration", "DocumentEnrichmentRegistration"}
+            else "interactive"
+        )
+        assert f'"lane":"{expected}"' in value

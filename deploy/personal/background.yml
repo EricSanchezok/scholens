@@ -30,7 +30,7 @@ Parameters:
   MaintenanceExecutionRoleArn: {Type: String}
   MaintenanceQueueUrl: {Type: String}
   MaintenanceQueueArn: {Type: String}
-  DocumentMemoryMiB: {Type: Number, Default: 2624, MinValue: 256, MaxValue: 2624}
+  DocumentMemoryMiB: {Type: Number, Default: 1344, MinValue: 256, MaxValue: 2624}
   ResearchMemoryMiB: {Type: Number, Default: 832, MinValue: 256, MaxValue: 2624}
   MaintenanceMemoryMiB: {Type: Number, Default: 576, MinValue: 256, MaxValue: 2624}
   DocumentIndexMemoryMiB: {Type: Number, Default: 1088, MinValue: 256, MaxValue: 2624}
@@ -87,11 +87,11 @@ Resources:
     Properties:
       Name: /sanchezcloud/personal/background/scholens-document-index
       Type: String
-      Value: !Sub '{"version":1,"name":"scholens-document-index","enabled":${Enabled},"task_definition":"${DocumentIndexTaskArn}","memory_mib":${DocumentIndexMemoryMiB},"priority":1,"lane":"interactive","queue_url":"${DocumentIndexQueueUrl}"}'
+      Value: !Sub '{"version":1,"name":"scholens-document-index","enabled":${Enabled},"task_definition":"${DocumentIndexTaskArn}","memory_mib":${DocumentIndexMemoryMiB},"priority":0,"lane":"batch","queue_url":"${DocumentIndexQueueUrl}"}'
   DocumentEnrichmentRegistration:
     Type: AWS::SSM::Parameter
     DependsOn: AdmissionGrant
     Properties:
       Name: /sanchezcloud/personal/background/scholens-document-enrichment
       Type: String
-      Value: !Sub '{"version":1,"name":"scholens-document-enrichment","enabled":${Enabled},"task_definition":"${DocumentEnrichmentTaskArn}","memory_mib":${DocumentEnrichmentMemoryMiB},"priority":2,"lane":"interactive","queue_url":"${DocumentEnrichmentQueueUrl}"}'
+      Value: !Sub '{"version":1,"name":"scholens-document-enrichment","enabled":${Enabled},"task_definition":"${DocumentEnrichmentTaskArn}","memory_mib":${DocumentEnrichmentMemoryMiB},"priority":0,"lane":"batch","queue_url":"${DocumentEnrichmentQueueUrl}"}'
