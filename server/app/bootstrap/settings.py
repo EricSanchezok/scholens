@@ -28,6 +28,7 @@ class AppSettings(BaseSettings):
     diagnostic_success_sample_rate: float = Field(default=0.01, ge=0, le=1)
     job_result_inbox_enabled: bool = False
     document_pipeline_enabled: bool = False
+    document_pipeline_percent: int = Field(default=100, ge=0, le=100)
     trust_cloudflare_client_ip: bool = False
     trusted_proxy_cidr: IPvAnyNetwork | None = None
     client_domain: str = "http://127.0.0.1:7300"

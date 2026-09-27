@@ -979,7 +979,11 @@ a second local model when a socket is configured. Standalone local development c
 still use the explicitly configured local model path.
 
 `DOCUMENT_PIPELINE_ENABLED` selects fenced deterministic PDF extraction for new
-imports. Canonical content becomes readable before independent `document_index`,
+imports in the stable requester cohort selected by `DOCUMENT_PIPELINE_PERCENT`
+(0–100; defaults to 100 when the explicit feature flag is enabled). HTTP, MCP,
+URL/upload-source jobs and Zotero's imported PDFs share this acceptance adapter.
+The selected delivery protocol is persisted once; changing a rollout percentage
+does not reinterpret accepted work. Canonical content becomes readable before independent `document_index`,
 `document_enrich` and `document_bibliography` jobs are transactionally dispatched.
 Indexing uses `document-index`; enrichment and bibliography use
 `document-enrichment`. The `document` consumer remains available for readable

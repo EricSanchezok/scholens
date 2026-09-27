@@ -274,6 +274,41 @@ def test_shared_inference_has_one_owner_and_unprivileged_socket_clients():
             assert consumer["User"] == "65532:1000"
 
 
+def test_document_rollout_is_explicit_and_defaults_to_consumer_first():
+    template = renderer.render("runtime")
+    assert template["Parameters"]["DocumentPipelinePercent"]["Default"] == 0
+    for name in (
+        "DocumentPipelineEnabled",
+        "JobResultInboxEnabled",
+        "JobDispatchFairnessEnabled",
+    ):
+        assert template["Parameters"][name]["Default"] == "false"
+    api = template["Resources"]["ApiTaskDefinition"]["Properties"][
+        "ContainerDefinitions"
+    ][0]
+    env = {e["Name"]: e["Value"] for e in api["Environment"]}
+    assert env["DOCUMENT_PIPELINE_PERCENT"] == {"Ref": "DocumentPipelinePercent"}
+    assert env["JOB_RESULT_INBOX_ENABLED"] == {"Ref": "JobResultInboxEnabled"}
+    assert "DocumentStageConsumers" in template["Rules"]
+
+
+def test_rollout_planning_preserves_percent_and_keeps_consumers_for_pause(monkeypatch):
+    import importlib
+    import pytest
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+    prior = {"DocumentPipelinePercent": "50", "SharedInferenceEnabled": "true"}
+    kept = control.processing_overrides(prior, "preserve", shared_inference=True)
+    assert kept["DocumentPipelinePercent"] == "50"
+    paused = control.processing_overrides(prior, "0", shared_inference=True)
+    assert paused["DocumentPipelineEnabled"] == "false"
+    assert paused["JobResultInboxEnabled"] == "true"
+    assert paused["SharedInferenceEnabled"] == "true"
+    with pytest.raises(ValueError, match="rollback"):
+        control.processing_overrides(prior, "0", shared_inference=False)
+
+
 def test_private_cache_enforces_tls_separate_acls_and_no_aws_runtime_role() -> None:
     import yaml
 

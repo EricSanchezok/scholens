@@ -495,6 +495,49 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "Default": "false",
         "AllowedValues": ["false", "true"],
     }
+    for flag in (
+        "JobResultInboxEnabled",
+        "DocumentPipelineEnabled",
+        "JobDispatchFairnessEnabled",
+    ):
+        template["Parameters"][flag] = {
+            "Type": "String",
+            "Default": "false",
+            "AllowedValues": ["false", "true"],
+        }
+    template["Parameters"]["DocumentPipelinePercent"] = {
+        "Type": "Number",
+        "Default": 0,
+        "AllowedValues": [0, 10, 50, 100],
+    }
+    template["Rules"]["DocumentStageConsumers"] = {
+        "Assertions": [
+            {
+                "Assert": {
+                    "Fn::Or": [
+                        {"Fn::Equals": [{"Ref": "DocumentPipelineEnabled"}, "false"]},
+                        {
+                            "Fn::And": [
+                                {
+                                    "Fn::Equals": [
+                                        {"Ref": "JobResultInboxEnabled"},
+                                        "true",
+                                    ]
+                                },
+                                {
+                                    "Fn::Equals": [
+                                        {"Ref": "SharedInferenceEnabled"},
+                                        "true",
+                                    ]
+                                },
+                            ]
+                        },
+                    ]
+                },
+                "AssertDescription": "Document stage producers require both durable receipt consumers and shared inference.",
+            }
+        ]
+    }
     template["Conditions"]["SharedInference"] = {
         "Fn::Equals": [{"Ref": "SharedInferenceEnabled"}, "true"]
     }
@@ -638,6 +681,23 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     env["SCHOLENS_EMBEDDING_SOCKET"] = {
                         "Fn::If": ["SharedInference", INFERENCE_SOCKET, ""]
                     }
+                if container["Name"] in {"api", "conversation-worker", "scheduler"}:
+                    env.update(
+                        {
+                            "JOB_RESULT_INBOX_ENABLED": {
+                                "Ref": "JobResultInboxEnabled"
+                            },
+                            "DOCUMENT_PIPELINE_ENABLED": {
+                                "Ref": "DocumentPipelineEnabled"
+                            },
+                            "DOCUMENT_PIPELINE_PERCENT": {
+                                "Ref": "DocumentPipelinePercent"
+                            },
+                            "JOB_DISPATCH_FAIRNESS_ENABLED": {
+                                "Ref": "JobDispatchFairnessEnabled"
+                            },
+                        }
+                    )
                 if container["Name"].endswith("-worker"):
                     env["SCHOLENS_WORKER_HEARTBEAT_FILE"] = "/tmp/worker-heartbeat"
                     container["HealthCheck"] = {

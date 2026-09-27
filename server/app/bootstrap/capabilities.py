@@ -193,6 +193,7 @@ class ApplicationCapabilities:
             db=self._session,
             journal=self._journal,
             staged_processing=self._settings.document_pipeline_enabled,
+            staged_percentage=self._settings.document_pipeline_percent,
         )
 
     @cached_property

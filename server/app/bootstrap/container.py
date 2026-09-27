@@ -290,12 +290,18 @@ def build_paper_download(*, db: Session) -> GetPaperDownload:
 
 
 def build_paper_ingestion(
-    *, db: Session, journal: OperationJournal, staged_processing: bool = False
+    *,
+    db: Session,
+    journal: OperationJournal,
+    staged_processing: bool = False,
+    staged_percentage: int = 100,
 ) -> IngestPaper:
     return IngestPaper(
         validator=DefaultPdfInputValidator(),
         limits=DefaultPaperIngestionLimits(),
-        gateway=SqlPaperIngestionGateway(db, staged_processing=staged_processing),
+        gateway=SqlPaperIngestionGateway(
+            db, staged_processing=staged_processing, staged_percentage=staged_percentage
+        ),
         journal=journal,
     )
 

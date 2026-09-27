@@ -241,6 +241,14 @@ Activate the staged producer only after five-registration acknowledgement and qu
 monitoring are verified. Rollback must first stop new-stage production and finish all
 accepted stage work; do not pair pending new tasks with an image that cannot execute them.
 
+`personal-preview.yml` exposes `processing_rollout=preserve|0|10|50|100`. The first
+consumer-capable release enables the receipt supervisor, shared inference and fair
+publication with zero new-stage producers. Advance the stable requester cohort
+through 10%, 50% and 100% only after each acceptance interval. `0` pauses producers
+while retaining all consumers for accepted work. `preserve` retains the live cohort;
+no ordinary release silently increases it. The template rejects stage producers
+without durable receipt consumers and shared inference.
+
 Plans bind the exact manifest bytes and control SHA, expire after 24 hours before
 execution, and reject intervening runtime changes. Rollback validates manifests against
 the selected commit's source files without executing that commit's control scripts.

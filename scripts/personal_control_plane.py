@@ -83,12 +83,43 @@ def guard_plan_freshness(change: dict, current: dict, now: datetime) -> None:
         raise ValueError("Runtime changed after planning")
 
 
+def processing_overrides(
+    previous: dict, rollout: str, *, shared_inference: bool
+) -> dict[str, str]:
+    if not shared_inference and previous.get("SharedInferenceEnabled") == "true":
+        raise ValueError(
+            "Pre-inference rollback requires the documented complete stage drain; "
+            "choose a compatible release for ordinary rollback"
+        )
+    percentage = (
+        previous.get("DocumentPipelinePercent", "0")
+        if rollout == "preserve"
+        else rollout
+    )
+    if percentage not in {"0", "10", "50", "100"}:
+        raise ValueError("Unsupported document rollout cohort")
+    if not shared_inference and percentage != "0":
+        raise ValueError("Document producers require a consumer-capable release")
+    return {
+        "SharedInferenceEnabled": "true" if shared_inference else "false",
+        "JobResultInboxEnabled": "true" if shared_inference else "false",
+        "JobDispatchFairnessEnabled": "true" if shared_inference else "false",
+        "DocumentPipelineEnabled": "true" if percentage != "0" else "false",
+        "DocumentPipelinePercent": percentage,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=STACKS)
     parser.add_argument("operation", choices=["plan", "apply"])
     parser.add_argument("--change-set-arn")
     parser.add_argument("--release-sha")
+    parser.add_argument(
+        "--processing-rollout",
+        choices=["preserve", "0", "10", "50", "100"],
+        default="preserve",
+    )
     parser.add_argument(
         "--background-mode",
         choices=["preserve", "resident", "admitted"],
@@ -232,16 +263,12 @@ def main() -> None:
             shared_inference = (
                 source / "packages/scholens_ai/src/scholens_ai/inference.py"
             ).is_file()
-            if (
-                not shared_inference
-                and previous_values.get("SharedInferenceEnabled") == "true"
-            ):
-                raise ValueError(
-                    "Pre-inference rollback requires the documented complete stage drain; "
-                    "choose a compatible release for ordinary rollback"
+            overrides.update(
+                processing_overrides(
+                    previous_values,
+                    args.processing_rollout,
+                    shared_inference=shared_inference,
                 )
-            overrides["SharedInferenceEnabled"] = (
-                "true" if shared_inference else "false"
             )
             aws(
                 "s3api",
