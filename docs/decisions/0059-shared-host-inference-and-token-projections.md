@@ -38,6 +38,13 @@ lookahead, preserve exact source character and line coordinates, and prefer
 paragraph boundaries. Existing five-line projections remain available through
 consumer rollout; activation requires versioned persistence and complete-index
 adoption. A partial or failed rebuild cannot erase the previous usable index.
+Separate tables use document/model revision heads and ordinal passage keys, so
+multiple token windows can share one canonical line. Source digests maintained
+by a database trigger also invalidate projections written before an N-1 source
+update. Validate all coordinates and vectors before replacing a head; bounded
+insert batches share the final atomic transaction. Legacy rows remain available
+for N-1 rollback but are suppressed once the selected revision is adopted.
+The additive migration avoids a blocking full-table text rewrite.
 
 ## Alternatives considered
 

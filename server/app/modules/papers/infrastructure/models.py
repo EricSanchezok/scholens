@@ -13,6 +13,8 @@ from sqlalchemy import (
     Computed,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
+    FetchedValue,
     Identity,
     Index,
     Integer,
@@ -239,6 +241,12 @@ class Document(Base):
         ARRAY(String), nullable=True
     )
     raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_digest: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
     parser_markdown_s3_key: Mapped[str | None] = mapped_column(String, nullable=True)
     parser_archive_s3_key: Mapped[str | None] = mapped_column(String, nullable=True)
     parser_backend: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -398,6 +406,73 @@ class DocumentSearchEmbedding(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class DocumentTokenProjection(Base):
+    """Atomic complete index head for one content and embedding revision."""
+
+    __tablename__ = "document_token_projections"
+    __table_args__ = (
+        CheckConstraint(
+            "passage_count BETWEEN 0 AND 10000", name="ck_token_projection_count"
+        ),
+    )
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    model_revision: Mapped[str] = mapped_column(String(128), primary_key=True)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    chunk_revision: Mapped[str] = mapped_column(String(80), nullable=False)
+    passage_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class DocumentTokenPassage(Base):
+    """Token window coordinates allow several passages on one canonical line."""
+
+    __tablename__ = "document_token_passages"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "model_revision"],
+            [
+                "document_token_projections.document_id",
+                "document_token_projections.model_revision",
+            ],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "ordinal >= 0 AND start_offset >= 0 AND end_offset > start_offset",
+            name="ck_token_passage_offsets",
+        ),
+        CheckConstraint(
+            "start_line >= 1 AND end_line >= start_line AND token_count BETWEEN 1 AND 256",
+            name="ck_token_passage_coordinates",
+        ),
+        Index(
+            "ix_document_token_passages_ts_vector", "ts_vector", postgresql_using="gin"
+        ),
+        Index(
+            "ix_document_token_passages_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    model_revision: Mapped[str] = mapped_column(String(128), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
+    ts_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
 
 class DocumentPassage(Base):

@@ -146,3 +146,10 @@ and run on the actual target architecture before choosing a variant. The report
 includes cold start, warm query percentiles, Recall@10, NDCG@10, process peak RSS,
 model/corpus digests and repeated legacy/token index measurements. This fixture
 is a regression check, not a claim about production relevance or user latency.
+
+`TokenProjection` packages exact character spans and deduplicated float32 vectors
+in the checked binary format, transported as bounded base64. The result is at
+most 10,000 passages with a 16 MiB binary vector bound. Canonical-source SHA-256,
+model revision, finite normalized vectors, advancing spans, complete text
+coverage, and the exact set of vector digests are validated before adoption.
+Repeated source text can reuse a vector without collapsing distinct coordinates.

@@ -937,3 +937,24 @@ anchored, existing, created and skipped counts without source text.
 Deploy additive migration `2026_09_27_1100` before this consumer. See
 [ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md) for legacy adoption
 and the retirement condition.
+
+## Versioned token search projections
+
+Migration `2026_09_27_1300` adds `documents.content_digest` and separate complete
+`document_token_projections` / `document_token_passages` tables. It performs no
+full-table text backfill. A database trigger maintains SHA-256 for N-1 text
+writers and skips rebuilding the full-text vector on unrelated metadata writes.
+The replacement is validated against locked canonical content, inserted in
+128-row batches and committed with its head in one transaction. Search selects
+only the current content/model revision, and does not resurrect legacy windows
+after an adopted projection becomes stale. Canonical full-text search remains
+available while the replacement is pending. Existing five-line tables remain
+intact for rollback. The owning persistence adapter contains the temporary dual
+read; retire it only after all retained documents have the active projection and
+N-1 rollout/rollback support has been explicitly retired.
+
+O4 and the measured ARM64 INT8 revision share the reviewed semantic acceptance
+thresholds. The synthetic bilingual fixture measured Recall@10 0.703125 to
+0.71875 and NDCG@10 0.718233 to 0.715284; this supports the precision change,
+not a production relevance guarantee. Producers remain on the legacy protocol
+until the separate staged processing rollout is enabled.

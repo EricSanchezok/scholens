@@ -262,7 +262,8 @@ def test_composite_candidate_projection_never_hydrates_full_document_fields() ->
     assert "left(scholens.documents.title" in projection_sql
     assert "left(scholens.documents.abstract" in projection_sql
     assert "left(scholens.documents.summary" in projection_sql
-    assert "left(scholens.document_passages.content" in passage_sql
+    assert "left(searchable_passages.content" in passage_sql
+    assert "documents.raw_content" not in passage_sql
 
 
 @pytest.mark.parametrize(

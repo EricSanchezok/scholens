@@ -36,12 +36,12 @@ from app.modules.papers.application.contracts.documents import (
 )
 from app.modules.papers.infrastructure.models import (
     Document,
-    DocumentPassage,
     DocumentSearchEmbedding,
     LibraryPaper,
     LibraryPaperTag,
     PaperTag,
 )
+from app.modules.papers.infrastructure.token_projection import searchable_passages
 from app.modules.papers.infrastructure.access import accessible_document_condition
 from app.modules.projects.infrastructure.models import (
     Project,
@@ -67,8 +67,11 @@ _TRIGRAM_SIMILARITY_MIN = 0.12
 # These conservative acceptance guardrails are scoped to this exact local E5
 # projection. A model revision must deliberately review them; loosening them
 # requires the fixed relevance evaluation set called for by ADR 0030.
-_E5_POLICY_MODEL_REVISION = "multilingual-e5-small-onnx-o4-v1"
-if EMBEDDING_MODEL_REVISION != _E5_POLICY_MODEL_REVISION:
+_E5_POLICY_MODEL_REVISIONS = {
+    "multilingual-e5-small-onnx-o4-v1",
+    "multilingual-e5-small-onnx-arm64-int8-v1",
+}
+if EMBEDDING_MODEL_REVISION not in _E5_POLICY_MODEL_REVISIONS:
     raise RuntimeError("paper search semantic acceptance policy requires review")
 _E5_SEMANTIC_MAX_COSINE_DISTANCE = 0.20
 _E5_SEMANTIC_BEST_DISTANCE_DELTA = 0.04
@@ -372,23 +375,24 @@ def _matching_passages(
 ) -> dict[UUID, list[PaperSearchSnippet]]:
     if not document_ids:
         return {}
-    passage_rank = func.ts_rank_cd(DocumentPassage.ts_vector, text_query)
+    passages = searchable_passages(model_revision=EMBEDDING_MODEL_REVISION).c
+    passage_rank = func.ts_rank_cd(passages.ts_vector, text_query)
     ranked = (
         select(
-            DocumentPassage.document_id.label("document_id"),
-            DocumentPassage.start_line.label("start_line"),
-            DocumentPassage.end_line.label("end_line"),
-            func.left(DocumentPassage.content, _PASSAGE_CHARACTERS).label("content"),
+            passages.document_id.label("document_id"),
+            passages.start_line.label("start_line"),
+            passages.end_line.label("end_line"),
+            func.left(passages.content, _PASSAGE_CHARACTERS).label("content"),
             func.row_number()
             .over(
-                partition_by=DocumentPassage.document_id,
-                order_by=(passage_rank.desc(), DocumentPassage.start_line),
+                partition_by=passages.document_id,
+                order_by=(passage_rank.desc(), passages.start_line),
             )
             .label("position"),
         )
         .where(
-            DocumentPassage.document_id.in_(document_ids),
-            DocumentPassage.ts_vector.op("@@")(text_query),
+            passages.document_id.in_(document_ids),
+            passages.ts_vector.op("@@")(text_query),
         )
         .subquery()
     )
@@ -497,15 +501,15 @@ class PostgresPaperSearch:
             )
             or 0
         )
+        passages = searchable_passages(model_revision=EMBEDDING_MODEL_REVISION).c
         semantic_passages = int(
             self._db.scalar(
-                select(func.count(func.distinct(DocumentPassage.document_id)))
-                .join(Document, Document.id == DocumentPassage.document_id)
+                select(func.count(func.distinct(passages.document_id)))
+                .join(Document, Document.id == passages.document_id)
                 .where(
                     *conditions,
-                    DocumentPassage.embedding_model_revision
-                    == EMBEDDING_MODEL_REVISION,
-                    DocumentPassage.embedding.is_not(None),
+                    passages.embedding_model_revision == EMBEDDING_MODEL_REVISION,
+                    passages.embedding.is_not(None),
                 )
             )
             or 0
@@ -608,14 +612,14 @@ class PostgresPaperSearch:
                         .limit(self._CANDIDATE_LIMIT)
                     ).tuples()
                 ]
-                passage_distance = DocumentPassage.embedding.cosine_distance(
-                    query_embedding
-                )
+                passages = searchable_passages(
+                    model_revision=EMBEDDING_MODEL_REVISION
+                ).c
+                passage_distance = passages.embedding.cosine_distance(query_embedding)
                 passage_conditions: list[ColumnElement[bool]] = [
                     *conditions,
-                    DocumentPassage.embedding_model_revision
-                    == EMBEDDING_MODEL_REVISION,
-                    DocumentPassage.embedding.is_not(None),
+                    passages.embedding_model_revision == EMBEDDING_MODEL_REVISION,
+                    passages.embedding.is_not(None),
                 ]
                 if has_exact_metadata:
                     passage_conditions.append(
@@ -637,15 +641,15 @@ class PostgresPaperSearch:
                         candidate_distance,
                     ) in self._db.execute(
                         select(
-                            DocumentPassage.document_id,
-                            DocumentPassage.start_line,
-                            DocumentPassage.end_line,
-                            func.left(DocumentPassage.content, _PASSAGE_CHARACTERS),
+                            passages.document_id,
+                            passages.start_line,
+                            passages.end_line,
+                            func.left(passages.content, _PASSAGE_CHARACTERS),
                             passage_distance.label("cosine_distance"),
                         )
-                        .join(Document, Document.id == DocumentPassage.document_id)
+                        .join(Document, Document.id == passages.document_id)
                         .where(*passage_conditions)
-                        .order_by(passage_distance, DocumentPassage.id)
+                        .order_by(passage_distance, passages.sort_key)
                         .limit(self._CANDIDATE_LIMIT)
                     ).tuples()
                 ]
