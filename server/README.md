@@ -161,6 +161,14 @@ schema validation of errors and always surface the original Scholens error
 code instead of a `-32602` schema-validation failure. The advertised
 `outputSchema` keeps its structured error branch for compatibility.
 
+Citation resolution, PDF bibliography recovery, OpenAlex, and MCP connector
+calls form one async chain on the Server event loop. They do not create a new
+loop per request or lend a pooled async HTTP client to a thread. OpenAlex reads
+credentials and records revision-bound outcomes in short worker-thread database
+transactions. Crossref and the synchronous LLM backend run in worker threads;
+provider requests hold no SQLAlchemy session. The application lifespan closes
+its OpenAlex HTTP and Redis clients on their owning event loop.
+
 Authenticated Job callbacks that fail the registered operation contract are
 atomically marked failed before their Redis concurrency leases are released.
 Unexpected handler or database failures keep their leases until retry or TTL,

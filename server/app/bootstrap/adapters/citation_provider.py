@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import difflib
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.helpers.parser import parse_publication_date
 from app.llm.citation_recovery import MetadataRecoveryAgent
+from app.llm.token_credits import llm_usage_context
 from app.modules.integrations.connectors.infrastructure.mcp import ConnectorToolResolver
 from app.modules.papers.application.citations import CitationMetadataPatch
 from app.modules.papers.application.contracts.citation import CitationStep
@@ -43,7 +45,7 @@ class CitationMetadataProvider:
         self._openalex = openalex
         self._crossref = crossref or CrossrefClient()
 
-    def deterministic(
+    async def deterministic(
         self,
         *,
         actor: Actor,
@@ -53,7 +55,8 @@ class CitationMetadataProvider:
         doi = fields.doi
         doi_title_verified = False
         if not doi and fields.title:
-            doi = self._crossref.find_doi(
+            doi = await asyncio.to_thread(
+                self._crossref.find_doi,
                 title=fields.title,
                 authors=fields.authors or None,
             )
@@ -65,7 +68,7 @@ class CitationMetadataProvider:
         publisher = fields.publisher
         publish_date = fields.publish_date
         if doi and (not journal or not publisher or not publish_date):
-            enriched = self._crossref.enriched_data(doi=doi)
+            enriched = await asyncio.to_thread(self._crossref.enriched_data, doi=doi)
             if _enrichment_title_matches(
                 fields,
                 enriched,
@@ -92,7 +95,7 @@ class CitationMetadataProvider:
 
         if not doi and fields.title:
             try:
-                doi = self._openalex.resolve_doi_sync(
+                doi = await self._openalex.resolve_doi(
                     actor=actor,
                     operation=operation,
                     title=fields.title,
@@ -105,7 +108,7 @@ class CitationMetadataProvider:
 
         if doi and (not journal or not publisher or not publish_date):
             try:
-                enriched = self._openalex.enriched_data_sync(
+                enriched = await self._openalex.enriched_data(
                     actor=actor,
                     operation=operation,
                     doi=doi,
@@ -156,21 +159,27 @@ class CitationMetadataProvider:
             filled_fields=filled,
         )
 
-    def agentic(
+    async def agentic(
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         fields: CitationFields,
         missing_fields: list[str],
         steps: list[CitationStep],
         filled_by: str = "get_paper_citation",
     ) -> CitationProviderResult:
-        findings, confidence = self._recovery.find_metadata(
-            actor=actor,
-            fields=fields,
-            missing_fields=missing_fields,
-            steps=steps,
-        )
+        with llm_usage_context(
+            user_id=actor.id,
+            feature="citation_metadata",
+            operation_id=str(operation.trace.operation_id),
+        ):
+            findings, confidence = await self._recovery.find_metadata(
+                actor=actor,
+                fields=fields,
+                missing_fields=missing_fields,
+                steps=steps,
+            )
         if not findings:
             return CitationProviderResult(
                 patch=CitationMetadataPatch(),

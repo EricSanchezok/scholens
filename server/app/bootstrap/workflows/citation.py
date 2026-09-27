@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import logging
 import math
@@ -120,7 +121,7 @@ class CitationWorkflow:
         self._provider = provider
         self._operation_factory = operation_factory
 
-    def run(
+    async def run(
         self,
         *,
         actor: Actor,
@@ -131,7 +132,7 @@ class CitationWorkflow:
         paper_collection: PaperCollection | None = None,
         anchor_document_id: UUID | None = None,
     ) -> CitationResult:
-        plan = self.prepare(
+        plan = await self.prepare(
             actor=actor,
             operation=operation,
             document_id=document_id,
@@ -142,16 +143,18 @@ class CitationWorkflow:
         )
         if not _patch_has_values(plan.patch):
             return self.complete(plan, fields=plan.initial_fields)
-        return self._executor.command(
+        result: CitationResult = await asyncio.to_thread(
+            self._executor.command,
             lambda capabilities: self.apply_prepared(
                 capabilities,
                 actor=actor,
                 operation=operation,
                 plan=plan,
-            )
+            ),
         )
+        return result
 
-    def prepare(
+    async def prepare(
         self,
         *,
         actor: Actor,
@@ -165,18 +168,20 @@ class CitationWorkflow:
         """Perform authorization and provider I/O without committing metadata."""
 
         if paper_collection is not None:
-            self._executor.query(
+            await asyncio.to_thread(
+                self._executor.query,
                 lambda capabilities: capabilities.paper_collection_access(
                     actor=actor,
                     collection=paper_collection,
                     document_id=document_id,
                     anchor_document_id=anchor_document_id,
-                )
+                ),
             )
         canonical = normalize_style(style)
         display = STYLE_DISPLAY_NAMES[canonical]
         steps: list[CitationStep] = []
-        fields = self._read(
+        fields = await asyncio.to_thread(
+            self._read,
             actor=actor,
             document_id=document_id,
             project_id=project_id,
@@ -230,7 +235,7 @@ class CitationWorkflow:
             )
 
         try:
-            deterministic = self._provider.deterministic(
+            deterministic = await self._provider.deterministic(
                 actor=actor,
                 operation=operation,
                 fields=fields,
@@ -309,8 +314,9 @@ class CitationWorkflow:
                 steps=tuple(steps),
             )
 
-        recovered = self._provider.agentic(
+        recovered = await self._provider.agentic(
             actor=actor,
+            operation=operation,
             fields=fields,
             missing_fields=missing,
             steps=steps,

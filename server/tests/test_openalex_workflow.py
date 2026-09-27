@@ -203,3 +203,54 @@ async def test_openalex_request_uses_short_credential_and_outcome_transactions(
     assert outcome["credential_revision"] == executor.integrations.revision
     assert outcome["outcome"] == "verified"
     assert "private-openalex-key" not in repr(openalex)
+
+
+@pytest.mark.asyncio
+async def test_openalex_request_keeps_network_on_loop_and_database_off_loop(
+    monkeypatch,
+):
+    import asyncio
+    import threading
+
+    executor = _Executor()
+    owner = asyncio.get_running_loop()
+    main_thread = threading.get_ident()
+    revisions = []
+    query = executor.query
+    command = executor.command
+
+    def checked_query(callback):
+        assert threading.get_ident() != main_thread
+        return query(callback)
+
+    def checked_command(callback):
+        assert threading.get_ident() != main_thread
+        return command(callback)
+
+    executor.query = checked_query
+    executor.command = checked_command
+    client = MagicMock()
+
+    async def remote(_client, secret):
+        assert _client is client
+        assert asyncio.get_running_loop() is owner
+        assert not executor.active
+        assert secret == "private-openalex-key"
+        return "ok"
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.openalex.cache_url_from_environment", lambda: None
+    )
+    service = UserOpenAlex(
+        executor=executor, operation_factory=OperationContextFactory(), client=client
+    )
+    for _ in range(2):
+        executor.integrations.revision = uuid4()
+        revisions.append(executor.integrations.revision)
+        assert (
+            await service.request(actor=_actor(), operation=_operation(), call=remote)
+            == "ok"
+        )
+    assert [
+        value["credential_revision"] for value in executor.integrations.outcomes
+    ] == revisions

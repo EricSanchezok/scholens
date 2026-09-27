@@ -54,7 +54,7 @@ class _Provider:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def deterministic(
+    async def deterministic(
         self,
         *,
         actor: Actor,
@@ -69,7 +69,7 @@ class _Provider:
             filled_fields={"doi": "10.1/example"},
         )
 
-    def agentic(self, **kwargs: object) -> CitationProviderResult:
+    async def agentic(self, **kwargs: object) -> CitationProviderResult:
         assert kwargs["actor"] == _actor()
         return CitationProviderResult(
             patch=CitationMetadataPatch(journal="Journal"),
@@ -245,7 +245,7 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
     callbacks = _Callbacks(events)
 
     class MismatchedProvider(_Provider):
-        def deterministic(self, **_kwargs: object) -> CitationProviderResult:
+        async def deterministic(self, **_kwargs: object) -> CitationProviderResult:
             events.append("external")
             return CitationProviderResult(
                 patch=CitationMetadataPatch(),
@@ -253,7 +253,7 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
                 identity_mismatch=True,
             )
 
-        def agentic(self, **_kwargs: object) -> CitationProviderResult:
+        async def agentic(self, **_kwargs: object) -> CitationProviderResult:
             raise AssertionError("identity mismatch must stop metadata recovery")
 
     workflow = PdfPostprocessWorkflow(

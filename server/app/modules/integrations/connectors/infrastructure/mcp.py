@@ -7,8 +7,7 @@ import json
 import re
 import time
 from builtins import BaseExceptionGroup
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Protocol, TypeVar
@@ -171,9 +170,6 @@ class ResolvedConnectorToolSet:
                 (time.monotonic() - started) * 1000,
                 attributes=attributes,
             )
-
-    def call_sync(self, name: str, arguments: dict[str, Any]) -> JsonValue:
-        return _run_sync(lambda: self.call(name, arguments))
 
 
 _PROVIDER_DEFINITIONS = {
@@ -384,20 +380,6 @@ class ConnectorToolResolver:
             declarations=tuple(declarations),
             issues=tuple(issues),
             _routes=MappingProxyType(routes),
-        )
-
-    def resolve_sync(
-        self,
-        *,
-        actor: Actor,
-        reserved_names: set[str] | frozenset[str] = frozenset(),
-    ) -> ResolvedConnectorToolSet:
-        return _run_sync(
-            lambda: self.resolve(
-                actor=actor,
-                permissions=frozenset({WorkspacePermission.READ}),
-                reserved_names=reserved_names,
-            )
         )
 
     def _connections(
@@ -658,12 +640,3 @@ def _walk_exceptions(exc: BaseException) -> tuple[BaseException, ...]:
         if current.__context__ is not None:
             pending.append(current.__context__)
     return tuple(result)
-
-
-def _run_sync(factory: Callable[[], Coroutine[Any, Any, T]]) -> T:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(factory())
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="connector-mcp") as pool:
-        return pool.submit(lambda: asyncio.run(factory())).result()

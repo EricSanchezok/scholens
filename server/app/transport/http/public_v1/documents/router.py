@@ -301,7 +301,7 @@ def get_document_file_url(
     "/{document_id}/citation",
     response_model=CitationResult,
 )
-def get_document_citation(
+async def get_document_citation(
     document_id: UUID,
     style: str = "APA",
     project_id: UUID | None = None,
@@ -309,7 +309,7 @@ def get_document_citation(
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
 ) -> CitationResult:
-    return workflow.run(
+    return await workflow.run(
         actor=current_user,
         operation=operation,
         document_id=document_id,

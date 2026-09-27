@@ -99,8 +99,7 @@ class PdfPostprocessWorkflow:
         metadata_resolution = (
             PdfPostprocessResolution()
             if snapshot.terminal
-            else await asyncio.to_thread(
-                self._resolve_external,
+            else await self._resolve_external(
                 actor,
                 operation,
                 _require_fields(snapshot),
@@ -189,7 +188,7 @@ class PdfPostprocessWorkflow:
             )
             return ()
 
-    def _resolve_external(
+    async def _resolve_external(
         self,
         actor: Actor,
         operation: OperationContext,
@@ -198,7 +197,7 @@ class PdfPostprocessWorkflow:
         deterministic_patch = CitationMetadataPatch()
         identity_mismatch = False
         try:
-            deterministic = self._provider.deterministic(
+            deterministic = await self._provider.deterministic(
                 actor=actor,
                 operation=operation,
                 fields=fields,
@@ -213,8 +212,9 @@ class PdfPostprocessWorkflow:
         missing_fields = bibliographic_gaps(resolved_fields)
         if missing_fields and not identity_mismatch:
             try:
-                agentic = self._provider.agentic(
+                agentic = await self._provider.agentic(
                     actor=actor,
+                    operation=operation,
                     fields=resolved_fields,
                     missing_fields=missing_fields,
                     steps=[],

@@ -7,9 +7,8 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable, Coroutine
-from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Literal, TypeVar
 from uuid import UUID
 
 from app.modules.integrations.connections.domain import IntegrationProvider
@@ -212,37 +211,17 @@ class UserOpenAlex:
             ),
         )
 
-    def resolve_doi_sync(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        title: str,
-        authors: list[str] | None = None,
-    ) -> str | None:
-        return _run_sync(
-            lambda: self.resolve_doi(
-                actor=actor,
-                operation=operation,
-                title=title,
-                authors=authors,
-            )
-        )
-
-    def enriched_data_sync(
+    async def enriched_data(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         doi: str,
     ) -> EnrichedData | None:
-        return self.request_sync(
+        return await self.request(
             actor=actor,
             operation=operation,
-            call=lambda client, api_key: client.enriched_data(
-                api_key=api_key,
-                doi=doi,
-            ),
+            call=lambda client, api_key: client.enriched_data(api_key=api_key, doi=doi),
         )
 
     async def request(
@@ -252,16 +231,18 @@ class UserOpenAlex:
         operation: OperationContext,
         call: OpenAlexCall[T],
     ) -> T:
-        credential = self._executor.query(
+        credential = await asyncio.to_thread(
+            self._executor.query,
             lambda capabilities: capabilities.integrations.credential(
                 actor=actor,
                 provider=IntegrationProvider.OPENALEX,
-            )
+            ),
         )
         try:
             result = await call(self._client, credential.secret)
         except AppError as exc:
-            self._record_outcome(
+            await asyncio.to_thread(
+                self._record_outcome,
                 actor=actor,
                 operation=operation,
                 credential_revision=credential.revision,
@@ -271,7 +252,8 @@ class UserOpenAlex:
                 error_code=exc.code,
             )
             raise
-        self._record_outcome(
+        await asyncio.to_thread(
+            self._record_outcome,
             actor=actor,
             operation=operation,
             credential_revision=credential.revision,
@@ -279,17 +261,6 @@ class UserOpenAlex:
             error_code=None,
         )
         return result
-
-    def request_sync(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        call: OpenAlexCall[T],
-    ) -> T:
-        return _run_sync(
-            lambda: self.request(actor=actor, operation=operation, call=call)
-        )
 
     def _record_outcome(
         self,
@@ -314,15 +285,6 @@ class UserOpenAlex:
                 error_code=error_code,
             )
         )
-
-
-def _run_sync(factory: Callable[[], Coroutine[Any, Any, T]]) -> T:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(factory())
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="openalex") as pool:
-        return pool.submit(lambda: asyncio.run(factory())).result()
 
 
 __all__ = ["UserOpenAlex"]

@@ -2029,8 +2029,7 @@ class WorkspaceToolHandlers:
         )
         if replay is not None:
             return finalize_outcome(restore_tool_outcome(replay))
-        plan = await asyncio.to_thread(
-            self._citations.prepare,
+        plan = await self._citations.prepare(
             actor=context.actor,
             operation=context.operation,
             document_id=parsed.document_id,
