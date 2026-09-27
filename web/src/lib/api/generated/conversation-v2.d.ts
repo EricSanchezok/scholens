@@ -1759,6 +1759,18 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentProcessingStatusResponse */
+        DocumentProcessingStatusResponse: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Readable */
+            readable: boolean;
+            /** Stages */
+            stages: components["schemas"]["DocumentStageStatus"][];
+        };
         /** DocumentReflowAssetResponse */
         DocumentReflowAssetResponse: {
             /** Checksum */
@@ -1913,6 +1925,28 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DocumentStageStatus */
+        DocumentStageStatus: {
+            /**
+             * Can Retry
+             * @default false
+             */
+            can_retry: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /** Required Integration */
+            required_integration?: "deepseek" | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "pending" | "running" | "completed" | "failed" | "cancelled" | "stale";
+        };
         /** DoiPaperSource */
         DoiPaperSource: {
             /**
@@ -2045,7 +2079,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
+        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_index" | "document_search_index" | "document_enrich" | "document_bibliography" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -4038,10 +4072,33 @@ export interface components {
              */
             index: number;
             /**
+             * Segment Id
+             * @description The supplied evidence segment ID containing this verbatim quote.
+             */
+            segment_id?: string | null;
+            /**
              * Text
-             * @description The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.
+             * @description An exact verbatim quote from the source. Never paraphrase evidence.
              */
             text: string;
+        };
+        /** RetryDocumentStage */
+        RetryDocumentStage: {
+            /**
+             * Acknowledge Provider Charge
+             * @default false
+             */
+            acknowledge_provider_charge: boolean;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
         };
         /** SelectedPaperCollection */
         SelectedPaperCollection: {

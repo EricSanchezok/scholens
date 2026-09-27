@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from botocore.exceptions import ClientError
@@ -139,43 +139,24 @@ def test_staging_metadata_requests_s3_checksum_validation(monkeypatch) -> None:
 
 
 def test_staging_download_is_version_locked_and_hard_bounded(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    class Body:
-        def read(self, amount: int) -> bytes:
-            captured["read_amount"] = amount
-            return b"%PDF"
-
-    def get_object(**kwargs) -> dict[str, object]:
-        captured["request"] = kwargs
-        return {"Body": Body()}
-
-    monkeypatch.setattr(s3_service.s3_client, "get_object", get_object)
-    monkeypatch.setattr(s3_service, "bucket_name", "bucket")
+    transfer = MagicMock()
+    transfer.read = AsyncMock(return_value=b"%PDF")
+    monkeypatch.setattr(s3_service, "_transfers", lambda: transfer)
     metadata = StagingObjectMetadata(
-        size_bytes=4,
-        checksum_sha256="checksum",
-        etag='"etag"',
-        version_id="version-1",
+        size_bytes=4, checksum_sha256="checksum", etag='"etag"', version_id="version-1"
     )
-
     assert (
         s3_service.download_staging_bytes(
-            "uploads/7/session/source.pdf",
-            metadata=metadata,
-            max_bytes=30,
+            "uploads/7/session/source.pdf", metadata=metadata, max_bytes=30
         )
         == b"%PDF"
     )
-    assert captured == {
-        "read_amount": 31,
-        "request": {
-            "Bucket": "bucket",
-            "IfMatch": '"etag"',
-            "Key": "uploads/7/session/source.pdf",
-            "VersionId": "version-1",
-        },
-    }
+    transfer.read.assert_awaited_once_with(
+        "uploads/7/session/source.pdf",
+        max_bytes=30,
+        etag='"etag"',
+        version_id="version-1",
+    )
 
 
 def test_staging_download_records_sanitized_s3_dependency_failure(
@@ -194,10 +175,9 @@ def test_staging_download_records_sanitized_s3_dependency_failure(
     )
     metric = MagicMock()
 
-    def get_object(**_kwargs: object) -> dict[str, object]:
-        raise failure
-
-    monkeypatch.setattr(s3_service.s3_client, "get_object", get_object)
+    transfer = MagicMock()
+    transfer.read = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(s3_service, "_transfers", lambda: transfer)
     monkeypatch.setattr(s3_service, "bucket_name", "private-bucket")
     monkeypatch.setattr(s3_module, "add_counter", metric)
     metadata = StagingObjectMetadata(

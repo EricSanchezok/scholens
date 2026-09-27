@@ -80,6 +80,8 @@ from app.modules.papers.infrastructure.discovery import (
     PostHogDiscoveryEventRecorder,
     SqlDiscoveryDocumentGateway,
 )
+from app.modules.papers.application.processing import DocumentProcessing
+from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
 from app.modules.papers.application.details import GetPaperDetails
 from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.library import PaperLibrary
@@ -289,11 +291,27 @@ def build_paper_download(*, db: Session) -> GetPaperDownload:
     )
 
 
-def build_paper_ingestion(*, db: Session, journal: OperationJournal) -> IngestPaper:
+def build_document_processing(
+    *, db: Session, journal: OperationJournal, enabled: bool
+) -> DocumentProcessing:
+    return DocumentProcessing(
+        SqlDocumentProcessing(db, enabled=enabled), journal=journal, enabled=enabled
+    )
+
+
+def build_paper_ingestion(
+    *,
+    db: Session,
+    journal: OperationJournal,
+    staged_processing: bool = False,
+    staged_percentage: int = 100,
+) -> IngestPaper:
     return IngestPaper(
         validator=DefaultPdfInputValidator(),
         limits=DefaultPaperIngestionLimits(),
-        gateway=SqlPaperIngestionGateway(db),
+        gateway=SqlPaperIngestionGateway(
+            db, staged_processing=staged_processing, staged_percentage=staged_percentage
+        ),
         journal=journal,
     )
 
@@ -616,6 +634,21 @@ def build_job_callbacks(
     )
     from app.shared.domain.enums import JobOperation
 
+    from app.bootstrap.adapters.document_search_projection import (
+        DocumentSearchIndexCallback,
+        DocumentSearchIndexCompletion,
+    )
+    from app.bootstrap.adapters.document_stage_callbacks import (
+        DocumentIndexCallback,
+        DocumentIndexCompletion,
+        DocumentEnrichmentCallback,
+        DocumentEnrichmentCompletion,
+    )
+    from app.bootstrap.adapters.document_bibliography import (
+        DocumentBibliographyCallback,
+        DocumentBibliographyCompletion,
+    )
+
     return JobCallbacks(
         lifecycle=SqlAlchemyJobLifecycle(db),
         handlers={
@@ -624,6 +657,18 @@ def build_job_callbacks(
             ),
             JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
                 PdfPostprocessCallback, PdfPostprocessCompletion(db)
+            ),
+            JobOperation.DOCUMENT_SEARCH_INDEX: RegisteredJobCallback(
+                DocumentSearchIndexCallback, DocumentSearchIndexCompletion(db)
+            ),
+            JobOperation.DOCUMENT_INDEX: RegisteredJobCallback(
+                DocumentIndexCallback, DocumentIndexCompletion(db)
+            ),
+            JobOperation.DOCUMENT_ENRICH: RegisteredJobCallback(
+                DocumentEnrichmentCallback, DocumentEnrichmentCompletion(db)
+            ),
+            JobOperation.DOCUMENT_BIBLIOGRAPHY: RegisteredJobCallback(
+                DocumentBibliographyCallback, DocumentBibliographyCompletion(db)
             ),
             JobOperation.DOCUMENT_GC: RegisteredJobCallback(
                 JobCallbackIdentity, DocumentGcCompletion(db)

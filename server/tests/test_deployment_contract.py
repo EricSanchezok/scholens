@@ -1982,6 +1982,8 @@ def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
     assert queues["Resource"] == [
         {"Fn::ImportValue": "sanchezcloud-scholens-conversation-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-document-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-document-index-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-document-enrichment-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-research-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-maintenance-queue-arn"},
     ]
@@ -2284,6 +2286,12 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_26_1200_source_reservation_nullable_digest.py",
         "2026_09_05_1400_passage_embeddings.py",
         "2026_09_08_1000_deepseek_connection.py",
+        "2026_09_27_0420_fenced_job_execution_and_result_inbox.py",
+        "2026_09_27_0523_personal_ai_evidence_receipts.py",
+        "2026_09_27_0628_durable_job_result_effects.py",
+        "2026_09_27_0650_token_projection_source_revisions.py",
+        "2026_09_27_0730_fair_job_dispatch.py",
+        "2026_09_27_0920_metadata_projection_revision.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
@@ -2507,6 +2515,7 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "POST /api/v1/me/reading-activity/paper-summaries",
         "PUT /api/v1/me/reading-activity-preferences",
         "POST /api/v1/papers/{document_id}/reading-sessions",
+        "POST /api/v1/papers/{document_id}/processing/retry",
         "POST /api/v1/projects/{project_id}/invitations",
         "PATCH /api/v1/projects/{project_id}/members/{user_id}",
         "POST /api/v1/projects/{project_id}/papers",

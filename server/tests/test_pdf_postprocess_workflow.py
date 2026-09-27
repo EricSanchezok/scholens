@@ -54,7 +54,7 @@ class _Provider:
     def __init__(self, events: list[str]) -> None:
         self._events = events
 
-    def deterministic(
+    async def deterministic(
         self,
         *,
         actor: Actor,
@@ -69,7 +69,7 @@ class _Provider:
             filled_fields={"doi": "10.1/example"},
         )
 
-    def agentic(self, **kwargs: object) -> CitationProviderResult:
+    async def agentic(self, **kwargs: object) -> CitationProviderResult:
         assert kwargs["actor"] == _actor()
         return CitationProviderResult(
             patch=CitationMetadataPatch(journal="Journal"),
@@ -84,7 +84,7 @@ class _Callbacks:
         self.operation: OperationContext | None = None
         self.resolution: object | None = None
 
-    async def complete_pdf_postprocess(self, **kwargs: object) -> JobCompletionResult:
+    def complete_pdf_postprocess(self, **kwargs: object) -> JobCompletionResult:
         self._events.append("finalize")
         self.operation = kwargs["operation"]  # type: ignore[assignment]
         self.resolution = kwargs["resolution"]
@@ -100,8 +100,8 @@ class _Executor:
     def __init__(self, capabilities: _Capabilities) -> None:
         self._capabilities = capabilities
 
-    async def command_async(self, operation: object) -> object:
-        return await operation(self._capabilities)  # type: ignore[operator]
+    def command(self, operation: object) -> object:
+        return operation(self._capabilities)  # type: ignore[operator]
 
 
 def _actor() -> Actor:
@@ -245,7 +245,7 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
     callbacks = _Callbacks(events)
 
     class MismatchedProvider(_Provider):
-        def deterministic(self, **_kwargs: object) -> CitationProviderResult:
+        async def deterministic(self, **_kwargs: object) -> CitationProviderResult:
             events.append("external")
             return CitationProviderResult(
                 patch=CitationMetadataPatch(),
@@ -253,7 +253,7 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
                 identity_mismatch=True,
             )
 
-        def agentic(self, **_kwargs: object) -> CitationProviderResult:
+        async def agentic(self, **_kwargs: object) -> CitationProviderResult:
             raise AssertionError("identity mismatch must stop metadata recovery")
 
     workflow = PdfPostprocessWorkflow(
@@ -274,3 +274,24 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
     assert result.value == "done"
     assert events == ["read", "external", "finalize"]
     assert callbacks.resolution == PdfPostprocessResolution()
+
+
+@pytest.mark.asyncio
+async def test_independent_bibliography_never_falls_through_to_paid_agentic_provider():
+    from unittest.mock import AsyncMock
+
+    provider = _Provider([])
+    provider.agentic = AsyncMock(side_effect=AssertionError("paid provider forbidden"))
+    workflow = PdfPostprocessWorkflow(
+        executor=_Executor(_Capabilities(_Callbacks([]))),
+        reader=_Reader([]),
+        provider=provider,
+        operation_factory=OperationContextFactory(),
+    )
+    result = await workflow.deterministic_bibliography(
+        actor=_actor(),
+        operation=_operation(),
+        fields=CitationFields(title="A paper", authors=["Ada"]),
+    )
+    assert result.doi == "10.1/example"
+    provider.agentic.assert_not_awaited()

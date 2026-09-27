@@ -23,6 +23,7 @@ from scholens_observability import add_counter, instrumented_span, record_histog
 logger = logging.getLogger(__name__)
 
 DISPATCH_BATCH_SIZE = 20
+FAIR_DISPATCH = os.getenv("JOB_DISPATCH_FAIRNESS_ENABLED", "false").casefold() == "true"
 DISPATCH_IDLE_SECONDS = float(os.getenv("JOB_DISPATCH_INTERVAL_SECONDS", "1"))
 MAX_BACKOFF_SECONDS = 60
 PUBLISH_LEASE = timedelta(
@@ -40,6 +41,7 @@ def _reserve_dispatches(
     limit: int,
     recover_conversation: Callable[[Session, DurableJob], None] | None,
     recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None,
+    recover_fenced: Callable[[Session, DurableJob], None] | None = None,
 ) -> tuple[ReservedJobDispatch, ...]:
     """Lease a batch in one short progress transaction."""
     recovered_count = 0
@@ -49,6 +51,7 @@ def _reserve_dispatches(
             db,
             limit=limit,
             recover_conversation=recover_conversation,
+            recover_fenced=recover_fenced,
         )
         if recover_unclaimed_pdf is not None:
             try:
@@ -67,6 +70,7 @@ def _reserve_dispatches(
             db,
             limit=limit,
             lease=PUBLISH_LEASE,
+            fair=FAIR_DISPATCH,
         )
         db.commit()
     if recovered_count:
@@ -125,6 +129,7 @@ def dispatch_pending_jobs_once(
     limit: int = DISPATCH_BATCH_SIZE,
     recover_conversation: Callable[[Session, DurableJob], None] | None = None,
     recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None = None,
+    recover_fenced: Callable[[Session, DurableJob], None] | None = None,
 ) -> int:
     """Publish outside a DB transaction, then persist each delivery outcome."""
     started = monotonic()
@@ -132,6 +137,7 @@ def dispatch_pending_jobs_once(
     dispatches = _reserve_dispatches(
         limit=limit,
         recover_conversation=recover_conversation,
+        recover_fenced=recover_fenced,
         recover_unclaimed_pdf=recover_unclaimed_pdf,
     )
     with instrumented_span(
@@ -207,6 +213,7 @@ async def run_job_dispatcher(
     wakeup: JobDispatcherWakeup | None = None,
     recover_conversation: Callable[[Session, DurableJob], None] | None = None,
     recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None = None,
+    recover_fenced: Callable[[Session, DurableJob], None] | None = None,
 ) -> None:
     """Continuously drain the outbox without blocking the ASGI event loop."""
     idle_wakeup = wakeup or JobDispatcherWakeup()
@@ -215,6 +222,7 @@ async def run_job_dispatcher(
             published = await asyncio.to_thread(
                 dispatch_pending_jobs_once,
                 recover_conversation=recover_conversation,
+                recover_fenced=recover_fenced,
                 recover_unclaimed_pdf=recover_unclaimed_pdf,
             )
         except Exception:

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 import asyncio
 import pytest
 from src import deepseek_credentials as credentials
+from src.execution_delivery import execution_scope
 
 
 def test_job_credential_is_scoped_and_never_uses_environment(monkeypatch):
@@ -53,3 +54,20 @@ def test_unclaimed_job_is_not_treated_as_optional_missing_key(monkeypatch):
             asyncio.run(credentials.current_deepseek_key())
     assert not isinstance(error.value, credentials.DeepSeekCredentialRequired)
     response.close.assert_called_once()
+
+
+def test_fenced_credential_request_carries_generation_and_restores_legacy_scope(
+    monkeypatch,
+):
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"credential": "owner-key"}
+    post = MagicMock(return_value=response)
+    monkeypatch.setattr(credentials, "post_signed_json", post)
+    with credentials.deepseek_job_context(
+        "https://server/internal/v1/jobs/job-1/complete"
+    ):
+        with execution_scope(7):
+            assert asyncio.run(credentials.current_deepseek_key()) == "owner-key"
+            assert post.call_args.args[1] == {"claim_generation": 7}
+        asyncio.run(credentials.current_deepseek_key())
+        assert post.call_args.args[1] == {}

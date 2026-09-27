@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from app.bootstrap.adapters.document_submission import finalize_reserved_document
+from app.bootstrap.document_rollout import in_document_rollout
 from app.bootstrap.adapters.upload_repository import upload_reservation_repository
 from app.bootstrap.adapters.upload_reservations import reserve_upload
 from app.database.models import (
@@ -273,8 +274,21 @@ class DefaultPaperIngestionLimits:
 
 
 class SqlPaperIngestionGateway:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        staged_processing: bool = False,
+        staged_percentage: int = 100,
+    ) -> None:
         self._db = db
+        self._staged_processing = staged_processing
+        self._staged_percentage = staged_percentage
+
+    def _use_document_stages(self, user_id: int) -> bool:
+        return self._staged_processing and in_document_rollout(
+            user_id, self._staged_percentage
+        )
 
     @staticmethod
     def response(
@@ -370,6 +384,7 @@ class SqlPaperIngestionGateway:
                 upload_job=reservation,
                 user=actor,
                 db=self._db,
+                staged_processing=self._use_document_stages(actor.id),
             )
             accepted_terminal = finalization.job_completed
             if original_reservation is not None:
@@ -502,6 +517,9 @@ class SqlPaperIngestionGateway:
                 job=durable_job,
                 task_name="ingest_source_and_process",
                 queue="document",
+                execution_replay="deterministic"
+                if self._use_document_stages(actor.id)
+                else None,
                 kwargs={
                     "source": source,
                     "staging_object_key": staging_key,

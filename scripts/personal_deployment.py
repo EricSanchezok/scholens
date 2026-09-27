@@ -146,7 +146,13 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
             "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sanchezcloud/personal/background/scholens-"
             + name
         }
-        for name in ("document", "research", "maintenance")
+        for name in (
+            "document",
+            "document-index",
+            "document-enrichment",
+            "research",
+            "maintenance",
+        )
     ]
     region = {"StringEquals": {"aws:RequestedRegion": {"Ref": "AWS::Region"}}}
     template["Resources"]["ProductionDeployRole"]["Properties"]["Policies"].append(
@@ -236,8 +242,8 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
         }
     ]
 
-    # The conversation process has its own role, with the same API capability boundary.
-    def add_conversation_role(value: Any) -> None:
+    # Each derived process has an independent, explicitly allowlisted task role.
+    def add_process_roles(value: Any) -> None:
         if isinstance(value, dict):
             resources = value.get("Resource")
             if isinstance(resources, list):
@@ -253,13 +259,20 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
                                 )
                             }
                         )
+                    if isinstance(arn, str) and arn.endswith(
+                        ":role/SanchezCloudScholensDocumentWorkerTaskRole"
+                    ):
+                        resources.extend(
+                            {"Fn::Sub": arn.replace("DocumentWorker", stage + "Worker")}
+                            for stage in ("DocumentIndex", "DocumentEnrichment")
+                        )
             for child in value.values():
-                add_conversation_role(child)
+                add_process_roles(child)
         elif isinstance(value, list):
             for child in value:
-                add_conversation_role(child)
+                add_process_roles(child)
 
-    add_conversation_role(template)
+    add_process_roles(template)
     return template
 
 
@@ -267,12 +280,179 @@ LIMITS = {
     "web": (64, 256, 512),
     "api": (128, 768, 1536),
     "conversation-worker": (128, 512, 1536),
-    "document-worker": (256, 768, 2560),
+    "document-worker": (256, 512, 1280),
+    "document-index-worker": (128, 384, 1024),
+    "document-enrichment-worker": (128, 384, 1024),
     "research-worker": (128, 384, 768),
     "maintenance-worker": (64, 256, 512),
     "migration": (128, 256, 512),
     "scheduler": (64, 128, 256),
 }
+
+
+def document_stage_resources(resources: dict[str, Any]) -> None:
+    """Reuse the canonical worker capabilities with a single-queue IAM boundary."""
+    for prefix, queue in (
+        ("DocumentIndex", "document-index"),
+        ("DocumentEnrichment", "document-enrichment"),
+    ):
+        role = copy.deepcopy(resources["DocumentWorkerTaskRole"])
+        role["Properties"]["RoleName"] = (
+            "SanchezCloudScholens" + prefix + "WorkerTaskRole"
+        )
+        policy = role["Properties"]["Policies"][0]
+        policy["PolicyName"] = prefix + "WorkerDataPlane"
+        for statement in policy["PolicyDocument"]["Statement"]:
+            if "sqs:ReceiveMessage" in statement.get("Action", []):
+                statement["Resource"] = {
+                    "Fn::ImportValue": "sanchezcloud-scholens-" + queue + "-queue-arn"
+                }
+        resources[prefix + "WorkerTaskRole"] = role
+        log = copy.deepcopy(resources["DocumentLogGroup"])
+        log["Properties"]["LogGroupName"] = (
+            "/sanchezcloud/scholens/" + queue + "-worker"
+        )
+        resources[prefix + "LogGroup"] = log
+        task = copy.deepcopy(resources["DocumentWorkerTaskDefinition"])
+        props = task["Properties"]
+        props["Family"] = "sanchezcloud-scholens-" + queue + "-worker"
+        props["TaskRoleArn"] = {"Fn::GetAtt": [prefix + "WorkerTaskRole", "Arn"]}
+        worker = props["ContainerDefinitions"][0]
+        worker["Name"] = queue + "-worker"
+        worker["Command"] = [
+            "--queues=" + queue if item == "--queues=document" else item
+            for item in worker["Command"]
+        ]
+        worker["LogConfiguration"]["Options"].update(
+            {
+                "awslogs-group": {"Ref": prefix + "LogGroup"},
+                "awslogs-stream-prefix": queue,
+            }
+        )
+        resources[prefix + "WorkerTaskDefinition"] = task
+        service = copy.deepcopy(resources["DocumentWorkerService"])
+        service["Properties"]["ServiceName"] = "scholens-" + queue + "-worker"
+        service["Properties"]["TaskDefinition"] = {
+            "Ref": prefix + "WorkerTaskDefinition"
+        }
+        resources[prefix + "WorkerService"] = service
+
+
+INFERENCE_VOLUME = {
+    "Name": "inference",
+    "Host": {"SourcePath": "/srv/sanchezcloud/scholens-inference"},
+}
+INFERENCE_SOCKET = "/run/scholens-inference/model.sock"
+
+
+def inference_resources(resources: dict[str, Any]) -> None:
+    """One warmed model, no AWS role, no TCP listener or outbound network."""
+    mount = {
+        "SourceVolume": "inference",
+        "ContainerPath": "/run/scholens-inference",
+        "ReadOnly": False,
+    }
+    resources["InferenceLogGroup"] = {
+        "Type": "AWS::Logs::LogGroup",
+        "Properties": {
+            "LogGroupName": "/sanchezcloud/scholens/inference",
+            "RetentionInDays": 7,
+        },
+    }
+    resources["InferenceTaskDefinition"] = {
+        "Type": "AWS::ECS::TaskDefinition",
+        "Properties": {
+            "Family": "sanchezcloud-scholens-inference",
+            "NetworkMode": "none",
+            "RequiresCompatibilities": ["EC2"],
+            "RuntimePlatform": {
+                "CpuArchitecture": "ARM64",
+                "OperatingSystemFamily": "LINUX",
+            },
+            "ExecutionRoleArn": {
+                "Fn::ImportValue": "sanchezcloud-scholens-task-execution-role-arn"
+            },
+            "Volumes": [copy.deepcopy(INFERENCE_VOLUME)],
+            "ContainerDefinitions": [
+                {
+                    "Name": "inference",
+                    "Image": {"Ref": "ApiImage"},
+                    "Essential": True,
+                    "User": "1000:1000",
+                    "Cpu": 128,
+                    "MemoryReservation": 512,
+                    "Memory": 1024,
+                    "ReadonlyRootFilesystem": True,
+                    "StopTimeout": 30,
+                    "EntryPoint": ["python", "-m", "scholens_ai.inference"],
+                    "Command": [],
+                    "LinuxParameters": {
+                        "InitProcessEnabled": True,
+                        "Capabilities": {"Drop": ["ALL"]},
+                    },
+                    "MountPoints": [mount],
+                    "DependsOn": [
+                        {"ContainerName": "inference-init", "Condition": "SUCCESS"}
+                    ],
+                    "Environment": [
+                        {
+                            "Name": "SCHOLENS_EMBEDDING_SOCKET",
+                            "Value": INFERENCE_SOCKET,
+                        },
+                        {"Name": "SCHOLENS_EMBEDDING_THREADS", "Value": "1"},
+                    ],
+                    "HealthCheck": {
+                        "Command": [
+                            "CMD",
+                            "python",
+                            "-m",
+                            "scholens_ai.inference",
+                            "--check",
+                        ],
+                        "Interval": 30,
+                        "Timeout": 5,
+                        "Retries": 3,
+                        "StartPeriod": 60,
+                    },
+                    "LogConfiguration": {
+                        "LogDriver": "awslogs",
+                        "Options": {
+                            "awslogs-region": {"Ref": "AWS::Region"},
+                            "awslogs-group": {"Ref": "InferenceLogGroup"},
+                            "awslogs-stream-prefix": "inference",
+                        },
+                    },
+                },
+                {
+                    "Name": "inference-init",
+                    "Image": {"Ref": "ApiImage"},
+                    "Essential": False,
+                    "User": "0",
+                    "Cpu": 0,
+                    "MemoryReservation": 32,
+                    "Memory": 64,
+                    "ReadonlyRootFilesystem": True,
+                    "EntryPoint": ["python", "-c"],
+                    "Command": [
+                        "import os; p='/run/scholens-inference'; os.chmod(p, 0o770); os.chown(p, 1000, 1000)"
+                    ],
+                    "LinuxParameters": {
+                        "Capabilities": {"Drop": ["ALL"], "Add": ["CHOWN", "FOWNER"]}
+                    },
+                    "MountPoints": [copy.deepcopy(mount)],
+                },
+            ],
+        },
+    }
+    service = copy.deepcopy(resources["DocumentWorkerService"])
+    service["Properties"].update(
+        {
+            "ServiceName": "scholens-inference",
+            "TaskDefinition": {"Ref": "InferenceTaskDefinition"},
+            "DesiredCount": {"Fn::If": ["RunSharedInference", 1, 0]},
+        }
+    )
+    resources["InferenceService"] = service
 
 
 def runtime(template: dict[str, Any]) -> dict[str, Any]:
@@ -288,6 +468,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         if v["Type"] in kept_types
         and k not in {"SchedulerInvocationRole", "MetricsLogGroup", "WafLogGroup"}
     }
+    document_stage_resources(resources)
     resources["ConversationWorkerTaskRole"] = copy.deepcopy(resources["ApiTaskRole"])
     resources["ConversationWorkerTaskRole"]["Properties"]["RoleName"] = (
         "SanchezCloudScholensConversationWorkerTaskRole"
@@ -309,6 +490,73 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         "Default": "resident",
         "AllowedValues": ["resident", "admitted"],
     }
+    template["Parameters"]["SharedInferenceEnabled"] = {
+        "Type": "String",
+        "Default": "false",
+        "AllowedValues": ["false", "true"],
+    }
+    for flag in (
+        "JobResultInboxEnabled",
+        "DocumentPipelineEnabled",
+        "JobDispatchFairnessEnabled",
+    ):
+        template["Parameters"][flag] = {
+            "Type": "String",
+            "Default": "false",
+            "AllowedValues": ["false", "true"],
+        }
+    template["Parameters"]["DocumentPipelinePercent"] = {
+        "Type": "Number",
+        "Default": 0,
+        "AllowedValues": [0, 10, 50, 100],
+    }
+    template["Rules"]["EnabledApplicationRequiresSharedInference"] = {
+        "Assertions": [
+            {
+                "Assert": {
+                    "Fn::Or": [
+                        {"Fn::Equals": [{"Ref": "ApplicationEnabled"}, "false"]},
+                        {"Fn::Equals": [{"Ref": "SharedInferenceEnabled"}, "true"]},
+                    ]
+                },
+                "AssertDescription": "Enabled tokenizer-only workers require the shared model owner and its measured memory budget.",
+            }
+        ]
+    }
+    template["Rules"]["DocumentStageConsumers"] = {
+        "Assertions": [
+            {
+                "Assert": {
+                    "Fn::Or": [
+                        {"Fn::Equals": [{"Ref": "DocumentPipelineEnabled"}, "false"]},
+                        {
+                            "Fn::And": [
+                                {
+                                    "Fn::Equals": [
+                                        {"Ref": "JobResultInboxEnabled"},
+                                        "true",
+                                    ]
+                                },
+                                {
+                                    "Fn::Equals": [
+                                        {"Ref": "SharedInferenceEnabled"},
+                                        "true",
+                                    ]
+                                },
+                            ]
+                        },
+                    ]
+                },
+                "AssertDescription": "Document stage producers require both durable receipt consumers and shared inference.",
+            }
+        ]
+    }
+    template["Conditions"]["SharedInference"] = {
+        "Fn::Equals": [{"Ref": "SharedInferenceEnabled"}, "true"]
+    }
+    template["Conditions"]["RunSharedInference"] = {
+        "Fn::And": [{"Condition": "RunApplication"}, {"Condition": "SharedInference"}]
+    }
     template["Conditions"]["AdmittedBackground"] = {
         "Fn::Equals": [{"Ref": "BackgroundMode"}, "admitted"]
     }
@@ -318,7 +566,13 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             {"Fn::Not": [{"Condition": "AdmittedBackground"}]},
         ]
     }
-    background = {"document-worker", "research-worker", "maintenance-worker"}
+    background = {
+        "document-worker",
+        "document-index-worker",
+        "document-enrichment-worker",
+        "research-worker",
+        "maintenance-worker",
+    }
     template["Parameters"]["EmailDeliveryEnabled"] = {
         "Type": "String",
         "Default": "false",
@@ -351,6 +605,8 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             props["DesiredCount"] = {"Fn::If": ["RunApplication", 1, 0]}
             if name in {
                 "DocumentWorkerService",
+                "DocumentIndexWorkerService",
+                "DocumentEnrichmentWorkerService",
                 "ResearchWorkerService",
                 "MaintenanceWorkerService",
             }:
@@ -367,6 +623,12 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             props.setdefault("Volumes", []).append(
                 {"Name": "trust", "Host": {"SourcePath": "/srv/sanchezcloud/trust"}}
             )
+            if name not in {
+                "WebTaskDefinition",
+                "MigrationTaskDefinition",
+                "SchedulerTaskDefinition",
+            }:
+                props["Volumes"].append(copy.deepcopy(INFERENCE_VOLUME))
             containers = [
                 c for c in props["ContainerDefinitions"] if c["Name"] != "adot"
             ]
@@ -391,6 +653,17 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     port.pop("AppProtocol", None)
                 if container["Name"] == "web":
                     continue
+                shared_client = any(v["Name"] == "inference" for v in props["Volumes"])
+                if shared_client:
+                    container.setdefault("MountPoints", []).append(
+                        {
+                            "SourceVolume": "inference",
+                            "ContainerPath": "/run/scholens-inference",
+                            "ReadOnly": True,
+                        }
+                    )
+                    if container["Name"] in background:
+                        container["User"] = "65532:1000"
                 container.setdefault("MountPoints", []).append(
                     {
                         "SourceVolume": "trust",
@@ -417,6 +690,27 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                         "TRUST_CLOUDFLARE_CLIENT_IP": "false",
                     }
                 )
+                if shared_client:
+                    env["SCHOLENS_EMBEDDING_SOCKET"] = {
+                        "Fn::If": ["SharedInference", INFERENCE_SOCKET, ""]
+                    }
+                if container["Name"] in {"api", "conversation-worker", "scheduler"}:
+                    env.update(
+                        {
+                            "JOB_RESULT_INBOX_ENABLED": {
+                                "Ref": "JobResultInboxEnabled"
+                            },
+                            "DOCUMENT_PIPELINE_ENABLED": {
+                                "Ref": "DocumentPipelineEnabled"
+                            },
+                            "DOCUMENT_PIPELINE_PERCENT": {
+                                "Ref": "DocumentPipelinePercent"
+                            },
+                            "JOB_DISPATCH_FAIRNESS_ENABLED": {
+                                "Ref": "JobDispatchFairnessEnabled"
+                            },
+                        }
+                    )
                 if container["Name"].endswith("-worker"):
                     env["SCHOLENS_WORKER_HEARTBEAT_FILE"] = "/tmp/worker-heartbeat"
                     container["HealthCheck"] = {
@@ -435,7 +729,11 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     env["SCHOLENS_WORKER_ONE_SHOT"] = {
                         "Fn::If": ["AdmittedBackground", "1", "0"]
                     }
-                if container["Name"] == "document-worker":
+                if container["Name"] in {
+                    "document-worker",
+                    "document-index-worker",
+                    "document-enrichment-worker",
+                }:
                     env["SCHOLENS_WORKER_MAX_TASKS"] = "5"
                     env["SCHOLENS_WORKER_MAX_SECONDS"] = "300"
                     env["SCHOLENS_EMBEDDING_THREADS"] = "1"
@@ -451,6 +749,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                 container["Environment"] = [
                     {"Name": k, "Value": v} for k, v in env.items()
                 ]
+    inference_resources(resources)
     template["Outputs"] = {
         name: {"Value": {"Ref": name}}
         for name, r in resources.items()

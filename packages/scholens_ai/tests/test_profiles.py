@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from pydantic_ai.models.openai import OpenAIChatModel
 
@@ -130,3 +132,23 @@ def test_openai_and_bedrock_profiles_are_supported_without_aliasing() -> None:
     )
     assert openai.provider == "openai"
     assert bedrock.provider == "bedrock"
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_deepseek_model_context_closes_its_transport_on_success_or_cancellation(cancel):
+    async def scenario():
+        profile = resolve_profile(AIProfileName.STANDARD, environment={})
+        model = build_model(profile, api_key="fixture-owned-key")
+        client = model.provider.client
+        assert client.timeout == profile.request_timeout_seconds
+        assert client.max_retries == profile.max_retries
+        try:
+            async with model:
+                assert not client.is_closed()
+                if cancel:
+                    raise asyncio.CancelledError()
+        except asyncio.CancelledError:
+            pass
+        assert client.is_closed()
+
+    asyncio.run(scenario())

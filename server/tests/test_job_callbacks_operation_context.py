@@ -89,7 +89,7 @@ class _Handler:
         self._lifecycle = lifecycle
         self._document_id = document_id
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: object,
@@ -113,7 +113,7 @@ class _ReplayHandler:
     def __init__(self) -> None:
         self.called = False
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: object,
@@ -226,7 +226,7 @@ async def test_job_completion_journals_business_and_terminal_changes_once() -> N
         journal=OperationJournal(store=store, clock=_Clock()),
     )
 
-    result = await callbacks.complete(
+    result = callbacks.complete(
         actor=None,
         operation=_operation(),
         job_id=job_id,
@@ -257,7 +257,7 @@ async def test_job_completion_replay_does_not_append_a_terminal_entry() -> None:
         journal=OperationJournal(store=store, clock=_Clock()),
     )
 
-    await callbacks.complete(
+    callbacks.complete(
         actor=None,
         operation=_operation(),
         job_id=job_id,
@@ -285,7 +285,7 @@ async def test_late_completion_after_cancellation_is_a_noop() -> None:
         journal=OperationJournal(store=store, clock=_Clock()),
     )
 
-    result = await callbacks.complete(
+    result = callbacks.complete(
         actor=None,
         operation=_operation(),
         job_id=job_id,

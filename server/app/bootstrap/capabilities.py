@@ -23,6 +23,7 @@ from app.bootstrap.container import (
     build_paper_content,
     build_paper_collection_access,
     build_paper_details,
+    build_document_processing,
     build_document_reflows,
     build_paper_discovery,
     build_paper_download,
@@ -62,6 +63,7 @@ from app.modules.identity.application.identity import Identity
 from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
 from app.modules.jobs.application.callbacks import JobCallbacks
+from app.modules.jobs.application.results import JobResults
 from app.modules.jobs.application.jobs import JobCommandPort, Jobs
 from app.modules.jobs.application.contracts import (
     JobIntegrationCredentialResponse,
@@ -74,6 +76,7 @@ from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.content import PaperContentCapabilities
 from app.modules.papers.application.collection_access import RequirePaperInCollection
 from app.modules.papers.application.details import GetPaperDetails
+from app.modules.papers.application.processing import DocumentProcessing
 from app.modules.papers.application.discovery import DiscoverPapers
 from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.application.ingestion import IngestPaper
@@ -188,7 +191,12 @@ class ApplicationCapabilities:
 
     @cached_property
     def paper_ingestion(self) -> IngestPaper:
-        return build_paper_ingestion(db=self._session, journal=self._journal)
+        return build_paper_ingestion(
+            db=self._session,
+            journal=self._journal,
+            staged_processing=self._settings.document_pipeline_enabled,
+            staged_percentage=self._settings.document_pipeline_percent,
+        )
 
     @cached_property
     def paper_uploads(self) -> PaperUploadSessions:
@@ -245,6 +253,14 @@ class ApplicationCapabilities:
         return build_paper_list_preferences(
             db=self._session,
             journal=self._journal,
+        )
+
+    @cached_property
+    def document_processing(self) -> DocumentProcessing:
+        return build_document_processing(
+            db=self._session,
+            journal=self._journal,
+            enabled=self._settings.job_result_inbox_enabled,
         )
 
     @cached_property
@@ -316,6 +332,12 @@ class ApplicationCapabilities:
             journal=self._journal,
             integrations=self.integrations,
         )
+
+    @cached_property
+    def job_results(self) -> JobResults:
+        from app.modules.jobs.infrastructure.result_inbox import JobResultRepository
+
+        return JobResults(JobResultRepository(self._session), self.job_callbacks)
 
     def job_deepseek_credential(
         self, *, job_id: UUID

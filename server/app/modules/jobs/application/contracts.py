@@ -84,6 +84,22 @@ class JobProgressRequest(BaseModel):
     ]
 
 
+class ClaimExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_token: UUID
+
+
+class JobExecutionScopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_generation: int | None = Field(default=None, ge=1)
+
+
+class ExecutionProgressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_generation: int = Field(ge=1)
+    progress: JobProgressRequest | None = None
+
+
 class JobCallbackIdentity(BaseModel):
     task_id: UUID
 
@@ -148,6 +164,8 @@ class SourceReadyCallback(JobCallbackIdentity):
     """Metadata-only callback after a document worker stages a source object."""
 
     model_config = ConfigDict(extra="forbid")
+
+    claim_generation: int | None = Field(default=None, ge=1)
 
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size_bytes: int = Field(gt=0, le=30 * 1024 * 1024)

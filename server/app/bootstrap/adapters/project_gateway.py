@@ -410,11 +410,15 @@ def _project_paper_list_plan(
                         )
                     )
                 )
+                .select_from(pivot_paper)
                 .join(
                     pivot_document,
                     pivot_document.id == pivot_paper.document_id,
                 )
-                .where(pivot_paper.id == position.id)
+                .where(
+                    pivot_paper.id == position.id,
+                    pivot_paper.project_id == project_id,
+                )
                 .scalar_subquery()
             )
         else:

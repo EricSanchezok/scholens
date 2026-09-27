@@ -59,7 +59,7 @@ degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
-fully authorized catalog exposes 63 stored-knowledge and management tools:
+fully authorized catalog exposes 64 stored-knowledge and management tools:
 paper retrieval, Project and collaborator management, personal Library and
 tags, known-source ingestion and jobs, annotation discussions, and existing
 research outputs. Narrower Access Keys see only their permitted subset.
@@ -82,6 +82,16 @@ coarse capability filter and every concrete resource is re-authorized against
 the current Actor. MCP resources expose bounded manifests at
 `scholens://library`, `scholens://projects`, and typed Project, paper,
 annotation-thread, and research-output URIs.
+
+The transport compiles its actor-independent tool schemas at construction time.
+Each tools/list request filters the current access-key permissions and serializes
+the transport-owned read-only schema snapshot. It never generates schemas or
+deep-copies the full tree on the request event loop. The SDK's tool cache owns no
+permission decision: every call still checks the current key and resource access.
+Tool failures record their bounded tool name and, for output-budget
+failures, the actual and maximum serialized UTF-8 byte counts. Diagnostics never
+include the tool arguments or returned paper text. HTTP transport success is
+separate from the `scholens.mcp.errors` business-failure signal.
 
 Paper-bearing MCP results also expose an optional `reader_url`, built from the
 configured Scholens client origin as `/reader/{document_id}`. When a tool call
@@ -153,6 +163,20 @@ schema validation of errors and always surface the original Scholens error
 code instead of a `-32602` schema-validation failure. The advertised
 `outputSchema` keeps its structured error branch for compatibility.
 
+Citation resolution, PDF bibliography recovery, OpenAlex, and MCP connector
+calls form one async chain on the Server event loop. They do not create a new
+loop per request or lend a pooled async HTTP client to a thread. OpenAlex reads
+credentials and records revision-bound outcomes in short worker-thread database
+transactions. Crossref and the synchronous LLM backend run in worker threads;
+provider requests hold no SQLAlchemy session. The application lifespan closes
+its OpenAlex HTTP and Redis clients on their owning event loop.
+
+Product DeepSeek Agents instead own one operation's transport. Conversation,
+translation, and suggestion execution enter the Agent context through complete
+stream consumption; error, cancellation, or explicit closure releases the
+transport on that loop. Jobs structured extraction uses the same ownership
+contract, so per-task event loops do not leave pooled connections behind.
+
 Authenticated Job callbacks that fail the registered operation contract are
 atomically marked failed before their Redis concurrency leases are released.
 Unexpected handler or database failures keep their leases until retry or TTL,
@@ -167,6 +191,50 @@ Internal callback routes deliberately declare no eager FastAPI body field: they
 parse only the bounded bytes cached by authentication after signature
 verification. A lost-control worker therefore cannot allocate or persist an
 unbounded result before the transport limit runs.
+
+The additive result-inbox protocol uses signed `/jobs/{id}/execution/claim`,
+`/execution/progress`, and `/results` internal routes. A claim token makes a lost
+claim response retryable; every takeover advances a generation. Result receipts
+contain only an immutable `jobs/results/{job}/{generation}/{sha256}.json` key,
+SHA-256 and bounded byte count. Acceptance transfers ownership to PostgreSQL
+without reading S3 or doing business work in the request. A single consumer per
+Server process downloads one bounded artifact outside a database session, then
+commits the execution fence, business effects and inbox acknowledgement together.
+A restarted consumer takes over an expired 180-second apply lease with a fresh
+nonce. Duplicated and superseded applications cannot commit effects twice.
+Expired workers cannot renew leases or submit new results. Existing execution
+rows reject unfenced legacy mutations; source materialization checks its optional
+generation inside the mutation transaction. Inbox acknowledgement requires a
+terminal business result. After eight failed applies, operation-owned failure
+compensation and the rejection commit together, including journal changes and
+the normal post-commit concurrency release. Apply lock/statement deadlines are
+five/thirty seconds. Consumer diagnostics contain error classes, not artifacts.
+
+Post-commit actions for fenced results are persisted in `job_result_effects` in
+the result transaction. The consumer delivers up to four effects between result
+applications and retries dependency failures with backoff capped at five minutes.
+Redis concurrency removal is idempotent and propagates failures to this outbox;
+existing legacy best-effort callers are unchanged. BYOK usage settlement remains
+a no-op. Analytics keeps its existing best-effort transport semantics.
+
+Every fenced dispatch reserves a cleanup effect, including work that later gets
+cancelled without submitting a result. It runs seven days after termination,
+once all other effects complete, and deletes only that UUID's `jobs/results/`
+and `jobs/checkpoints/` prefixes in pages of at most 100 keys each. Incomplete
+deletion remains retryable. Canonical document and research objects are outside
+this cleanup scope. Migration `2026_09_27_1200` adds the effects table without
+rewriting existing jobs; older applications ignore it while new consumers drain.
+
+This is a consumer-first expansion: `JOB_RESULT_INBOX_ENABLED` defaults to false,
+and `DOCUMENT_PIPELINE_ENABLED` separately controls new ingestion producers.
+The producer flag requires the inbox consumer flag. Disabled producers retain
+their accepted callback protocol. Enable only after matching consumers, queues,
+cleanup, failure recovery and rollback drain are verified. The jobs module owns the old transport until all previously accepted
+jobs drain and the application rollback window closes. Existing jobs without an
+execution row continue through the legacy callback path. Migration
+`2026_09_27_1000` adds independent tables; it does not rewrite existing job rows.
+Synchronous callback database transactions and storage work run off the ASGI
+event loop. Callback continuation restores the job owner's AI usage context.
 
 Transactional generated-object cleanup uses a second shared Jobs contract.
 Only ASCII-safe keys under `documents/` or `research/audio/` are eligible, each
@@ -361,19 +429,39 @@ Existing or stale semantic projections are maintained with a bounded dry-run
 first:
 
 ```bash
-uv run scholens maintenance backfill-search-embeddings --batch-size 100 --json
-uv run scholens maintenance backfill-search-embeddings --batch-size 100 --apply --yes --json
-uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --json
-uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --apply --yes --json
+uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --json
+uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --apply --yes --json
+uv run scholens maintenance backfill-token-indexes --actor-email admin@example.com --batch-size 5 --json
+uv run scholens maintenance backfill-token-indexes --actor-email admin@example.com --batch-size 5 --apply --yes --json
+uv run scholens maintenance backfill-passage-embeddings --actor-email admin@example.com --batch-size 128 --json
+uv run scholens maintenance backfill-passage-embeddings --actor-email admin@example.com --batch-size 128 --apply --yes --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --apply --yes --json
 ```
 
-Repeat each apply command until `candidates` reaches zero. Both semantic
-projections are versioned and digest-bound, so a model or source-text change is
-reindexed without rewriting canonical Document content. Passage inference runs
-outside the database transaction and the apply command revalidates each content
-digest before updating it.
+Metadata repair scans at most `--batch-size` Documents per page. Pass the returned
+`next_cursor` as `--after-document-id` until it is null, including pages with zero
+candidates. Dry-run counts describe that page, not the whole database. Apply
+embeds at most eight texts between short transactions, rechecks administrator
+access and each source digest before writing, and reports stale/deleted rows.
+Passage repair repeats until `candidates` reaches zero. Both projections are
+versioned and digest-bound; neither invokes a paid provider or rewrites content.
+The additive metadata revision invalidates vectors on title/keywords/summary/
+abstract changes, including N-1 writes, and preserves them on unrelated updates.
+
+Token repair scans at most 25 IDs per keyset page and loads only one bounded
+canonical body at a time. It does not depend on historical parser S3 objects.
+Use the same `next_cursor` convention even when a page has no candidates. Each
+document is tokenized and embedded outside SQL, in RPC batches of at most eight;
+adoption rechecks administrator access and the exact source, then atomically
+commits the complete projection. Changed/deleted bodies are counted as stale;
+40 MiB body and 10,000-passage limits are reported as skipped, never truncated.
+Rerunning a page skips current projections. Interruptions may recompute the
+unfinished document but cannot duplicate paid work or partially adopt an index.
+In production, run this operator in an isolated, low-priority 1 GiB process with
+the shared inference socket, one invocation at a time; do not start a second
+model inside the serving API container. Observe admission and API latency between
+pages before continuing. This command changes only shared search projections.
 
 The `maintenance fix-annotation-offsets` and
 `maintenance reprocess-contaminated-documents` repairs are also bounded and
@@ -714,8 +802,10 @@ starve later papers. Failures update attempt time but never successful-sync
 time; confirmed missing remote items or attachments disable future automatic
 annotation polling for that link while retaining the local paper.
 
-The PDF completion callback persists extracted metadata, generated summary,
-and summary citations on the canonical `Document`. Ingestion never creates a
+The PDF completion callback persists parsed content and any supplied metadata,
+generated summary, and summary citations on the canonical `Document`. A valid
+parsed result with no AI metadata completes basic readability and preserves
+existing metadata; missing provider credentials do not invalidate usable text. Ingestion never creates a
 Conversation, Turn, or Response. A paper-scoped conversation begins only from
 an explicit user action and reads the existing Document-owned context.
 
@@ -844,3 +934,133 @@ reported by `/api/v1/billing/capacity`; token billing is retired. See
 explicitly isolated rehearsals: Identity email senders and project-invitation delivery
 supervision are then absent even if provider credentials are present. The normal
 production path continues to require a complete Aliyun DirectMail configuration.
+
+## Search inference isolation
+
+Private paper search and the stored-knowledge MCP workflow prepare an optional
+query vector before opening the search transaction. The PostgreSQL adapter only
+consumes a prepared vector whose normalized query digest and model revision
+match. It never calls an embedding model while holding a Session transaction.
+Inference unavailability leaves the authorized lexical/full-text lanes available.
+`SCHOLENS_EMBEDDING_SOCKET` selects the shared host service described in the
+[AI package](../packages/scholens_ai/README.md); it is not enabled by the current
+consumer-only rollout. Existing public HTTP and MCP shapes are unchanged.
+
+## Personal AI evidence
+
+AI highlights use source-bound segment IDs and verbatim quotes with reversible
+Unicode/whitespace normalization. Ambiguous or stale evidence produces no
+annotation. The stored quote is always the canonical source slice. Legacy
+callbacks without segments require a unique quote across the document.
+`ai_annotation_evidence` receipts make delivery idempotent per user, document,
+content and anchor. Partial retries add missing evidence, retain existing
+comments and respect deletion tombstones. Access is rechecked under the document
+lock before creating personal annotations. Coverage logs report candidate,
+anchored, existing, `annotations_created` and skipped counts without source text
+or collisions with reserved Python log record fields.
+Deploy additive migration `2026_09_27_1100` before this consumer. See
+[ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md) for legacy adoption
+and the retirement condition.
+
+## Versioned token search projections
+
+Migration `2026_09_27_1300` adds `documents.content_digest` and separate complete
+`document_token_projections` / `document_token_passages` tables. It performs no
+full-table text backfill. A database trigger maintains SHA-256 for N-1 text
+writers and skips rebuilding the full-text vector on unrelated metadata writes.
+The replacement is validated against locked canonical content, inserted in
+128-row batches and committed with its head in one transaction. Search selects
+only the current content/model revision, and does not resurrect legacy windows
+after an adopted projection becomes stale. Canonical full-text search remains
+available while the replacement is pending. Existing five-line tables remain
+intact for rollback. The owning persistence adapter contains the temporary dual
+read; retire it only after all retained documents have the active projection and
+N-1 rollout/rollback support has been explicitly retired.
+
+O4 and the measured ARM64 INT8 revision share the reviewed semantic acceptance
+thresholds. The synthetic bilingual fixture measured Recall@10 0.703125 to
+0.71875 and NDCG@10 0.718233 to 0.715284; this supports the precision change,
+not a production relevance guarantee. Producers remain on the legacy protocol
+until the separate staged processing rollout is enabled.
+
+The `document_index` callback accepts only the job's content/model snapshot.
+It rechecks current document access and source before adoption, stores only
+counts/revisions in the durable job result, and leaves document processing status
+unchanged on index failure. Full result artifacts follow the fenced inbox and
+terminal artifact-retention policy.
+
+Signed credential and source-resolution requests accept an optional execution
+generation. Fenced jobs require the live generation before access; source
+resolution rechecks after external work. N-1 callers without a generation remain
+valid only for legacy jobs. The signature alone is not an execution lease.
+
+### Independent document stages
+
+The configured inference socket also owns operator and metadata-projection
+embeddings. Maintenance sends at most eight texts per RPC and does not instantiate
+a second local model when a socket is configured. Standalone local development can
+still use the explicitly configured local model path.
+
+`DOCUMENT_PIPELINE_ENABLED` selects fenced deterministic PDF extraction for new
+imports in the stable requester cohort selected by `DOCUMENT_PIPELINE_PERCENT`
+(0–100; defaults to 100 when the explicit feature flag is enabled). HTTP, MCP,
+URL/upload-source jobs and Zotero's imported PDFs share this acceptance adapter.
+The selected delivery protocol is persisted once; changing a rollout percentage
+does not reinterpret accepted work. Canonical content becomes readable before independent `document_index`,
+`document_enrich` and `document_bibliography` jobs are transactionally dispatched.
+Indexing uses `document-index`; enrichment and bibliography use
+`document-enrichment`. The `document` consumer remains available for readable
+extraction and accepted legacy envelopes. Each queue has its own outbox budget.
+Repeated application uses durable idempotency keys. Optional stages cannot change
+the completed basic processing state. The parent result references stage job IDs
+and retains bounded audit fields, excluding duplicate body/page-map/AI payloads.
+
+Enrichment has a source digest and the requester's credential scope. Missing AI
+credentials do not prevent import. It fills only absent metadata, except an
+untouched filename placeholder explicitly marked by provenance. Human and Zotero
+values remain authoritative; personal annotations and summary citations require
+verbatim evidence from the current source. Zotero imports do not automatically
+schedule paid enrichment. Bibliography uses deterministic providers only, outside
+SQL transactions, with a 25-second deadline and execution checks before and after
+provider work. Application rechecks access, source and citation identity, then
+fills gaps without replacing current values. Independent index results follow
+the same source/access fencing. Failure leaves the readable document intact.
+
+### Fair outbox admission
+
+`JOB_DISPATCH_FAIRNESS_ENABLED=true` enables database admission before broker
+publication. It defaults off for consumer-first rollout. Each queue admits at
+most two unfinished jobs and at most one per requester. Other accepted work stays
+in the durable outbox. Requesters rotate by a persisted cursor, independently per
+queue, rather than by the oldest bulk upload's timestamp. A short nonblocking
+PostgreSQL advisory lock serializes reservations across API processes; broker I/O
+runs after commit. Terminal or cancelled jobs release their slots, and expired
+publisher claims reuse the original job without spending another slot. The cursor
+stores only ordering state and never owns completion or broker acknowledgement.
+
+Migration `2026_09_27_1400` adds cursors and dispatch indexes without rewriting
+accepted jobs. Enabling the flag with an existing oversized broker backlog stops
+new publication until it drains under the bound. N-1 publishers remain executable
+with the flag disabled, but the bound requires all active publishers to adopt it.
+See [ADR 0061](../docs/decisions/0061-fair-bounded-job-publication.md).
+
+Fenced execution recovery permits at most four worker generations and two hours
+from the first start. Claim refuses exhausted takeovers; the dispatcher compensates
+expired or already requeued exhausted jobs through their operation handler in its
+transaction, journals the outcome and persists concurrency release. Unavailable
+owners are tolerated only for inbox terminal compensation, never for credential
+or source access, and a mismatched existing Actor remains forbidden. An ownerless
+PDF result cannot apply content; it marks only its unsuperseded processing document
+failed and schedules ordinary reference-aware GC. Existing shared document content
+and unrelated memberships are preserved. Legacy jobs retain their recovery policy.
+
+### Finite result storage I/O
+
+The result consumer reads artifacts through `scholens_storage` with an explicit
+byte ceiling and a 45-second total transfer deadline. That deadline includes SDK
+retries and slow response bodies; it closes the connection rather than abandoning
+a blocking thread. Durable cleanup effects await the same owned async transport
+directly, process one 100-key page per job-owned prefix and complete or cancel
+before another effect is attempted. Other synchronous S3 calls have explicit
+5-second connect / 10-second inactivity timeouts and two total attempts; those
+SDK limits alone are not described as absolute wall-clock deadlines.

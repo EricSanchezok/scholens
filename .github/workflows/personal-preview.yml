@@ -33,6 +33,12 @@ on:
         default: preserve
         type: choice
         options: [preserve, resident, admitted]
+      processing_rollout:
+        description: Preserve the cohort, pause new-stage producers (0), or advance after acceptance
+        required: true
+        default: preserve
+        type: choice
+        options: [preserve, '0', '10', '50', '100']
 
 permissions:
   contents: read
@@ -70,10 +76,11 @@ jobs:
           RELEASE_SHA: ${{ inputs.release_sha }}
           APPLICATION_ENABLED: ${{ inputs.application_enabled || 'false' }}
           BACKGROUND_MODE: ${{ inputs.background_mode || 'preserve' }}
+          PROCESSING_ROLLOUT: ${{ inputs.processing_rollout || 'preserve' }}
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
         run: |
           uv run --no-project --with PyYAML==6.0.3 --with boto3==1.43.61 python scripts/personal_control_plane.py runtime "$OPERATION" \
-            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED" --background-mode "$BACKGROUND_MODE"
+            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED" --background-mode "$BACKGROUND_MODE" --processing-rollout "$PROCESSING_ROLLOUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: inputs.operation == 'plan'
         with:

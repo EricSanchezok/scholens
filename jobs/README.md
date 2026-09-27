@@ -17,6 +17,16 @@ A reconnect closes consumption rather than taking another delivery against an
 unresolved lease. Child `task_postrun` is not proof of broker settlement. Existing
 child-memory recycling, durable callbacks and retries remain authoritative.
 
+PDF ingestion, text repair and post-processing use Celery's task-level
+`reject_on_worker_lost` policy with late acknowledgement. A killed child returns
+the delivery to the broker; the durable Server claim still decides whether it
+may execute. Other tasks retain failure acknowledgement so non-idempotent
+provider work is not blindly replayed. Failure signals preserve the start time
+until postrun records the terminal duration.
+Celery result representations are suppressed for every Jobs task so success logs
+cannot serialize paper bodies or embedding arrays; bounded structured task
+events remain available.
+
 Platform schedules these workers in its interactive lane independently of the
 Scholight batch lane. Each lane has at most one task. The conversation worker
 remains a separate resident service. Task placement uses container reservations;
@@ -30,6 +40,22 @@ The failure handler also runs in the parent when a child is killed, where
 `task_postrun` cannot run; this prevents a lost child from blocking deployment
 until the protection expires. Releasing protection does not acknowledge a
 message or change the durable job lease, so ordinary recovery remains intact.
+
+The PDF entrypoints also accept `delivery_protocol=manifest-v1`. This selects a
+generation-fenced lease, skips inline AI metadata, writes an immutable hashed
+result plus a recovery pointer, and submits a metadata-only receipt. Heartbeats
+stop work cooperatively after ownership loss; source-ready mutations carry the
+generation. A delivery retry reuses persisted bytes and retains its claim token.
+Takeover of `checkpoint_only` work replays a known result or reports an unknown
+provider outcome. PDF parsing can also resume an independently persisted MinerU
+batch, without submitting another batch. Legacy task envelopes
+continue to use their existing transport. Producer activation follows schema,
+consumer, cleanup, and staged-pipeline acceptance; this argument alone does not
+enable production dispatch. S3 readers always close their response stream, and
+result/checkpoint reads have explicit byte ceilings and a 45-second total
+network deadline through `scholens_storage`. Source downloads stream to disk
+with a 180-second total deadline and remove partial files on failure. Cancellation
+closes the async S3 connection before returning to the synchronous worker.
 
 Before doing provider or storage work, every task claims its durable Server
 job. Transient claim transport failures use bounded exponential Celery retry
@@ -152,8 +178,16 @@ The production image stores the pinned search model at
 `SCHOLENS_EMBEDDING_MODEL_PATH`. It never downloads a model at task execution
 time and never sends the semantic projection to a remote provider.
 
-Local engines (`pymupdf4llm`, `markitdown`) are CPU-only, run in-process with
-a bounded time budget per engine, and never send document content off-host.
+Local analysis and engines (`pymupdf4llm`, `markitdown`) run in supervised CPU-only
+subprocesses with a bounded time budget per engine. Timeout or cancellation
+terminates the entire process group, escalates to SIGKILL if needed, and reaps
+the parser before trying another engine or removing temporary files. Linux also
+kills the parser when its owning Celery child dies. Source and result transfer
+uses private temporary files; bounded result validation runs on both sides.
+Parser libraries load only in the subprocess that needs them. Preview allocation
+is capped before rasterization at 800 by 1,600 pixels and copied directly from
+RGB samples, without an intermediate PNG. Document content never goes off-host
+through these local engines.
 MinerU is used only for scanned PDFs and as a rescue for digital PDFs whose
 local extraction failed; its results are persisted as `full` quality. A
 `text_only` result (local fallback or rescue timeout) is persisted so the
@@ -181,7 +215,7 @@ because the Server callback never adopts repair preview state. The general
 `repair_revision` argument so jobs accepted before the producer switches to
 the dedicated task remain executable during a rolling deployment.
 
-MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
+Legacy MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
 purpose, document content hash, and credential revision, so two jobs parsing
 the same PDF never reuse each other's provider batch or archive. Four
 consecutive network failures switch polling or downloading to a slower bounded
@@ -189,7 +223,12 @@ backoff; they do not end the task before its deadline. Redelivery and later
 retry attempts with the same job, source, and credential resume the same
 provider task instead of submitting another one. A retryable failure retains
 the checkpoint; successful and non-retryable provider outcomes clear it once
-the provider result no longer needs to be resumed.
+the provider result no longer needs to be resumed. Fenced PDF jobs instead retain
+the batch in a bounded private S3 checkpoint under the job namespace; Redis owns
+only the short submit lock. A separate upload marker cannot regress when a late
+writer arrives. Source or credential changes reject the stored scope. Successful
+parsing does not delete these checkpoints: job GC owns deletion after its grace
+period, closing the gap before the final result is durably persisted.
 
 ## AI reading reflow
 
@@ -301,14 +340,20 @@ Parser-specific tests mirror this structure under `tests/pdf/`.
 
 ## Configuration
 
+The personal ARM64 image contains only the pinned tokenizer and requires the
+configured shared inference socket for indexing. It never downloads model weights
+at startup or loads a local fallback after a socket failure. Generic image builds
+retain an explicit full-model option for standalone deployments.
+
 The repository-level [`.env.example`](../.env.example) is the only environment
 variable catalog. Copy the values needed by Jobs into `jobs/.env`; never commit
 that file.
 
 Production requires:
 
-- SQS through `CELERY_BROKER_URL=sqs://` and the three predefined
-  `SQS_DOCUMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
+- SQS through `CELERY_BROKER_URL=sqs://` and the five predefined
+  `SQS_DOCUMENT_QUEUE_URL`, `SQS_DOCUMENT_INDEX_QUEUE_URL`,
+  `SQS_DOCUMENT_ENRICHMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
   `SQS_MAINTENANCE_QUEUE_URL` values. The shared contract also defines
   `conversation`, but that queue is owned and consumed only by the Server-image
   Conversation worker; Jobs must never subscribe to it.
@@ -396,3 +441,92 @@ claim. Keys never enter queue payloads. Optional PDF metadata skips absent
 connections; explicit AI generation is gated before enqueue. No platform model
 key or token billing is used. Server must support this route before workers
 roll forward; existing queue envelopes need no migration.
+
+Postprocess embedding consumers use `configured_embedder` from `scholens_ai`.
+When `SCHOLENS_EMBEDDING_SOCKET` is set, they use the shared host inference
+process and do not load a private model on service failure. The exact protocol,
+deadlines and microbatch policy live in the
+[AI package](../packages/scholens_ai/README.md). Model/queue deployment remains a
+separate activation step; existing postprocess envelopes remain accepted.
+
+Metadata extraction supplies complete bounded evidence segments to the model.
+Highlights and summary citations request the source segment ID and a verbatim
+quote; interpretation belongs in the annotation/summary. The input budget ends
+at a complete segment boundary. Optional `segment_id` fields are additive to
+existing result contracts. Server verifies source identity, quote uniqueness and
+canonical offsets before materializing highlights; it reports partial coverage
+without failing basic readability. See
+[ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md).
+
+## Independent document indexing
+
+`index_document` consumes a canonical Markdown key, exact content SHA-256 and
+model revision through `manifest-v1`. It has no AI/provider credential scope.
+The client loads only the pinned tokenizer and delegates inference through the
+configured embedding boundary. Distinct text vectors are reused within a job;
+64-passage checkpoints under `jobs/checkpoints/<job>/index/` survive owner loss,
+with at most eight texts per inference RPC. Every checkpoint verifies ordered
+text digests and model revision. Corruption fails explicitly; an unavailable
+owner/storage retries with the existing claim token. The complete result carries
+bounded binary vectors and exact spans, and Server rechecks access and canonical
+source before atomic adoption. Basic readability is independent of index success.
+Server produces this task when `DOCUMENT_PIPELINE_ENABLED` is enabled. Both this
+flag and `JOB_RESULT_INBOX_ENABLED` default to false; the consumer must deploy
+before the producer is activated. Legacy accepted messages retain their original
+route and protocol until drained.
+
+Fenced execution scope propagates its generation to just-in-time credentials and
+source resolution, including async credential lookup threads. Legacy jobs send
+an empty scope and remain accepted only when they have no fenced execution row.
+Paid stage implementations must call `begin_external_effect` immediately before
+provider work. Its durable intent precedes the external effect: if output cannot
+be checkpointed, even a retry with the same claim token must report
+`provider_outcome_unknown` instead of invoking the provider again. Persisted
+complete results are replayed first. This bounds duplicate execution across job
+retries; it does not claim exactly-once semantics from an external provider.
+
+## Readable-first document stages
+
+With the staged producer enabled, PDF extraction persists canonical readable
+content before independently enqueuing `index_document`, `enrich_document`, and
+`hydrate_document_bibliography`. Each has its own job, execution fence, checkpoint,
+terminal outcome and cleanup. Optional-stage failure never changes basic document
+readability. Job status results retain small audit facts rather than a second
+copy of Markdown, page maps and extracted metadata.
+
+Enrichment downloads and verifies the exact canonical content snapshot, then
+obtains the requester's DeepSeek credential just in time. Missing credentials
+produce an optional-stage failure; import and deterministic stages remain usable.
+Paid-call intent is persisted immediately before provider execution. A lost result
+with a recorded intent becomes `provider_outcome_unknown` and cannot trigger
+another automatic paid call. Server fills only missing metadata; a filename title
+is replaceable only when its provenance still identifies the filename placeholder.
+Human/Zotero values and provenance survive. Personal annotations and summary
+citations require source-bound exact evidence. A changed source rejects the result.
+
+Bibliography is deterministic only. A signed, generation-scoped request snapshots
+citation identity in a short database read, resolves providers asynchronously under
+a 25-second deadline, then rechecks the generation. The worker persists the small
+resolution before delivery. Server rechecks source, access and citation identity
+before filling gaps. Enrichment can enqueue a fresh identity-specific bibliography
+job after improving metadata. Zotero imports skip automatic paid enrichment.
+
+Fenced PDF parsing records external-effect intent immediately before requesting
+a new MinerU batch. After worker loss, a valid durable batch resumes upload/poll/
+download for that same provider task; it never authorizes another submission.
+Missing or corrupt batch state cannot authorize paid recovery. A known batch with
+different source/credential scope is rejected. If submission succeeded but its
+batch response could not be persisted, the outcome remains unknown and requires
+an explicit user retry with the possible duplicate charge disclosed.
+The legacy parser checkpoint protocol remains accepted for N-1 deliveries. The
+Server bounds fenced recovery by worker generations and elapsed execution age;
+exhaustion is terminal and transactionally releases its concurrency reservation.
+
+Metadata search vectors run in `index_document_metadata` on the index queue.
+The producer supplies at most 24,000 characters and the source/model identities;
+the deterministic worker verifies them, calls the shared local model, and stores
+its small result through the fenced inbox. No provider credential or paid intent
+is involved. Server accepts only current metadata and records its semantic
+revision. Metadata changes do not force re-parsing or re-embedding the PDF body.
+Finite S3 operation timeouts in index/enrichment preparation are transient
+execution failures; they retain the same source/paid-intent recovery policy.

@@ -43,6 +43,52 @@
     },
     "2026_09_08_1000": {
       "phase": "expand"
+    },
+    "2026_09_27_1000": {
+      "phase": "expand"
+    },
+    "2026_09_27_1100": {
+      "phase": "expand"
+    },
+    "2026_09_27_1200": {
+      "phase": "expand"
+    },
+    "2026_09_27_1300": {
+      "phase": "expand",
+      "reviewed_sql": {
+        "f5164fd8f9522a64474878ebc1284689850d69a2aa77eb76d94635a031a5f5f5": {
+          "reason": "Adds a source SHA function. N-1 inserts and text updates derive the same digest without requiring a new application field; null legacy content remains null.",
+          "compatibility_test": "server/tests/test_token_projection_repository.py"
+        },
+        "ea9d680f15810cb8c6a3435f11bc4b25a5d7a809ed60d2bfe67a57f741207d1e": {
+          "reason": "Adds the source SHA trigger on the nullable additive column. Existing writers retain their columns and invalidate newer projections on text changes.",
+          "compatibility_test": "server/tests/test_token_projection_repository.py"
+        },
+        "8281e9d232dbd613c0060a81ca0821a2f6c334a6985850438268bfdeaef69eb4": {
+          "reason": "Adds text-search maintenance only to the new token passage table. Existing legacy passage rows and writers are unchanged.",
+          "compatibility_test": "server/tests/test_token_projection_repository.py"
+        },
+        "9597b127c77b684032606527a769b3d0193799a1a63e46012377dbaf401a2bc1": {
+          "reason": "Preserves the existing weighted English text-search expression. Returns the existing vector for unchanged source fields, avoiding recomputation on unrelated metadata updates.",
+          "compatibility_test": "server/tests/test_token_projection_repository.py"
+        }
+      }
+    },
+    "2026_09_27_1400": {
+      "phase": "expand"
+    },
+    "2026_09_27_1500": {
+      "phase": "expand",
+      "reviewed_sql": {
+        "9e91451918e0822a205988382e6b741962ce291c12bdbd28fca4c00ac2a4d93b": {
+          "reason": "Adds a metadata revision guard for N-1 writers. Only changes to title, keywords, summary or abstract advance the additive revision; unrelated reference and status writes preserve it. Legacy vectors remain readable at revision zero.",
+          "compatibility_test": "server/tests/test_document_pipeline_postgres.py"
+        },
+        "4ffd10aaf06746a1d3a55932bbe7c47aa2cf9efbd5341664c27fbde15f36351a": {
+          "reason": "Adds a metadata revision guard for N-1 writers. Only changes to title, keywords, summary or abstract advance the additive revision; unrelated reference and status writes preserve it. Legacy vectors remain readable at revision zero.",
+          "compatibility_test": "server/tests/test_document_pipeline_postgres.py"
+        }
+      }
     }
   }
 }

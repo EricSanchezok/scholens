@@ -256,7 +256,23 @@ def _migration_contract() -> dict[str, Any]:
                     "revisions through the production baseline must be baseline"
                 )
         elif phase == "expand":
-            pass
+            if "reviewed_sql" in metadata:
+                allowed_keys.add("reviewed_sql")
+                reviews = metadata["reviewed_sql"]
+                if not isinstance(reviews, dict) or not reviews:
+                    raise ValueError(f"migration {revision} has invalid SQL reviews")
+                for digest, review in reviews.items():
+                    if (
+                        not re.fullmatch(r"[0-9a-f]{64}", digest)
+                        or not isinstance(review, dict)
+                        or set(review) != {"reason", "compatibility_test"}
+                        or not all(
+                            isinstance(v, str) and v.strip() for v in review.values()
+                        )
+                    ):
+                        raise ValueError(
+                            f"migration {revision} has invalid SQL review evidence"
+                        )
         elif phase == "contract":
             allowed_keys.add("minimum_compatible_application_revision")
             proposed_floor = metadata.get("minimum_compatible_application_revision")

@@ -8,11 +8,13 @@ import re
 import zlib
 from importlib.metadata import version
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import pymupdf
-import pymupdf4llm
-from markitdown import MarkItDown
 from PIL import Image
+
+if TYPE_CHECKING:
+    from markitdown import MarkItDown
 
 from src.pdf.models import (
     LocalPDFAnalysis,
@@ -103,14 +105,13 @@ def _project_page_offsets(
 
 def _render_preview(document: pymupdf.Document) -> bytes | None:
     try:
-        pixmap = document[0].get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
-        image: Image.Image = Image.open(BytesIO(pixmap.tobytes("png")))
-        if image.width > 800:
-            ratio = 800 / image.width
-            image = image.resize(
-                (800, int(image.height * ratio)),
-                Image.Resampling.LANCZOS,
-            )
+        page = document[0]
+        # Bound allocation before rasterizing, including huge/tall PDF pages.
+        scale = min(2.0, 800 / page.rect.width, 1600 / page.rect.height)
+        pixmap = page.get_pixmap(
+            matrix=pymupdf.Matrix(scale, scale), colorspace=pymupdf.csRGB, alpha=False
+        )
+        image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
         output = BytesIO()
         image.save(output, format="WEBP", quality=82, method=6)
         return output.getvalue()
@@ -192,6 +193,8 @@ def extract_markdown_pymupdf4llm(
     parser_version: str,
 ) -> ParsedDocument:
     """Extract page-chunked Markdown with exact per-page offsets (primary)."""
+    import pymupdf4llm
+
     try:
         chunks = pymupdf4llm.to_markdown(
             pdf_path,
@@ -247,6 +250,8 @@ def extract_markdown_markitdown(
     """
     global _markitdown
     if _markitdown is None:
+        from markitdown import MarkItDown
+
         _markitdown = MarkItDown()
     try:
         result = _markitdown.convert_local(pdf_path)

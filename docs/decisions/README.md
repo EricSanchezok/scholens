@@ -32,6 +32,8 @@ change what the accepted record decided.
 
 ## Accepted decisions
 
+- [ADR 0061: Fair bounded job publication](./0061-fair-bounded-job-publication.md)
+
 - [ADR 0053: Explicit single-host runtime endpoints](./0053-explicit-single-host-runtime.md)
 - [ADR 0054: Admit background workers on the shared host](./0054-admitted-background-workers.md)
 - [ADR 0055: Independent interactive and batch admission](./0055-independent-background-lanes.md)
@@ -123,3 +125,9 @@ How will we know the decision works, and when should it be revisited?
 ```
 
 - [ADR 0052: User-owned AI and capacity-only plans](./0052-user-owned-ai-and-capacity-plans.md)
+- [ADR 0056: Supervised local PDF parsers](./0056-supervised-local-pdf-parsers.md)
+
+- [ADR 0057: Fenced durable result inbox](./0057-fenced-durable-result-inbox.md)
+- [ADR 0058: Provider event-loop ownership](./0058-provider-event-loop-ownership.md)
+- [ADR 0059: Shared host inference and token projections](./0059-shared-host-inference-and-token-projections.md)
+- [ADR 0060: Personal verbatim evidence receipts](./0060-personal-verbatim-evidence.md)

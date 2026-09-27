@@ -678,6 +678,8 @@ Resources:
             Resource:
             - Fn::ImportValue: sanchezcloud-scholens-conversation-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-document-queue-arn
+            - Fn::ImportValue: sanchezcloud-scholens-document-index-queue-arn
+            - Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-research-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-arn
           - Effect: Allow
@@ -1249,6 +1251,12 @@ Resources:
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_DOCUMENT_INDEX_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-index-queue-url
+        - Name: SQS_DOCUMENT_ENRICHMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-url
         - Name: SQS_RESEARCH_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-research-queue-url
@@ -1607,6 +1615,12 @@ Resources:
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_DOCUMENT_INDEX_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-index-queue-url
+        - Name: SQS_DOCUMENT_ENRICHMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-url
         - Name: SQS_RESEARCH_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-research-queue-url
@@ -2005,6 +2019,12 @@ Resources:
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_DOCUMENT_INDEX_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-index-queue-url
+        - Name: SQS_DOCUMENT_ENRICHMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-url
         - Name: SQS_RESEARCH_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-research-queue-url
@@ -2238,6 +2258,12 @@ Resources:
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_DOCUMENT_INDEX_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-index-queue-url
+        - Name: SQS_DOCUMENT_ENRICHMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-url
         - Name: SQS_RESEARCH_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-research-queue-url
@@ -2471,6 +2497,12 @@ Resources:
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_DOCUMENT_INDEX_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-index-queue-url
+        - Name: SQS_DOCUMENT_ENRICHMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-enrichment-queue-url
         - Name: SQS_RESEARCH_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-research-queue-url

@@ -55,11 +55,29 @@ short product outage to avoid static-port conflicts and doubled memory use.
 
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
-worker has a 2,560 MiB hard limit; its original 1,280 MiB limit killed a PDF
-postprocessing child while loading the model. Passage inference uses batches
-of eight to avoid the larger activation peak of a 128-window batch. Soft
-reservations, worker concurrency and the host size remain unchanged; verify
-aggregate host memory under representative simultaneous work after rollout.
+worker now has a 1,280 MiB hard limit and a 512 MiB reservation. Its former
+2,560 MiB limit covered a second in-process model and prevented admission on the
+shared host. With the required shared inference owner,
+application processes use a private Unix socket instead of loading ONNX weights.
+The single inference owner uses the same API image, one compute thread, one-text
+microbatches and a 1,024 MiB hard limit. It has no task role, secrets, TCP ports or
+external network. Its model is warmed before the socket health check succeeds.
+A host directory owned by `1000:1000`, mode `0770`, holds the `0660` socket; Jobs
+uses its existing non-root UID with group `1000` and a read-only mount. The owner
+stops before replacement and holds an exclusive file lock before model loading.
+Client failure never starts a second model: queries can degrade to lexical search
+while deterministic indexing retries.
+
+The reviewed native ARM64 fixture measured a 761 MiB peak with the pinned INT8
+model, within the 1,024 MiB ceiling after 25% headroom and rounding. The current ARM64 Jobs image also completed a network-isolated, 0.75-CPU fixture:
+a 29,400,304-byte / 50-page electronic PDF peaked at 742.25 MiB across parent and
+parser children; analysis plus both local parser engines and imports finished in
+75.89 seconds. A separate 9,000-passage checkpoint/serialization fixture peaked
+at 709.21 MiB (model computation measured separately). These support the 1,280 MiB
+parser and 1,024 MiB index caps with headroom. They do not prove every input or
+end-to-end online latency. API/conversation caps remain 1,536 MiB pending online
+measurements. No host resize is involved. The template prevents starting this
+release's tokenizer-only workers without the shared inference owner.
 
 The maintenance worker reserves 256 MiB with a 512 MiB hard limit: the shared Jobs
 imports exceed the original 256 MiB limit before it can consume a task. Every
@@ -91,6 +109,15 @@ OCI index. The existing release manifest format records `linux/arm64` in each im
 all components must agree. The legacy CLI default is `linux/amd64`; production
 verification requires explicit `--expected-platform linux/arm64`.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
+
+The personal publisher selects `arm64-int8` for both Python images. Jobs packages
+only the digest-verified tokenizer; the API image carries the registered model
+artifact for the independent owner. Native image smoke tests execute that model
+offline and assert that Jobs has no model weight file. Control planning enables
+shared inference when the selected immutable source contains its owner module.
+Ordinary rollback rejects older images without that module after shared inference
+has been enabled; a legacy rollback requires a separate complete stage drain and
+restoration of the prior topology. Compatible newer releases retain the socket contract.
 
 The personal renderer defaults `EmailDeliveryEnabled` to `false`. This suppresses
 both identity email senders and the project-invitation delivery supervisor, even if
@@ -160,7 +187,8 @@ credentials and database passwords never appear in workflow inputs or artifacts.
 
 ### Queue alerts
 
-Deploy `queue-monitoring.yml` once for each conversation, document, research, and
+Deploy `queue-monitoring.yml` once for each conversation, document, document-index,
+document-enrichment, research, and
 maintenance queue, supplying its queue/DLQ names from the destination foundation and
 the confirmed shared alert topic from Platform. Each pair adds two standard alarms:
 a visible message older than the configured waiting budget for three minutes, and any
@@ -172,7 +200,7 @@ These alerts report delay/failure and never scale instances or replay failed wor
 
 [ADR 0054](../../docs/decisions/0054-admitted-background-workers.md) owns the worker
 lifecycle. `BackgroundMode=resident` preserves the previous deployment. The reviewed
-`admitted` mode scales only document/research/maintenance services to zero and enables
+`admitted` mode scales document/document-index/document-enrichment/research/maintenance services to zero and enables
 one-shot task definitions with explicit container hard memory bounds and soft placement reservations.
 Background CPU shares may use idle host CPU; the document embedder uses one thread. Deploy
 `background.yml` with task revisions, role ARNs and queue outputs from this product;
@@ -194,13 +222,38 @@ The historical `personal-preview` name remains for its configured OIDC identity.
 Application apply automatically disables only this product's background registrations,
 requires the live controller to acknowledge their exact SSM versions, and waits up to
 20 minutes for actual task termination, including STOPPING tasks. It then applies the
-runtime change, refreshes the three task revisions and RunTask/PassRole grant together,
+runtime change, refreshes the five task revisions and RunTask/PassRole grant together,
 restores the preceding enabled flag, and waits for acknowledgement again. Other
 products and their schedules stay enabled. Durable checkpoints under the release
 bucket's `cloudformation/personal/releases/` prefix allow the same operation to resume
 without repeating completed runtime or registration updates. A timeout leaves admission
 paused; it never kills a user's task. Failed CloudFormation updates require investigation
 or a newly reviewed compatible rollback before restoring the recorded enabled flag.
+
+The first independent-stage rollout expands the retained foundation with two queues
+and DLQs, then the bootstrap role allowlists with the two exact worker roles and SSM
+parameter ARNs. Do this before deploying the application. The renderer derives stage
+task definitions from the canonical document worker, but gives each a separate role,
+log group, single-queue command and bounded lifecycle. Index and enrichment each have
+a 1,024 MiB container ceiling (1,088 MiB including initialization), subject to measured
+mixed-load acceptance before producer activation. No instance or managed compute is added.
+
+Release coordination acknowledges the existing three registrations before the first
+drain. After the runtime converges, it expands `background.yml` while disabled, adding
+only the two owned registrations. Subsequent releases update all five. Each registration's
+memory parameter must equal the actual sum of its task's container hard limits;
+RunTask/PassRole permissions and revisions change in the same CloudFormation update.
+Activate the staged producer only after five-registration acknowledgement and queue
+monitoring are verified. Rollback must first stop new-stage production and finish all
+accepted stage work; do not pair pending new tasks with an image that cannot execute them.
+
+`personal-preview.yml` exposes `processing_rollout=preserve|0|10|50|100`. The first
+consumer-capable release enables the receipt supervisor, shared inference and fair
+publication with zero new-stage producers. Advance the stable requester cohort
+through 10%, 50% and 100% only after each acceptance interval. `0` pauses producers
+while retaining all consumers for accepted work. `preserve` retains the live cohort;
+no ordinary release silently increases it. The template rejects stage producers
+without durable receipt consumers and shared inference.
 
 Plans bind the exact manifest bytes and control SHA, expire after 24 hours before
 execution, and reject intervening runtime changes. Rollback validates manifests against
@@ -214,9 +267,15 @@ Account Center, Scholight and the common edge remain outside this runtime operat
 Scholens document/research/maintenance registrations select Platform's `interactive`
 lane. Platform must first deploy the additive lane/resource contract with total
 concurrency one. Its later reviewed concurrency-two change permits Scholight batch
-work to run alongside a Scholens task. Preserve the existing 2,560/768/512 MiB
-worker container ceilings plus the 64 MiB initializer, but omit task-level memory
-and CPU so ECS placement uses the existing soft reservations and CPU shares.
+work to run alongside a Scholens task. Index/enrichment follow-up work uses the
+`batch` lane at priority zero so a long index does not occupy the import lane;
+automatic batch/backup workloads retain their bounded aging opportunities. All
+priorities satisfy Platform's 0/1 registration contract. Worker hard limits are
+1,280/1,024/1,024/768/512 MiB for document/index/enrichment/research/maintenance,
+plus the 64 MiB initializer. Omit task-level memory and CPU so ECS placement uses
+explicit soft reservations and CPU shares. Platform also reserves at least 1 GiB
+free, default 512 MiB resident growth, and active tasks' remaining hard-bound
+growth before starting another task.
 Release validation derives the hard total from all containers and rejects missing
 bounds. No database, queue or job-envelope migration is involved.
 

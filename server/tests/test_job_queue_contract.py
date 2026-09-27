@@ -41,14 +41,20 @@ def test_all_product_enqueue_sites_use_the_shared_queue_contract() -> None:
                 and expression.attr == "queue"
             ):
                 continue
-            assert isinstance(expression, ast.Attribute), (
-                f"{path}:{call.lineno} must use JobQueue, not a local queue value"
+            choices = (
+                [expression.body, expression.orelse]
+                if isinstance(expression, ast.IfExp)
+                else [expression]
             )
-            assert isinstance(expression.value, ast.Name)
-            assert expression.value.id == "JobQueue"
-            queue = JobQueue[expression.attr]
-            assert queue in JOB_QUEUE_NAMES
-            seen.add(queue)
+            for choice in choices:
+                assert isinstance(choice, ast.Attribute), (
+                    f"{path}:{call.lineno} must use JobQueue, not a local queue value"
+                )
+                assert isinstance(choice.value, ast.Name)
+                assert choice.value.id == "JobQueue"
+                queue = JobQueue[choice.attr]
+                assert queue in JOB_QUEUE_NAMES
+                seen.add(queue)
 
     assert seen == JOB_QUEUE_NAMES
     application_contract = (
@@ -74,7 +80,7 @@ def test_local_worker_command_resolves_queues_from_shared_contract(tmp_path) -> 
         """#!/usr/bin/env bash
 set -euo pipefail
 if [[ "$*" == "-m scholens_job_contracts" ]]; then
-  printf '%s\\n' 'document,maintenance,research'
+  printf '%s\\n' 'document,document-enrichment,document-index,maintenance,research'
   exit 0
 fi
 printf '%s\\n' "$@" > "$CAPTURE_PATH"
@@ -97,6 +103,9 @@ printf '%s\\n' "$@" > "$CAPTURE_PATH"
     )
 
     arguments = captured.read_text(encoding="utf-8").splitlines()
-    assert "--queues=document,maintenance,research" in arguments
+    assert (
+        "--queues=document,document-enrichment,document-index,maintenance,research"
+        in arguments
+    )
     assert not any(argument.startswith("--time-limit") for argument in arguments)
     assert not any(argument.startswith("--soft-time-limit") for argument in arguments)

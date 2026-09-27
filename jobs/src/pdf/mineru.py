@@ -19,6 +19,9 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from src.execution_delivery import begin_scoped_external_effect
+from src.pdf.durable_state import parser_state_store
+
 from src.pdf.models import (
     MinerUArchive,
     ParsedDocument,
@@ -32,7 +35,6 @@ from src.pdf.models import (
 )
 from src.pdf.state import (
     MinerUBatchCheckpoint,
-    ParserStateStore,
     ParserTaskState,
 )
 
@@ -234,7 +236,7 @@ class MinerUClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.config = config
-        self.state_store = state_store or ParserStateStore()
+        self.state_store = state_store or parser_state_store()
         self.transport = transport
         self.headers = {"Authorization": f"Bearer {self.config.token}"}
 
@@ -499,6 +501,7 @@ class MinerUClient:
             checkpoint = await self.state_store.get_checkpoint(data_id)
             if checkpoint is not None:
                 return checkpoint
+            await asyncio.to_thread(begin_scoped_external_effect)
             checkpoint = await self.request_upload(client, data_id=data_id)
             await self.state_store.save_checkpoint(data_id, checkpoint)
             return checkpoint

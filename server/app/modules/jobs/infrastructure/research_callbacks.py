@@ -127,7 +127,7 @@ def _research_failure_result(
     )
 
 
-async def complete_audio_job(
+def complete_audio_job(
     job_id: uuid.UUID,
     webhook: AudioOverviewWebhookData,
     db: Session,
@@ -245,7 +245,7 @@ async def complete_audio_job(
     )
 
 
-async def complete_data_table_job(
+def complete_data_table_job(
     job_id: uuid.UUID,
     webhook: DataTableWebhookData,
     db: Session,

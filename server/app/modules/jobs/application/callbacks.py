@@ -56,13 +56,25 @@ class JobCredentialScope:
 
 
 class JobCompletionHandler(Protocol):
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
         operation: OperationContext,
         job_id: UUID,
         callback: BaseModel,
+    ) -> JobHandlerResult: ...
+
+
+@runtime_checkable
+class JobFailureHandler(Protocol):
+    def fail(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        error_code: str,
     ) -> JobHandlerResult: ...
 
 
@@ -82,7 +94,7 @@ class PdfPostprocessResolution:
 
 @runtime_checkable
 class PdfPostprocessCompletionHandler(Protocol):
-    async def complete_resolved(
+    def complete_resolved(
         self,
         *,
         actor: Actor,
@@ -137,7 +149,17 @@ class RecordJobTelemetry:
     properties: tuple[tuple[str, JsonValue], ...]
 
 
-type JobPostCommitAction = ReleaseJobConcurrency | SettleJobUsage | RecordJobTelemetry
+@dataclass(frozen=True, slots=True)
+class DeleteJobResultArtifacts:
+    job_id: UUID
+
+
+type JobPostCommitAction = (
+    ReleaseJobConcurrency
+    | SettleJobUsage
+    | RecordJobTelemetry
+    | DeleteJobResultArtifacts
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +217,7 @@ class JobCallbacks:
         permitted = (
             {
                 JobOperation.PDF_PROCESS,
+                JobOperation.DOCUMENT_ENRICH,
                 JobOperation.DATA_TABLE_GENERATE,
                 JobOperation.AUDIO_GENERATE,
             }
@@ -220,7 +243,7 @@ class JobCallbacks:
             )
         return scope
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -234,7 +257,20 @@ class JobCallbacks:
         before = self._lifecycle.status(job_id=job_id)
         if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return JobCompletionResult(value={"accepted": False})
-        handler_result = await registration.handler.complete(
+        if actor is None and job_operation in {
+            JobOperation.PDF_PROCESS,
+            JobOperation.DOCUMENT_INDEX,
+            JobOperation.DOCUMENT_SEARCH_INDEX,
+            JobOperation.DOCUMENT_ENRICH,
+            JobOperation.DOCUMENT_BIBLIOGRAPHY,
+        }:
+            return self.fail_result(
+                actor=None,
+                operation=operation,
+                job_id=job_id,
+                error_code="job_owner_unavailable",
+            )
+        handler_result = registration.handler.complete(
             actor=actor,
             operation=operation,
             job_id=job_id,
@@ -254,7 +290,7 @@ class JobCallbacks:
             handler_result=handler_result,
         )
 
-    async def complete_pdf_postprocess(
+    def complete_pdf_postprocess(
         self,
         *,
         actor: Actor,
@@ -278,7 +314,7 @@ class JobCallbacks:
         before = self._lifecycle.status(job_id=job_id)
         if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return JobCompletionResult(value={"accepted": False})
-        handler_result = await handler.complete_resolved(
+        handler_result = handler.complete_resolved(
             actor=actor,
             operation=operation,
             job_id=job_id,
@@ -348,6 +384,35 @@ class JobCallbacks:
         return JobCompletionResult(
             value=handler_result.value,
             post_commit=handler_result.post_commit,
+        )
+
+    def fail_result(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        error_code: str,
+    ) -> JobCompletionResult:
+        """Compensate the owning domain before acknowledging a rejected result."""
+        job_operation = self._lifecycle.operation(job_id=job_id)
+        before = self._lifecycle.status(job_id=job_id)
+        if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            return JobCompletionResult(value={"accepted": False})
+        handler = self._registration(job_operation).handler
+        if isinstance(handler, JobFailureHandler):
+            result = handler.fail(
+                actor=actor, operation=operation, job_id=job_id, error_code=error_code
+            )
+        else:
+            changed = self._lifecycle.fail(job_id=job_id, error_code=error_code)
+            result = JobHandlerResult(value={"accepted": changed})
+        return self._record_completion(
+            actor=actor,
+            operation=operation,
+            job_id=job_id,
+            before=before,
+            handler_result=result,
         )
 
     def fail(

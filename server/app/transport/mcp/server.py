@@ -174,6 +174,14 @@ def _error_result(
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
 ) -> mcp_types.CallToolResult:
     safe_details = _safe_error_details(details)
+    diagnostic_fields: dict[str, JsonValue] = {}
+    if tool_name is not None:
+        diagnostic_fields["tool_name"] = tool_name[:128]
+    # Record wire-size facts, never the tool arguments or returned paper content.
+    for key in ("actual_output_bytes", "max_output_bytes"):
+        value = (safe_details or {}).get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            diagnostic_fields[key] = value
     app_error = AppError(
         code=code,
         message=message,
@@ -188,6 +196,7 @@ def _error_result(
             snapshot_id=snapshot_id,
             code=code,
             kind=kind,
+            fields=diagnostic_fields,
         )
     error = ErrorEnvelope.from_app_error(
         app_error,
@@ -223,6 +232,9 @@ def _error_result(
         error_code=code,
         error_kind=kind.value,
         diagnostic_id=error.get("diagnostic_id"),
+        tool_name=diagnostic_fields.get("tool_name"),
+        actual_output_bytes=diagnostic_fields.get("actual_output_bytes"),
+        max_output_bytes=diagnostic_fields.get("max_output_bytes"),
     )
     return mcp_types.CallToolResult(
         content=[
@@ -295,6 +307,7 @@ def _record_mcp_diagnostic(
     snapshot_id: uuid.UUID,
     code: str,
     kind: FailureKind,
+    fields: dict[str, JsonValue] | None = None,
 ) -> None:
     context = current_context()
     try:
@@ -314,6 +327,7 @@ def _record_mcp_diagnostic(
                         "code": code,
                         "kind": kind.value,
                         "stage": context.stage or "mcp_tool_call",
+                        **(fields or {}),
                     }
                 },
             )
@@ -809,6 +823,34 @@ def build_mcp_transport(
         server.list_tools,
     )
 
+    # Transport-local schemas contain no actor state. Compile before serving;
+    # every request still filters the current authenticated permission snapshot.
+    compiled_tools = {
+        definition.name: mcp_types.Tool(
+            name=definition.name,
+            title=definition.title,
+            description=definition.description,
+            inputSchema=definition.input_model.model_json_schema(),
+            outputSchema=(
+                tool_output_schema(definition.output_model)
+                if definition.output_model is not None
+                else None
+            ),
+            annotations=(
+                mcp_types.ToolAnnotations(
+                    title=definition.title,
+                    readOnlyHint=definition.behavior.read_only,
+                    destructiveHint=definition.behavior.destructive,
+                    idempotentHint=definition.behavior.idempotent,
+                    openWorldHint=definition.behavior.open_world,
+                )
+                if definition.behavior is not None
+                else None
+            ),
+        )
+        for definition in catalog.profile_definitions(MCP_TOOL_PROFILE)
+    }
+
     @register_list_tools()
     async def list_tools() -> list[mcp_types.Tool]:
         authenticated = _authenticated_context.get()
@@ -819,28 +861,11 @@ def build_mcp_transport(
             permissions=authenticated.permissions,
         )
         return [
-            mcp_types.Tool(
-                name=definition.name,
-                title=definition.title,
-                description=definition.description,
-                inputSchema=definition.input_model.model_json_schema(),
-                outputSchema=(
-                    tool_output_schema(definition.output_model)
-                    if definition.output_model is not None
-                    else None
-                ),
-                annotations=(
-                    mcp_types.ToolAnnotations(
-                        title=definition.title,
-                        readOnlyHint=definition.behavior.read_only,
-                        destructiveHint=definition.behavior.destructive,
-                        idempotentHint=definition.behavior.idempotent,
-                        openWorldHint=definition.behavior.open_world,
-                    )
-                    if definition.behavior is not None
-                    else None
-                ),
-            )
+            # The transport owns these actor-independent values. The SDK reads
+            # them to serialize the response and cache definitions; it never
+            # mutates schemas. Copying the entire 700-KiB tree per request spends
+            # most of tools/list on Python allocation and garbage collection.
+            compiled_tools[definition.name]
             for definition in catalog.definitions_for(access)
         ]
 
@@ -861,6 +886,7 @@ def build_mcp_transport(
                 kind=FailureKind.UNAUTHENTICATED,
                 code="mcp_authentication_required",
                 message="Authentication is required",
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         access = ToolAccess(
@@ -875,6 +901,7 @@ def build_mcp_transport(
                 kind=FailureKind.UNAUTHENTICATED,
                 code="mcp_authentication_required",
                 message="Authentication is required",
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         invocation_id = mcp_invocation_id(
@@ -940,6 +967,7 @@ def build_mcp_transport(
                 kind=FailureKind.UNAVAILABLE,
                 code="tool_execution_failed",
                 message="Tool execution failed",
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
 
@@ -951,6 +979,7 @@ def build_mcp_transport(
                 code="tool_result_invalid",
                 message="The tool produced an invalid result",
                 details={"tool": name},
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         try:
@@ -960,6 +989,7 @@ def build_mcp_transport(
                 kind=FailureKind.NOT_FOUND,
                 code="tool_not_found",
                 message="Tool not found",
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         if serialized.call_tool_result_utf8_bytes > definition.max_output_bytes:
@@ -975,6 +1005,7 @@ def build_mcp_transport(
                 code="tool_result_budget_exceeded",
                 message="The tool result exceeded its safe output budget",
                 details=details,
+                tool_name=name,
                 diagnostic_recorder=diagnostic_recorder,
             )
         content: list[mcp_types.ContentBlock] = [

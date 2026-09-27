@@ -9,6 +9,7 @@ dependencies = [
     "scholens-job-contracts",
     "scholens-observability",
     "scholens-runtime-contracts",
+    "scholens-storage",
 ]
 
 [tool.uv]
@@ -19,6 +20,7 @@ scholens-ai = { workspace = true }
 scholens-job-contracts = { workspace = true }
 scholens-observability = { workspace = true }
 scholens-runtime-contracts = { workspace = true }
+scholens-storage = { workspace = true }
 
 [tool.uv.workspace]
 members = [
@@ -26,9 +28,11 @@ members = [
     "scholens_job_contracts",
     "scholens_observability",
     "scholens_runtime_contracts",
+    "scholens_storage",
 ]
 
 [dependency-groups]
+model-build = ["onnx==1.19.1", "numpy==2.3.3"]
 dev = [
     "mypy>=1.14",
     "pytest>=8",
@@ -46,6 +50,7 @@ testpaths = [
     "scholens_job_contracts/tests",
     "scholens_observability/tests",
     "scholens_runtime_contracts/tests",
+    "scholens_storage/tests",
 ]
 
 [tool.ruff]

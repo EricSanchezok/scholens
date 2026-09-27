@@ -1,15 +1,19 @@
 """Provider-neutral AI profile and model construction primitives."""
 
-from scholens_ai.profiles import (
-    AIProfile,
-    AIProfileName,
-    AIThinkingEffort,
-    AIThinkingMode,
-    ProviderConfigurationError,
-    build_model,
-    profile_model_settings,
-    resolve_profile,
-)
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from scholens_ai.profiles import (
+        AIProfile as AIProfile,
+        AIProfileName as AIProfileName,
+        AIThinkingEffort as AIThinkingEffort,
+        AIThinkingMode as AIThinkingMode,
+        ProviderConfigurationError as ProviderConfigurationError,
+        build_model as build_model,
+        profile_model_settings as profile_model_settings,
+        resolve_profile as resolve_profile,
+    )
+
 from scholens_ai.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL_ID,
@@ -17,6 +21,7 @@ from scholens_ai.embeddings import (
     LocalOnnxTextEmbedder,
     TextEmbedder,
     embed_text,
+    configured_embedder,
     semantic_document_text,
     semantic_source_digest,
     try_local_embedder,
@@ -34,7 +39,43 @@ from scholens_ai.passages import (
     encode_passage_embedding_artifact,
 )
 
+from scholens_ai.token_passages import (
+    TOKEN_PASSAGE_REVISION,
+    TokenPassage,
+    PassageLimitExceeded,
+    iter_token_passages,
+    load_passage_tokenizer,
+)
+from scholens_ai.token_projection import (
+    TokenProjection,
+    TokenSpan,
+    ProjectedTokenPassage,
+)
+
+from scholens_ai.evidence import (
+    EVIDENCE_REVISION,
+    EvidenceAnchor,
+    EvidenceResolution,
+    EvidenceSegment,
+    evidence_segments,
+    resolve_evidence,
+)
+
 __all__ = [
+    "TokenProjection",
+    "TokenSpan",
+    "ProjectedTokenPassage",
+    "EVIDENCE_REVISION",
+    "EvidenceAnchor",
+    "EvidenceResolution",
+    "EvidenceSegment",
+    "evidence_segments",
+    "resolve_evidence",
+    "TOKEN_PASSAGE_REVISION",
+    "TokenPassage",
+    "PassageLimitExceeded",
+    "iter_token_passages",
+    "load_passage_tokenizer",
     "EMBEDDING_DIMENSION",
     "EMBEDDING_MODEL_ID",
     "EMBEDDING_MODEL_REVISION",
@@ -47,6 +88,7 @@ __all__ = [
     "TextEmbedder",
     "build_model",
     "embed_text",
+    "configured_embedder",
     "profile_model_settings",
     "resolve_profile",
     "semantic_document_text",
@@ -63,3 +105,29 @@ __all__ = [
     "decode_passage_embedding_artifact",
     "encode_passage_embedding_artifact",
 ]
+
+
+_PROFILE_EXPORTS = frozenset(
+    {
+        "AIProfile",
+        "AIProfileName",
+        "AIThinkingEffort",
+        "AIThinkingMode",
+        "ProviderConfigurationError",
+        "build_model",
+        "profile_model_settings",
+        "resolve_profile",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    # The inference owner needs no provider SDKs, credentials or Agent graph.
+    # Keep the public import API while loading model providers only on use.
+    if name not in _PROFILE_EXPORTS:
+        raise AttributeError(name)
+    from scholens_ai import profiles
+
+    value = getattr(profiles, name)
+    globals()[name] = value
+    return value

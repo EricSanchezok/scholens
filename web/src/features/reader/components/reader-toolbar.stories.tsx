@@ -14,6 +14,9 @@ const labels = {
   nextPage: "Next page",
   nextSearchResult: "Next match",
   noSearchResults: "No matches",
+  searchPending: "Searching…",
+  searchFailed: "Search unavailable",
+  searchLimited: "Showing the first matches. Refine your search.",
   openPanel: "Open context panel",
   page: "Page",
   previousPage: "Previous page",
@@ -267,5 +270,37 @@ export const SearchOpen: Story = {
       onQueryChange: fn(),
       query: "retrieval",
     },
+  },
+};
+
+export const SearchPending: Story = {
+  args: {
+    ...SearchOpen.args,
+    search: { ...SearchOpen.args!.search!, matchCount: 0, status: "pending" },
+  },
+};
+
+export const SearchFailed: Story = {
+  args: {
+    ...SearchOpen.args,
+    search: { ...SearchOpen.args!.search!, matchCount: 0, status: "failed" },
+  },
+};
+
+export const SearchLimited: Story = {
+  args: {
+    ...SearchOpen.args,
+    search: {
+      ...SearchOpen.args!.search!,
+      currentIndex: 0,
+      matchCount: 1000,
+      limited: true,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText("1 / 1000+")).toBeVisible();
+    await expect(
+      within(canvasElement).getByLabelText(labels.searchLimited),
+    ).toBeVisible();
   },
 };

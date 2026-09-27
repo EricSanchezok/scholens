@@ -236,6 +236,26 @@ async function mockReaderMotion(page: Page) {
       }),
   );
   await page.route(
+    `${apiPattern}/papers/${readerDocument.document_id}/processing`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: readerDocument.document_id,
+          readable: true,
+          stages: [
+            { stage: "index", status: "completed", can_retry: false },
+            { stage: "enrichment", status: "not_requested", can_retry: false },
+            {
+              stage: "bibliography",
+              status: "not_requested",
+              can_retry: false,
+            },
+          ],
+        }),
+      }),
+  );
+  await page.route(
     `${apiPattern}/papers/${readerDocument.document_id}/projects`,
     (route) =>
       route.fulfill({

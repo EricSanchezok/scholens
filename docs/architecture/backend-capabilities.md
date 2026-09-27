@@ -881,6 +881,25 @@ the database transaction and writes revalidate content digests. Retrieval
 responses report their active mode, per-result retrieval modes, and document
 and passage semantic coverage; raw user queries are not written to analytics
 telemetry.
+The staged pipeline produces metadata vectors as independent deterministic
+`document_search_index` maintenance Jobs on the index queue. Initial readability
+and accepted AI metadata each enqueue the current semantic revision. Immutable
+results use the same fenced inbox as body indexing. Adoption locks the document,
+checks the metadata digest and active model, and records its search revision.
+Retrieval accepts only the matching revision. Migration `2026_09_27_1500` adds a
+nullable revision and N-1-safe trigger: only title, keywords, summary or abstract
+changes advance it; old vectors at revision zero remain compatible. Metadata
+repair uses an explicit UUID cursor and finite page, with inference outside SQL
+transactions and compare-before-write adoption in batches of eight.
+
+The private `maintenance backfill-token-indexes` command upgrades historical body
+indexes using the same token window and complete-projection format as Jobs. It
+scans at most 25 IDs per UUID page, reads one canonical body at a time, computes
+outside SQL in RPC batches of eight, then rechecks administrator rights and the
+source under the projection's atomic adoption lock. Current heads are skipped;
+changed/deleted sources and explicit size limits are reported. It never calls
+paid providers, changes paper text, or repairs personal annotations implicitly.
+
 `PAPER_SEARCH_BACKEND` is validated at startup. HTTP, Agent, and MCP consumers
 continue to depend only on the application port and public search contract.
 
@@ -1002,8 +1021,9 @@ membership is an independent idempotent association. `add_to_library=false`
 compensation removes only the membership(s) the job actually created, and a
 retry inherits the original job's `add_to_library` intent.
 
-PDF completion persists extracted metadata, generated summary, and summary
-citations on the canonical `Document`. It rejects a successful worker result
+PDF completion persists parsed content and optional extracted metadata, generated
+summary, and summary citations on the canonical `Document`. Missing AI metadata
+does not reject usable parsed content or clear existing metadata. It rejects a successful worker result
 whose `s3_object_key` does not match the Document's canonical source key,
 failing the job with `job_result_key_mismatch` instead of persisting content.
 Jobs parser fallback and Server repair adoption share one service-neutral PDF
@@ -1199,3 +1219,22 @@ The current connection catalog is `/api/v1/me/connections`, including user-owned
 DeepSeek keys. `/api/v1/me/integrations` remains a deprecated HTTP adapter with
 its original provider/category enums until the registered retirement conditions
 are met. Both adapters delegate to the same connection application capability.
+
+### Independent document stage recovery
+
+`GET /api/v1/papers/{document_id}/processing` returns readability separately
+from index, enrichment, and bibliography state. It authorizes current document
+access, reads bounded metadata, and exposes only the caller's latest Jobs.
+The shared index is complete only when its head matches the current source and
+model revision. Historical documents without staged work report `not_requested`.
+
+`POST /api/v1/papers/{document_id}/processing/retry` accepts the failed/cancelled
+stage's exact job ID. The composition adapter locks Job then Document, requires
+current access, requester ownership, current source digest, and the latest stage,
+and creates one fresh execution/outbox entry with an idempotency key derived
+from the original Job. Duplicate submissions return the same replacement.
+It preserves readable content and the original terminal audit record. Enrichment
+requires explicit `acknowledge_provider_charge`: a new provider request may
+charge again even when the earlier paid result was lost. No automatic AI replay
+is inferred from this user action. Retry requires the result inbox consumer to
+be enabled and is independent of the admission percentage for new uploads.

@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 
 from app.database.models import (
     DurableJob,
@@ -25,6 +25,14 @@ from app.modules.jobs.domain import (
     can_fail_job,
     can_recover_job,
 )
+from app.modules.jobs.domain.execution import (
+    execution_exhausted,
+    MAX_EXECUTION_ATTEMPTS,
+    MAX_EXECUTION_RECOVERY_AGE,
+)
+from app.modules.jobs.infrastructure.models import JobExecution
+from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
+from app.modules.jobs.application.callbacks import DeleteJobResultArtifacts
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -62,6 +70,7 @@ class EnqueueJob(CreateJob):
     queue: str = ""
     task_kwargs: dict[str, JsonValue] = field(default_factory=dict)
     available_at: datetime | None = None
+    execution_replay: Literal["deterministic", "checkpoint_only"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +251,22 @@ class JobRepository:
         queue: str,
         kwargs: dict[str, JsonValue],
         available_at: datetime | None = None,
+        execution_replay: Literal["deterministic", "checkpoint_only"] | None = None,
     ) -> JobDispatch:
+        if execution_replay is not None:
+            db.add(JobExecution(job_id=job.id))
+            JobEffectRepository(db).enqueue(
+                job_id=job.id,
+                generation=0,
+                actions=(DeleteJobResultArtifacts(job.id),),
+                available_at=datetime.now(UTC) + timedelta(days=7),
+            )
+            job.payload = {
+                **job.payload,
+                "delivery_protocol": "manifest-v1",
+                "execution_replay": execution_replay,
+            }
+            kwargs = {**kwargs, "delivery_protocol": "manifest-v1"}
         dispatch = JobDispatch(
             job_id=job.id,
             task_name=task_name,
@@ -265,6 +289,7 @@ class JobRepository:
                 queue=request.queue,
                 kwargs=request.task_kwargs,
                 available_at=request.available_at,
+                execution_replay=request.execution_replay,
             )
         return persisted
 
@@ -549,6 +574,7 @@ class JobRepository:
         *,
         limit: int,
         recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+        recover_fenced: Callable[[Session, DurableJob], None] | None = None,
     ) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)
@@ -556,9 +582,23 @@ class JobRepository:
             db.scalars(
                 select(DurableJob)
                 .where(
-                    DurableJob.status == JobStatus.RUNNING.value,
-                    DurableJob.lease_expires_at.is_not(None),
-                    DurableJob.lease_expires_at < now,
+                    or_(
+                        and_(
+                            DurableJob.status == JobStatus.RUNNING.value,
+                            DurableJob.lease_expires_at.is_not(None),
+                            DurableJob.lease_expires_at < now,
+                        ),
+                        and_(
+                            DurableJob.status == JobStatus.PENDING.value,
+                            DurableJob.payload["delivery_protocol"].as_string()
+                            == "manifest-v1",
+                            or_(
+                                DurableJob.attempt_count >= MAX_EXECUTION_ATTEMPTS,
+                                DurableJob.started_at
+                                <= now - MAX_EXECUTION_RECOVERY_AGE,
+                            ),
+                        ),
+                    ),
                 )
                 .order_by(DurableJob.lease_expires_at, DurableJob.id)
                 .limit(limit)
@@ -566,7 +606,7 @@ class JobRepository:
             ).all()
         )
         for job in expired_jobs:
-            if not can_recover_job(
+            if job.status != JobStatus.PENDING.value and not can_recover_job(
                 JobStatus(job.status),
                 lease_expires_at=job.lease_expires_at,
                 now=now,
@@ -577,6 +617,15 @@ class JobRepository:
                     raise RuntimeError("conversation_recovery_hook_missing")
                 cls._fail_interrupted_conversation_job(job=job, now=now)
                 recover_conversation(db, job)
+                continue
+            if job.payload.get(
+                "delivery_protocol"
+            ) == "manifest-v1" and execution_exhausted(
+                attempts=job.attempt_count, started_at=job.started_at, now=now
+            ):
+                if recover_fenced is None:
+                    raise RuntimeError("fenced_execution_recovery_hook_missing")
+                recover_fenced(db, job)
                 continue
             job.status = JobStatus.PENDING.value
             job.lease_expires_at = None
@@ -786,29 +835,38 @@ class JobRepository:
         *,
         limit: int,
         lease: timedelta,
+        fair: bool = False,
     ) -> tuple[ReservedJobDispatch, ...]:
         now = datetime.now(UTC)
-        dispatches = list(
-            db.scalars(
-                select(JobDispatch)
-                .options(selectinload(JobDispatch.job))
-                .where(
-                    or_(
-                        and_(
-                            JobDispatch.status == JobDispatchStatus.PENDING.value,
-                            JobDispatch.available_at <= now,
-                        ),
-                        and_(
-                            JobDispatch.status == JobDispatchStatus.PUBLISHING.value,
-                            JobDispatch.available_at <= now,
-                        ),
+        if fair:
+            from app.modules.jobs.infrastructure.fair_dispatch import (
+                select_fair_dispatches,
+            )
+
+            dispatches = select_fair_dispatches(db, limit=limit, now=now)
+        else:
+            dispatches = list(
+                db.scalars(
+                    select(JobDispatch)
+                    .options(selectinload(JobDispatch.job))
+                    .where(
+                        or_(
+                            and_(
+                                JobDispatch.status == JobDispatchStatus.PENDING.value,
+                                JobDispatch.available_at <= now,
+                            ),
+                            and_(
+                                JobDispatch.status
+                                == JobDispatchStatus.PUBLISHING.value,
+                                JobDispatch.available_at <= now,
+                            ),
+                        )
                     )
-                )
-                .order_by(JobDispatch.available_at, JobDispatch.id)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
-            ).all()
-        )
+                    .order_by(JobDispatch.available_at, JobDispatch.id)
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
+                ).all()
+            )
         reserved: list[ReservedJobDispatch] = []
         for dispatch in dispatches:
             job = dispatch.job

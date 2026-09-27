@@ -26,6 +26,9 @@ class AppSettings(BaseSettings):
     diagnostic_snapshot_bucket: str | None = None
     diagnostic_snapshot_kms_key_id: str | None = None
     diagnostic_success_sample_rate: float = Field(default=0.01, ge=0, le=1)
+    job_result_inbox_enabled: bool = False
+    document_pipeline_enabled: bool = False
+    document_pipeline_percent: int = Field(default=100, ge=0, le=100)
     trust_cloudflare_client_ip: bool = False
     trusted_proxy_cidr: IPvAnyNetwork | None = None
     client_domain: str = "http://127.0.0.1:7300"
@@ -81,6 +84,10 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_development_secrets_in_production(self) -> AppSettings:
+        if self.document_pipeline_enabled and not self.job_result_inbox_enabled:
+            raise ValueError(
+                "DOCUMENT_PIPELINE_ENABLED requires JOB_RESULT_INBOX_ENABLED"
+            )
         try:
             integration_key = base64.urlsafe_b64decode(
                 self.integration_credential_encryption_key.encode()

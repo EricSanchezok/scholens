@@ -23,6 +23,8 @@ type AnnotationListFilters = {
 export const readerKeys = {
   all: ["reader"] as const,
   document: (documentId: string) => ["reader", "document", documentId] as const,
+  processing: (documentId: string) =>
+    ["reader", "processing", documentId] as const,
   projects: (documentId: string, projectId?: string) =>
     ["reader", "projects", documentId, projectId ?? "personal"] as const,
   annotationLists: (documentId: string) =>
@@ -38,6 +40,28 @@ export const readerKeys = {
 };
 
 export const readerQueries = {
+  processing: (documentId: string) =>
+    queryOptions({
+      queryKey: readerKeys.processing(documentId),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET(
+          "/api/v1/papers/{document_id}/processing",
+          {
+            params: { path: { document_id: documentId } },
+            signal,
+          },
+        );
+        if (!data) throw new Error("Reader processing response was empty");
+        return data;
+      },
+      refetchInterval: (query) =>
+        query.state.data?.stages.some(
+          (stage) => stage.status === "pending" || stage.status === "running",
+        )
+          ? 3_000
+          : false,
+      refetchOnWindowFocus: true,
+    }),
   document: (documentId: string) =>
     queryOptions({
       queryKey: readerKeys.document(documentId),
@@ -183,4 +207,19 @@ export async function deleteReaderComment(commentId: string) {
   await apiClient.DELETE("/api/v1/annotation-comments/{comment_id}", {
     params: { path: { comment_id: commentId } },
   });
+}
+
+export async function retryReaderStage(
+  documentId: string,
+  body: components["schemas"]["RetryDocumentStage"],
+) {
+  const { data } = await apiClient.POST(
+    "/api/v1/papers/{document_id}/processing/retry",
+    {
+      params: { path: { document_id: documentId } },
+      body,
+    },
+  );
+  if (!data) throw new Error("Reader retry response was empty");
+  return data;
 }

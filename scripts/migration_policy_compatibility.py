@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -53,9 +55,42 @@ def _literal(tree: ast.Module, name: str, *, path: Path) -> object:
     raise ValueError(f"{path.name} does not define {name}")
 
 
-def _expand_failures(path: Path) -> list[str]:
+def _reviewed_sql(call: ast.Call, reviews: dict[str, Any]) -> str | None:
+    """Recognize an exact, explicitly reviewed function/trigger definition.
+
+    This is an integrity gate, not a SQL safety parser. The rationale and N-1
+    test remain mandatory review evidence; table/data SQL has no escape hatch.
+    """
+    if len(call.args) != 1 or call.keywords:
+        return None
+    literal = call.args[0]
+    if not isinstance(literal, ast.Constant) or not isinstance(literal.value, str):
+        return None
+    sql = literal.value
+    if not re.match(
+        r"\s*CREATE\s+(?:(?:OR\s+REPLACE\s+)?FUNCTION\s+scholens\."
+        r"|TRIGGER\s+[A-Za-z_][A-Za-z_0-9]*\s+)",
+        sql,
+        re.IGNORECASE,
+    ):
+        return None
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+    review = reviews.get(digest)
+    if not isinstance(review, dict) or not all(
+        isinstance(review.get(key), str) and review[key].strip()
+        for key in ("reason", "compatibility_test")
+    ):
+        return None
+    return digest
+
+
+def _expand_failures(
+    path: Path, *, reviewed_sql: dict[str, Any] | None = None
+) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     failures: list[str] = []
+    reviews = reviewed_sql or {}
+    seen_sql: set[str] = set()
     operation_targets = {"op"}
     for node in ast.walk(tree):
         if not isinstance(node, ast.With):
@@ -82,6 +117,9 @@ def _expand_failures(path: Path) -> list[str]:
             continue
         target_name = node.func.value.id
         operation = node.func.attr
+        if operation == "execute" and (digest := _reviewed_sql(node, reviews)):
+            seen_sql.add(digest)
+            continue
         if operation in DESTRUCTIVE_EXPAND_OPERATIONS:
             failures.append(f"{path.name}:{node.lineno} uses op.{operation}")
         if operation in RESTRICTIVE_EXPAND_OPERATIONS:
@@ -134,6 +172,8 @@ def _expand_failures(path: Path) -> list[str]:
                 failures.append(
                     f"{path.name}:{node.lineno} removes an existing server default"
                 )
+    for digest in sorted(set(reviews).difference(seen_sql)):
+        failures.append(f"{path.name} has an unmatched SQL review {digest}")
     return failures
 
 
@@ -166,7 +206,11 @@ def compatibility_failures(
     for name in sorted(set(revision["revisions"]).difference(known)):
         metadata = revision["revisions"][name]
         if metadata.get("phase") == "expand":
-            failures.extend(_expand_failures(paths_by_revision[name]))
+            failures.extend(
+                _expand_failures(
+                    paths_by_revision[name], reviewed_sql=metadata.get("reviewed_sql")
+                )
+            )
     return failures
 
 

@@ -31,7 +31,7 @@ EXTRACT_COLS_INSTRUCTION = """You are a data extraction assistant specializing i
 9. Preserve formatting for citations, formulas, or special notation
 
 **Citation Requirements:**
-- For each column value, include >=1 direct quote or paraphrase that supports that specific value
+- For each column value, include >=1 verbatim source quote that supports that specific value
 - Citations should be the exact text from the paper
 - Include an index number for each citation (sequential numbering starting from 1)
 - If a value appears in multiple places, cite the most relevant occurrence

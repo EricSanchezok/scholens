@@ -78,6 +78,14 @@ Applied migration files are immutable: do not edit, rename, delete, reorder, or
 squash them. Add one or more new revisions and classify each in
 `server/migrations/policy.json`. The graph remains one linear chain.
 
+The expand gate rejects arbitrary `op.execute`. A function or trigger definition
+that Alembic cannot express may carry a `reviewed_sql` entry in its new revision's
+policy: the SHA-256 of the exact UTF-8 literal, its compatibility rationale, and
+the N-1 test path. Review the entire SQL body and execute that test against the
+expanded schema. This is an integrity check, not an automatic SQL safety proof.
+Dynamic SQL, unmatched hashes, and table/data mutation statements remain rejected.
+Existing revision policy entries are immutable along with migration history.
+
 Schema replacement follows separate releases:
 
 1. **Expand:** add nullable columns, tables, indexes, or otherwise compatible

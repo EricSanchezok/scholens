@@ -416,11 +416,16 @@ def test_download_survives_more_than_four_consecutive_tls_failures(
     assert calls == {"download": 6, "poll": 6}
 
 
-def test_submit_transport_failure_is_not_blindly_retried() -> None:
+def test_submit_transport_failure_is_not_blindly_retried(monkeypatch) -> None:
     calls = 0
+    effects = []
+    monkeypatch.setattr(
+        "src.pdf.mineru.begin_scoped_external_effect", lambda: effects.append("intent")
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
+        assert effects == ["intent"]
         calls += 1
         raise httpx.ConnectError("response lost", request=request)
 

@@ -15,6 +15,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.bootstrap.adapters.document_stage_dispatch import enqueue_document_stages
+
 from app.bootstrap.adapters.document_gc import (
     collect_document_if_due,
     schedule_document_gc,
@@ -780,7 +782,7 @@ def _failed_pdf_result(
     )
 
 
-async def handle_paper_processing_webhook(
+def handle_paper_processing_webhook(
     job_id: str,
     webhook_data: PdfProcessingWebhookData,
     db: Session,
@@ -815,6 +817,7 @@ async def handle_paper_processing_webhook(
             kind=FailureKind.CONFLICT,
         )
 
+    staged_processing = durable_job.payload.get("delivery_protocol") == "manifest-v1"
     normalized_job_id = str(upload_job.id)
     job_uuid = upload_job.id
     post_commit = _pdf_post_commit_actions(
@@ -920,6 +923,7 @@ async def handle_paper_processing_webhook(
                                 db,
                                 job_id=job_uuid,
                                 result=result,
+                                compact=staged_processing,
                             )
                             salvage_changes = [
                                 _document_change(
@@ -970,6 +974,7 @@ async def handle_paper_processing_webhook(
                             db,
                             job_id=job_uuid,
                             result=result,
+                            compact=staged_processing,
                         )
                         zotero_changes = [
                             _document_change(
@@ -981,6 +986,33 @@ async def handle_paper_processing_webhook(
                                 resources=(ResourceRef("document", str(finalized)),),
                             ),
                         ]
+                        if staged_processing:
+                            document = db.get(Document, uuid.UUID(finalized))
+                            if document is not None:
+                                stages = enqueue_document_stages(
+                                    db,
+                                    document=document,
+                                    actor=actor,
+                                    operation=operation,
+                                    ingestion_job_id=job_uuid,
+                                    enrich=False,
+                                )
+                                durable_job.result = {
+                                    **(durable_job.result or {}),
+                                    "stage_job_ids": [
+                                        str(stage.job.id) for stage in stages
+                                    ],
+                                }
+                                zotero_changes.extend(
+                                    OperationChange(
+                                        action=JOB_CREATED,
+                                        resources=(
+                                            ResourceRef("job", str(stage.job.id)),
+                                        ),
+                                    )
+                                    for stage in stages
+                                    if stage.created
+                                )
                         zotero_post_commit = _pdf_post_commit_actions(
                             actor_id=actor.id,
                             job_id=job_uuid,
@@ -1012,20 +1044,6 @@ async def handle_paper_processing_webhook(
                     )
 
                 metadata = result.metadata
-                if metadata is None or not metadata.title:
-                    logger.error(
-                        "document.pdf_callback.metadata_missing",
-                        extra={"job_id": normalized_job_id},
-                    )
-                    return _failed_pdf_result(
-                        db=db,
-                        job_id=normalized_job_id,
-                        actor=actor,
-                        operation=operation,
-                        reason="Missing metadata",
-                        status=("webhook processed - failed due to missing metadata"),
-                        post_commit=post_commit,
-                    )
                 if not result.raw_content:
                     logger.error(
                         "document.pdf_callback.content_missing",
@@ -1074,23 +1092,28 @@ async def handle_paper_processing_webhook(
                     DocumentProcessingStatus(existing_paper.processing_status)
                 ):
                     raise RuntimeError("document_completion_transition_rejected")
-                paper = document_repository.update_canonical(
-                    db,
-                    update=_document_update_from_pdf_result(
-                        result,
-                        title=metadata.title,
-                        authors=metadata.authors,
-                        abstract=metadata.abstract,
-                        summary=metadata.summary,
-                        summary_citations=metadata.summary_citations,
-                        institutions=metadata.institutions,
-                        keywords=metadata.keywords,
-                        publish_date=(
+                # Basic readability has no AI/provider prerequisite. Omitted
+                # metadata never clears existing canonical/user-owned fields.
+                metadata_fields: dict[str, object] = {}
+                if metadata is not None:
+                    metadata_fields = {
+                        "authors": metadata.authors,
+                        "abstract": metadata.abstract,
+                        "summary": metadata.summary,
+                        "summary_citations": metadata.summary_citations,
+                        "institutions": metadata.institutions,
+                        "keywords": metadata.keywords,
+                        "publish_date": (
                             parse_publication_date(metadata.publish_date)
                             if metadata.publish_date
                             else None
                         ),
-                    ),
+                    }
+                    if metadata.title:
+                        metadata_fields["title"] = metadata.title
+                paper = document_repository.update_canonical(
+                    db,
+                    update=_document_update_from_pdf_result(result, **metadata_fields),
                     document=existing_paper,
                     user=actor,
                     refresh_result=False,
@@ -1098,7 +1121,7 @@ async def handle_paper_processing_webhook(
 
                 created_annotation_thread_ids: tuple[uuid.UUID, ...] = ()
                 created_comment_ids: tuple[uuid.UUID, ...] = ()
-                if metadata.highlights:
+                if metadata is not None and metadata.highlights:
                     with optional_savepoint(
                         db,
                         operation="create_ai_annotations",
@@ -1112,6 +1135,7 @@ async def handle_paper_processing_webhook(
                             document_id=paper.id,
                             metadata=metadata,
                             user=actor,
+                            source_job_id=job_uuid,
                         )
                         created_annotation_thread_ids = created_annotations.thread_ids
                         created_comment_ids = created_annotations.comment_ids
@@ -1120,24 +1144,44 @@ async def handle_paper_processing_webhook(
                     db,
                     job_id=job_uuid,
                     result=result,
+                    compact=staged_processing,
                 )
                 semantic_text = semantic_document_text(
-                    title=metadata.title,
-                    keywords=metadata.keywords,
-                    summary=metadata.summary,
-                    abstract=metadata.abstract,
+                    title=paper.title,
+                    keywords=metadata.keywords if metadata else None,
+                    summary=metadata.summary if metadata else None,
+                    abstract=metadata.abstract if metadata else None,
                 )
-                postprocess_job = _enqueue_pdf_postprocess(
-                    db,
-                    ingestion_job_id=job_uuid,
-                    document_id=paper.id,
-                    user_id=actor.id,
-                    origin_operation_id=operation.trace.operation_id,
-                    correlation_id=operation.trace.correlation_id,
-                    semantic_text=semantic_text,
-                    semantic_digest=semantic_source_digest(semantic_text),
-                    parser_markdown_s3_key=result.parser_markdown_s3_key,
-                )
+                if staged_processing:
+                    postprocess_jobs = enqueue_document_stages(
+                        db,
+                        document=paper,
+                        actor=actor,
+                        operation=operation,
+                        ingestion_job_id=job_uuid,
+                        enrich=not bool(
+                            durable_job.payload.get("skip_metadata_extraction")
+                        ),
+                    )
+                    durable_job.result = {
+                        **(durable_job.result or {}),
+                        "stage_job_ids": [
+                            str(stage.job.id) for stage in postprocess_jobs
+                        ],
+                    }
+                else:
+                    postprocess_job = _enqueue_pdf_postprocess(
+                        db,
+                        ingestion_job_id=job_uuid,
+                        document_id=paper.id,
+                        user_id=actor.id,
+                        origin_operation_id=operation.trace.operation_id,
+                        correlation_id=operation.trace.correlation_id,
+                        semantic_text=semantic_text,
+                        semantic_digest=semantic_source_digest(semantic_text),
+                        parser_markdown_s3_key=result.parser_markdown_s3_key,
+                    )
+                    postprocess_jobs = (postprocess_job,)
                 changes: list[OperationChange] = []
                 if completed:
                     changes.append(
@@ -1165,18 +1209,14 @@ async def handle_paper_processing_webhook(
                     )
                     for comment_id in created_comment_ids
                 )
-                if postprocess_job.created:
-                    changes.append(
-                        OperationChange(
-                            action=JOB_CREATED,
-                            resources=(
-                                ResourceRef(
-                                    "job",
-                                    str(postprocess_job.job.id),
-                                ),
-                            ),
-                        )
+                changes.extend(
+                    OperationChange(
+                        action=JOB_CREATED,
+                        resources=(ResourceRef("job", str(stage.job.id)),),
                     )
+                    for stage in postprocess_jobs
+                    if stage.created
+                )
                 end_time = datetime.now(timezone.utc)
                 success_post_commit = _pdf_post_commit_actions(
                     actor_id=actor.id,
@@ -1187,13 +1227,13 @@ async def handle_paper_processing_webhook(
                             actor_id=actor.id,
                             event="extracted_metadata",
                             properties=(
-                                ("has_title", bool(metadata.title)),
-                                ("has_authors", bool(metadata.authors)),
-                                ("has_abstract", bool(metadata.abstract)),
-                                ("has_summary", bool(metadata.summary)),
+                                ("has_title", bool(metadata and metadata.title)),
+                                ("has_authors", bool(metadata and metadata.authors)),
+                                ("has_abstract", bool(metadata and metadata.abstract)),
+                                ("has_summary", bool(metadata and metadata.summary)),
                                 (
                                     "has_ai_highlights",
-                                    bool(metadata.highlights),
+                                    bool(metadata and metadata.highlights),
                                 ),
                             ),
                         ),
@@ -1201,7 +1241,7 @@ async def handle_paper_processing_webhook(
                             actor_id=actor.id,
                             event="paper_upload",
                             properties=(
-                                ("has_metadata", True),
+                                ("has_metadata", metadata is not None),
                                 (
                                     "duration",
                                     (end_time - upload_job.created_at).total_seconds(),
@@ -1220,6 +1260,13 @@ async def handle_paper_processing_webhook(
                     post_commit=success_post_commit,
                 )
         except Exception:
+            if (
+                isinstance(durable_job.payload, dict)
+                and durable_job.payload.get("delivery_protocol") == "manifest-v1"
+            ):
+                # The durable inbox owns retry and exhaustion compensation.
+                # A rolled-back transient apply must retain its known result.
+                raise
             logger.exception(
                 "paper.pdf_callback.application_failed",
                 extra={"job_id": normalized_job_id},

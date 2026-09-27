@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Iterator
 
 from src.webhook_signing import post_signed_json
+from src.execution_delivery import execution_scope_payload
 
 _credential_url: ContextVar[str | None] = ContextVar(
     "deepseek_job_credential_url", default=None
@@ -30,7 +31,7 @@ def deepseek_job_context(webhook_url: str) -> Iterator[None]:
 
 
 def _fetch_key(url: str) -> str:
-    response = post_signed_json(url, {}, timeout=30)
+    response = post_signed_json(url, execution_scope_payload(), timeout=30)
     try:
         if response.status_code in {409, 422}:
             error = response.json()

@@ -11,6 +11,38 @@ from src.cache_config import CacheConfigurationError, cache_url
 from src.task_protection import register_task_protection_signals, set_task_protection
 
 
+def test_document_worker_loss_redelivers_late_acknowledged_work() -> None:
+    from src.celery_app import celery_app
+    from src.tasks import construct_data_table_task, upload_and_process_file
+
+    celery_app.finalize()
+    assert upload_and_process_file.acks_late is True
+    assert upload_and_process_file.reject_on_worker_lost is True
+    assert construct_data_table_task.reject_on_worker_lost is False
+
+
+def test_celery_success_log_omits_private_result_content(caplog) -> None:
+    from src.celery_app import celery_app
+    import logging
+
+    @celery_app.task(name="test_private_result", lazy=False)
+    def private_result():
+        return {"raw_content": "private-paper-content-928137", "embedding": [0.123]}
+
+    trace_logger = logging.getLogger("celery.app.trace")
+    trace_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger="celery.app.trace"):
+            result = private_result.apply(throw=True)
+        assert result.successful()
+        assert "succeeded" in caplog.text
+        assert "private-paper-content-928137" not in caplog.text
+        assert "embedding" not in caplog.text
+    finally:
+        trace_logger.removeHandler(caplog.handler)
+        celery_app.tasks.pop("test_private_result", None)
+
+
 def test_managed_cache_url_escapes_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

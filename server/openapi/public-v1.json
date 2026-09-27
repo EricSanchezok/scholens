@@ -4511,6 +4511,33 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentProcessingStatusResponse": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "readable": {
+            "title": "Readable",
+            "type": "boolean"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentStageStatus"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "readable",
+          "stages"
+        ],
+        "title": "DocumentProcessingStatusResponse",
+        "type": "object"
+      },
       "DocumentReflowAssetResponse": {
         "properties": {
           "checksum": {
@@ -5056,6 +5083,67 @@
         "title": "DocumentResponse",
         "type": "object"
       },
+      "DocumentStageStatus": {
+        "properties": {
+          "can_retry": {
+            "default": false,
+            "title": "Can Retry",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "required_integration": {
+            "anyOf": [
+              {
+                "const": "deepseek",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Integration"
+          },
+          "stage": {
+            "enum": [
+              "index",
+              "enrichment",
+              "bibliography"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "status"
+        ],
+        "title": "DocumentStageStatus",
+        "type": "object"
+      },
       "DoiPaperSource": {
         "additionalProperties": false,
         "properties": {
@@ -5430,6 +5518,10 @@
           "conversation_generate",
           "pdf_process",
           "pdf_postprocess",
+          "document_index",
+          "document_search_index",
+          "document_enrich",
+          "document_bibliography",
           "document_reflow",
           "audio_generate",
           "data_table_generate",
@@ -11011,8 +11103,21 @@
             "title": "Index",
             "type": "integer"
           },
+          "segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The supplied evidence segment ID containing this verbatim quote.",
+            "title": "Segment Id"
+          },
           "text": {
-            "description": "The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.",
+            "description": "An exact verbatim quote from the source. Never paraphrase evidence.",
             "title": "Text",
             "type": "string"
           }
@@ -11022,6 +11127,35 @@
           "index"
         ],
         "title": "ResponseCitation",
+        "type": "object"
+      },
+      "RetryDocumentStage": {
+        "properties": {
+          "acknowledge_provider_charge": {
+            "default": false,
+            "title": "Acknowledge Provider Charge",
+            "type": "boolean"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "index",
+              "enrichment",
+              "bibliography"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "job_id"
+        ],
+        "title": "RetryDocumentStage",
         "type": "object"
       },
       "SelectedPaperCollection": {
@@ -18465,6 +18599,106 @@
         "tags": [
           "reading-activity"
         ]
+      }
+    },
+    "/api/v1/papers/{document_id}/processing": {
+      "get": {
+        "operationId": "get_document_processing_api_v1_papers__document_id__processing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentProcessingStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Document Processing"
+      }
+    },
+    "/api/v1/papers/{document_id}/processing/retry": {
+      "post": {
+        "operationId": "retry_document_stage_api_v1_papers__document_id__processing_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryDocumentStage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentStageStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Retry Document Stage"
       }
     },
     "/api/v1/papers/{document_id}/projects": {

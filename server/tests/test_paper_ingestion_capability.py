@@ -55,6 +55,66 @@ def _operation():
     )
 
 
+@pytest.mark.parametrize("percentage, staged", [(0, False), (100, True)])
+@pytest.mark.parametrize("source_job", [False, True])
+def test_both_acceptance_paths_persist_the_chosen_document_cohort(
+    percentage, staged, source_job
+):
+    from app.bootstrap.adapters import paper_ingestion as module
+
+    db = MagicMock()
+    db.scalar.return_value = None
+    job = SimpleNamespace(id=uuid4(), status="pending", payload={}, document_id=None)
+    reservation = SimpleNamespace(id=job.id, job=job)
+    with (
+        patch.object(
+            module,
+            "reserve_upload",
+            return_value=SimpleNamespace(reservation=reservation, created=True),
+        ),
+        patch.object(
+            module,
+            "finalize_reserved_document",
+            return_value=SimpleNamespace(job_completed=False),
+        ) as finalize,
+        patch.object(module.job_repository, "add_dispatch") as dispatch,
+        patch.object(
+            module.SqlPaperIngestionGateway,
+            "response",
+            return_value=_accepted().ingestion,
+        ),
+    ):
+        gateway = SqlPaperIngestionGateway(
+            db, staged_processing=True, staged_percentage=percentage
+        )
+        common = dict(
+            actor=_actor(),
+            correlation_id=uuid4(),
+            origin_operation_id=uuid4(),
+            project_id=None,
+            add_to_library=True,
+            filename="fixture.pdf",
+            display_name="fixture.pdf",
+            source_kind="upload",
+            idempotency_key=None,
+            job_id=job.id,
+        )
+        if source_job:
+            gateway.accept_source(
+                **common,
+                fingerprint="fixture",
+                source_value=None,
+                resolved_url=None,
+                upload_id=uuid4(),
+            )
+            assert dispatch.call_args.kwargs["execution_replay"] == (
+                "deterministic" if staged else None
+            )
+        else:
+            gateway.accept(**common, content=b"%PDF fixture", retry_of=None)
+            assert finalize.call_args.kwargs["staged_processing"] is staged
+
+
 def _accepted(*, replayed: bool = False) -> AcceptedIngestion:
     job_id = uuid4()
     return AcceptedIngestion(

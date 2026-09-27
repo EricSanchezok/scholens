@@ -850,7 +850,9 @@ jobs:
           SCHOLENS_POSTGRES_TEST_URL="postgresql+psycopg2://scholens_app:${APP_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
           SCHOLENS_POSTGRES_TEST_ADMIN_URL="postgresql+psycopg2://postgres:${PGPASSWORD}@127.0.0.1:5432/sanchezcloud" \
             server/.venv/bin/pytest \
-              server/tests/test_postgres_quota_invariants.py -q
+              server/tests/test_postgres_quota_invariants.py \
+              server/tests/test_job_result_inbox.py \
+              server/tests/test_ai_evidence_postgres.py -q
 
           PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app -d sanchezcloud \
             -v ON_ERROR_STOP=1 -c \

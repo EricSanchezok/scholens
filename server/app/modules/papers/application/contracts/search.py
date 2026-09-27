@@ -118,6 +118,16 @@ class PaperSearchRequest(BaseModel):
     cursor: str | None = Field(default=None, max_length=1_024)
 
 
+class PaperSearchEmbedding(BaseModel):
+    """Prepared outside persistence; never accepted from a public request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    query_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_revision: str = Field(min_length=1, max_length=128)
+    vector: tuple[float, ...] = Field(min_length=384, max_length=384)
+
+
 class PaperSearchQuery(BaseModel):
     """Internal request supplied to a replaceable search adapter."""
 
@@ -127,6 +137,7 @@ class PaperSearchQuery(BaseModel):
     sort: PaperSearchSort
     limit: int
     offset: int = Field(ge=0)
+    embedding: PaperSearchEmbedding | None = None
 
 
 class PaperSearchSnippet(BaseModel):

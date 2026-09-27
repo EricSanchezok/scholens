@@ -42,7 +42,12 @@ class ResponseCitation(BaseModel):
     """
 
     text: str = Field(
-        description="The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper."
+        description="An exact verbatim quote from the source. Never paraphrase evidence."
+    )
+    segment_id: str | None = Field(
+        default=None,
+        max_length=160,
+        description="The supplied evidence segment ID containing this verbatim quote.",
     )
     index: int = Field(
         description="The index of the citation in the paper's reference list. This is used to identify the citation in discussions or findings."
@@ -65,7 +70,12 @@ class AIHighlight(BaseModel):
     """
 
     text: str = Field(
-        description="The raw text of the highlight as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper."
+        description="An exact verbatim quote from one source segment. Never paraphrase evidence."
+    )
+    segment_id: str | None = Field(
+        default=None,
+        max_length=160,
+        description="The supplied evidence segment ID containing this verbatim quote.",
     )
     annotation: str = Field(
         description="The context or annotation for the highlight, explaining its significance or relevance to the paper's content. Less than 350 characters."
@@ -111,7 +121,7 @@ class SummaryAndCitations(BaseModel):
     """Schema for summary and citations extraction."""
 
     summary_citations: list[ResponseCitation] = Field(
-        description="List of citations supporting the summary. Include direct quotes or paraphrases with the citation index. The index should match the inline citations used in the summary. Only include citations that are directly relevant to the summary content. Use sequential numbering starting from 1."
+        description="List of citations supporting the summary. Include verbatim source quotes with the citation index. The index should match the inline citations used in the summary. Only include citations that are directly relevant to the summary content. Use sequential numbering starting from 1."
     )
     summary: str = Field(
         description="""
@@ -231,7 +241,7 @@ The summary should be accessible to readers with basic domain knowledge while ma
     )
     summary_citations: list[ResponseCitation] = Field(
         default_factory=list,
-        description="List of citations that are relevant to the summary. These should be direct quotes or paraphrases from the paper that support the summary provided. Remember to include the citation index (e.g., [^1], [^2]) in the summary.",
+        description="List of citations that are relevant to the summary. These should be verbatim source quotes from the paper that support the summary provided. Remember to include the citation index (e.g., [^1], [^2]) in the summary.",
     )
     publish_date: str | None = Field(
         default=None, description="Publishing date of the paper in YYYY-MM-DD format"
@@ -325,7 +335,7 @@ class DataTableCellValue(BaseModel):
     value: str = Field(description="The extracted value for this column")
     citations: list[ResponseCitation] = Field(
         default_factory=list,
-        description="List of citations that support this specific value. These should be direct quotes or paraphrases from the paper.",
+        description="List of citations that support this specific value. These should be verbatim source quotes from the paper.",
     )
 
 

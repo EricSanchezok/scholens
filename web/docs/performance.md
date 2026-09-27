@@ -49,7 +49,7 @@ use the separate `pdf_render_error` event with an allowlisted error kind,
 surface, and optional decoder (`jbig2`, `openjpeg`, `qcms`, or `unknown`). It
 never accepts a user/account/Conversation/document identifier, content, title,
 query string, raw URL, signed URL, raw error text, or IP address. The receiver
-adds only `CN`/`non-CN` and the Cloudflare colo, writes structured
+adds only `CN`/`non-CN`/`unknown` and a validated three-letter Cloudflare colo, writes structured
 `web_performance`, `conversation_performance`, `reader_annotation`, or
 `pdf_render` events, and
 returns `204` without persistence in application state.
@@ -62,6 +62,14 @@ incident. Mainland CDN
 or acceleration procurement begins only after two consecutive weeks show that
 non-China targets pass while China mobile primary-content p75 is both above
 1.5 seconds and more than twice the non-China value.
+
+Primary-content timing uses the exact observed navigation destination. Two
+Reader documents or Projects never share a clock merely because their coarse
+route group matches. The initial hard navigation can be reported once; later
+routes without an observed start are excluded rather than reporting browser
+uptime as latency. Country headers that are missing or unknown form a separate
+cohort and never count as non-China acceptance evidence. These measurement
+changes preserve the existing visual intent and require no new UI state.
 
 ## Conversation streaming
 
@@ -84,9 +92,25 @@ first-token time and tool pauses remain separately observable service latency.
 
 ## Verification
 
+PDF pages measure their scroll viewport in a layout effect before first paint.
+Rendering waits for a nonzero viewport, and resize observations with unchanged
+dimensions preserve state. This prevents the initial minimum-scale placeholders
+from painting many tiny pages and then expanding the entire document. Page
+geometry stays reserved while offscreen canvases and text layers are released.
+
 Performance changes retain deterministic unit, Storybook, and Playwright
 behavior. Production bundle comparisons use the procedure in
 [`testing.md`](./testing.md); local development timings are evidence for
 regression diagnosis, not production acceptance. Do not add arbitrary sleeps,
 route transitions, raw timing tokens, or speculative caching to make a test or
 demo appear faster.
+
+The Reader residency browser test supports an opt-in production-build acceptance
+probe: `SCHOLENS_READER_PERFORMANCE=1 pnpm exec playwright test reader.spec.ts
+--project chromium --grep "bounds PDF bitmap residency" --workers 1`. It traverses
+the document three times, searches with real keyboard events, and records canvas
+pixels, post-GC JavaScript heap/DOM counts, CLS session windows and the longest
+observed interaction. Equivalent second/third traversals must plateau within
+8 MiB heap and 2,000 DOM nodes; CLS is at most 0.1 and the longest measured
+interaction at most 200 ms. The attached JSON is controlled desktop fixture
+evidence, never a replacement for cohort-specific production INP or RUM.

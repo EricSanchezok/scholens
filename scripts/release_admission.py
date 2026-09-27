@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
+from urllib.parse import urlsplit
 
 import boto3
 from botocore.config import Config
@@ -18,8 +20,22 @@ BUCKET = f"sanchezcloud-scholens-releases-{ACCOUNT}-{REGION}"
 ROLE = (
     f"arn:aws:iam::{ACCOUNT}:role/SanchezCloudScholensRuntimeCloudFormationServiceRole"
 )
-NAMES = {"scholens-document", "scholens-research", "scholens-maintenance"}
+WORKERS = {
+    "Document": "document",
+    "DocumentIndex": "document-index",
+    "DocumentEnrichment": "document-enrichment",
+    "Research": "research",
+    "Maintenance": "maintenance",
+}
+NAMES = {"scholens-" + queue for queue in WORKERS.values()}
 PREFIX = "/sanchezcloud/personal/background/"
+
+
+def registration_names(parameters: dict) -> set[str]:
+    present = {key for key in WORKERS if key + "TaskArn" in parameters}
+    if present not in ({"Document", "Research", "Maintenance"}, set(WORKERS)):
+        raise ValueError("Incomplete product registration topology")
+    return {"scholens-" + WORKERS[key] for key in present}
 
 
 def acknowledged(status: dict, expected: dict, now: float) -> bool:
@@ -43,22 +59,25 @@ def unsettled(tasks: list[dict], names: set[str]) -> bool:
     )
 
 
-def guard_registration_change(change: dict) -> None:
-    allowed = {
-        "DocumentRegistration",
-        "ResearchRegistration",
-        "MaintenanceRegistration",
-        "AdmissionGrant",
-    }
+def guard_registration_change(change: dict, *, expanding: bool = False) -> None:
+    allowed = {key + "Registration" for key in WORKERS} | {"AdmissionGrant"}
+    additions = {"DocumentIndexRegistration", "DocumentEnrichmentRegistration"}
     for item in change.get("Changes", []):
         r = item["ResourceChange"]
         if (
-            r["Action"] != "Modify"
+            not (
+                r["Action"] == "Modify"
+                or (
+                    expanding
+                    and r["Action"] == "Add"
+                    and r["LogicalResourceId"] in additions
+                )
+            )
             or r["LogicalResourceId"] not in allowed
             or r.get("Replacement") in {"True", "Conditional"}
         ):
             raise ValueError(
-                "Only existing product registrations and their grant may change"
+                "Only owned registrations and their grant may change; expansion is explicit"
             )
 
 
@@ -136,8 +155,45 @@ class AdmissionRelease:
             }
         if all(actual.get(k) == v for k, v in overrides.items()):
             return
-        if set(overrides) - set(actual):
+        expanding = stage == "revisions" and "DocumentIndexTaskArn" not in actual
+        new_parameters = {
+            prefix + suffix
+            for prefix in ("DocumentIndex", "DocumentEnrichment")
+            for suffix in (
+                "TaskArn",
+                "TaskRoleArn",
+                "ExecutionRoleArn",
+                "QueueUrl",
+                "QueueArn",
+            )
+        } | {prefix + "MemoryMiB" for prefix in WORKERS}
+        if (
+            set(overrides)
+            - set(actual)
+            - (new_parameters if stage == "revisions" else set())
+        ):
             raise ValueError("Unknown registration parameter")
+        if expanding and (
+            actual.get("Enabled") != "false" or overrides.get("Enabled") != "false"
+        ):
+            raise ValueError(
+                "Registration expansion requires acknowledged paused admission"
+            )
+        template = (
+            {
+                "TemplateBody": (
+                    Path(__file__).resolve().parents[1]
+                    / "deploy/personal/background.yml"
+                ).read_text()
+            }
+            if stage == "revisions"
+            else {"UsePreviousTemplate": True}
+        )
+        planned_parameters = actual | overrides
+        if stage == "revisions" and not new_parameters <= set(planned_parameters):
+            raise ValueError(
+                "Revision update must include complete stage and memory parameters"
+            )
         try:
             change = self.cf.describe_change_set(
                 StackName=BACKGROUND, ChangeSetName=name
@@ -149,11 +205,11 @@ class AdmissionRelease:
                 StackName=BACKGROUND,
                 ChangeSetName=name,
                 ChangeSetType="UPDATE",
-                UsePreviousTemplate=True,
+                **template,
                 Description=f"product-release:{self.operation}:{stage}",
                 Parameters=[
-                    {"ParameterKey": k, "ParameterValue": overrides.get(k, v)}
-                    for k, v in actual.items()
+                    {"ParameterKey": k, "ParameterValue": v}
+                    for k, v in planned_parameters.items()
                 ],
                 Capabilities=["CAPABILITY_NAMED_IAM"],
                 RoleARN=ROLE,
@@ -168,7 +224,7 @@ class AdmissionRelease:
             or change["ExecutionStatus"] != "AVAILABLE"
         ):
             raise ValueError("Registration change set is not executable")
-        guard_registration_change(change)
+        guard_registration_change(change, expanding=expanding)
         planned = {p["ParameterKey"]: p["ParameterValue"] for p in change["Parameters"]}
         if planned != actual | overrides:
             raise ValueError("Registration plan no longer matches live configuration")
@@ -189,9 +245,17 @@ class AdmissionRelease:
         self.wait_stack(BACKGROUND)
 
     def wait_ack(self) -> None:
-        parameters = self.ssm.get_parameters(Names=[PREFIX + n for n in sorted(NAMES)])
+        active_names = registration_names(
+            {
+                p["ParameterKey"]: p["ParameterValue"]
+                for p in self.stack(BACKGROUND)["Parameters"]
+            }
+        )
+        parameters = self.ssm.get_parameters(
+            Names=[PREFIX + n for n in sorted(active_names)]
+        )
         if parameters.get("InvalidParameters") or len(parameters["Parameters"]) != len(
-            NAMES
+            active_names
         ):
             raise ValueError("Product registration missing")
         expected = {}
@@ -239,22 +303,22 @@ class AdmissionRelease:
         )
 
     def revisions(self) -> dict:
+        from personal_deployment import LIMITS
+
         outputs = {
             x["OutputKey"]: x["OutputValue"] for x in self.stack(RUNTIME)["Outputs"]
         }
         result = {}
-        for name, memory in (
-            ("Document", 2624),
-            ("Research", 832),
-            ("Maintenance", 576),
-        ):
+        for name, queue in WORKERS.items():
+            memory = LIMITS[queue + "-worker"][2] + 64
             arn = outputs[name + "WorkerTaskDefinition"]
             task = self.ecs.describe_task_definition(taskDefinition=arn)[
                 "taskDefinition"
             ]
             if (
                 task.get("requiresCompatibilities") != ["EC2"]
-                or sum(c.get("memory", 0) for c in task["containerDefinitions"]) != memory
+                or sum(c.get("memory", 0) for c in task["containerDefinitions"])
+                != memory
                 or any(not c.get("memory") for c in task["containerDefinitions"])
                 or task.get("memory") is not None
                 or task.get("cpu") is not None
@@ -272,7 +336,28 @@ class AdmissionRelease:
                     name + "TaskArn": arn,
                     name + "TaskRoleArn": task["taskRoleArn"],
                     name + "ExecutionRoleArn": task["executionRoleArn"],
+                    name + "MemoryMiB": str(memory),
                 }
+            )
+            worker = next(
+                c
+                for c in task["containerDefinitions"]
+                if c["name"] == queue + "-worker"
+            )
+            env = {e["name"]: e["value"] for e in worker["environment"]}
+            url = env["SQS_" + queue.upper().replace("-", "_") + "_QUEUE_URL"]
+            parsed = urlsplit(url)
+            if (
+                parsed.scheme != "https"
+                or parsed.netloc != f"sqs.{REGION}.amazonaws.com"
+                or parsed.path != f"/{ACCOUNT}/scholens-preview-{queue}"
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("Foreign worker queue")
+            result[name + "QueueUrl"] = url
+            result[name + "QueueArn"] = (
+                f"arn:aws:sqs:{REGION}:{ACCOUNT}:scholens-preview-{queue}"
             )
         return result
 

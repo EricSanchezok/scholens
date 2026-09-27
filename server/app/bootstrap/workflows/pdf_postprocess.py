@@ -90,7 +90,8 @@ class PdfPostprocessWorkflow:
                 kind=FailureKind.UNPROCESSABLE,
             ) from exc
 
-        snapshot = self._reader.read(
+        snapshot = await asyncio.to_thread(
+            self._reader.read,
             actor=actor,
             job_id=job_id,
             callback_task_id=callback.task_id,
@@ -98,15 +99,16 @@ class PdfPostprocessWorkflow:
         metadata_resolution = (
             PdfPostprocessResolution()
             if snapshot.terminal
-            else await asyncio.to_thread(
-                self._resolve_external,
+            else await self._resolve_external(
                 actor,
                 operation,
                 _require_fields(snapshot),
             )
         )
         passage_embeddings = (
-            self._load_passage_embeddings(callback) if not snapshot.terminal else ()
+            await asyncio.to_thread(self._load_passage_embeddings, callback)
+            if not snapshot.terminal
+            else ()
         )
         resolution = PdfPostprocessResolution(
             doi=metadata_resolution.doi,
@@ -129,24 +131,41 @@ class PdfPostprocessWorkflow:
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
-        result = await self._executor.command_async(
+        result: JobCompletionResult = await asyncio.to_thread(
+            self._executor.command,
             lambda capabilities: capabilities.job_callbacks.complete_pdf_postprocess(
                 actor=actor,
                 operation=finalize_operation,
                 job_id=job_id,
                 payload=payload,
                 resolution=resolution,
-            )
+            ),
         )
         if callback.passage_embedding_artifact is not None:
-            if not s3_service.delete_file(
-                callback.passage_embedding_artifact.storage_key
+            if not await asyncio.to_thread(
+                s3_service.delete_file, callback.passage_embedding_artifact.storage_key
             ):
                 logger.warning(
                     "paper.pdf_postprocess.passage_artifact_cleanup_failed",
                     extra={"job_id": str(job_id)},
                 )
         return result
+
+    async def deterministic_bibliography(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        fields: CitationFields,
+    ) -> CitationMetadataPatch:
+        """Independent bibliography stage never invokes paid agentic recovery."""
+        if not bibliographic_gaps(fields):
+            return CitationMetadataPatch()
+        async with asyncio.timeout(25):
+            resolved = await self._provider.deterministic(
+                actor=actor, operation=operation, fields=fields
+            )
+        return resolved.patch
 
     @staticmethod
     def _load_passage_embeddings(
@@ -185,7 +204,7 @@ class PdfPostprocessWorkflow:
             )
             return ()
 
-    def _resolve_external(
+    async def _resolve_external(
         self,
         actor: Actor,
         operation: OperationContext,
@@ -194,7 +213,7 @@ class PdfPostprocessWorkflow:
         deterministic_patch = CitationMetadataPatch()
         identity_mismatch = False
         try:
-            deterministic = self._provider.deterministic(
+            deterministic = await self._provider.deterministic(
                 actor=actor,
                 operation=operation,
                 fields=fields,
@@ -209,8 +228,9 @@ class PdfPostprocessWorkflow:
         missing_fields = bibliographic_gaps(resolved_fields)
         if missing_fields and not identity_mismatch:
             try:
-                agentic = self._provider.agentic(
+                agentic = await self._provider.agentic(
                     actor=actor,
+                    operation=operation,
                     fields=resolved_fields,
                     missing_fields=missing_fields,
                     steps=[],

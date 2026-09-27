@@ -30,14 +30,22 @@ from scholens_ai import (
     build_document_passages,
     embed_text,
     encode_passage_embedding_artifact,
-    try_local_embedder,
+    configured_embedder,
+    load_passage_tokenizer,
 )
+from scholens_ai.inference_client import EmbeddingUnavailable
+from scholens_ai.token_passages import PassageLimitExceeded
 from scholens_job_contracts import (
     PDF_TEXT_REPAIR_TASK_NAME,
     ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS,
     PDFTextRepairTaskRequest,
     require_storage_delete_batch,
+    MAX_PDF_CALLBACK_RAW_CONTENT_BYTES,
 )
+from botocore.exceptions import BotoCoreError, ClientError
+from src.indexing import build_checkpointed_projection
+from src.pdf.durable_state import can_resume_mineru
+from src.document_enrichment import enrich_document
 
 from src.audio import generate_audio
 from src.celery_app import celery_app
@@ -63,6 +71,13 @@ from src.schemas import (
     ZoteroJobCredentialResponse,
 )
 from src.deepseek_credentials import deepseek_job_context
+from src.execution_delivery import (
+    DeliveryUnavailable,
+    ExecutionLost,
+    FencedExecution,
+    run_fenced_task,
+    execution_scope_payload,
+)
 from src.token_usage import collect_token_usage
 from src.utils import time_it
 from src.webhook_signing import CallbackPayloadTooLarge, post_signed_json
@@ -101,7 +116,7 @@ def _passage_embedding_artifact(
     passages = tuple(passages_by_digest.values())
     if not passages or len(passages) > MAX_PASSAGE_EMBEDDINGS:
         return None
-    embedder = try_local_embedder()
+    embedder = configured_embedder()
     if embedder is None:
         return None
     records: list[PassageEmbeddingRecord] = []
@@ -181,9 +196,11 @@ class ProgressReporter:
         *,
         task_id: str,
         progress_url: str,
+        execution: FencedExecution | None = None,
     ) -> None:
         self._task_id = task_id
         self._progress_url = progress_url
+        self._execution = execution
         self._progress_code = "downloading"
         self._stop = threading.Event()
         self._cancelled = threading.Event()
@@ -194,10 +211,16 @@ class ProgressReporter:
         )
 
     def __enter__(self) -> "ProgressReporter":
-        self._thread.start()
+        if self._execution is not None:
+            self._execution.__enter__()
+        else:
+            self._thread.start()
         return self
 
     def __exit__(self, *_args: object) -> None:
+        if self._execution is not None:
+            self._execution.__exit__(*_args)
+            return
         self._stop.set()
         self._thread.join(timeout=JOB_PROGRESS_TIMEOUT_SECONDS + 1)
 
@@ -214,6 +237,8 @@ class ProgressReporter:
         self.check_cancelled()
 
     def check_cancelled(self) -> None:
+        if self._execution is not None:
+            self._execution.check_cancelled()
         if self._cancelled.is_set():
             raise JobCancelled("paper_ingestion_cancelled")
 
@@ -226,6 +251,12 @@ class ProgressReporter:
             self._post_progress()
 
     def _post_progress(self) -> None:
+        if self._execution is not None:
+            try:
+                self._execution.report(self._progress_code)
+            except DeliveryUnavailable:
+                self._execution.check_cancelled()
+            return
         response: requests.Response | None = None
         try:
             response = post_signed_json(
@@ -488,7 +519,9 @@ def _log_data_table_progress(task_id: str, status: str) -> None:
 def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
     response: requests.Response | None = None
     try:
-        response = post_signed_json(credential_url, {}, timeout=30)
+        response = post_signed_json(
+            credential_url, execution_scope_payload(), timeout=30
+        )
     except requests.RequestException as exc:
         raise ParserTransientError(
             "Could not obtain the job-scoped MinerU credential",
@@ -610,7 +643,7 @@ def _response_error_code(response: requests.Response, default: str) -> str:
 def _resolve_source_url(url: str) -> str:
     response: requests.Response | None = None
     try:
-        response = post_signed_json(url, {}, timeout=30)
+        response = post_signed_json(url, execution_scope_payload(), timeout=30)
     except requests.RequestException as exc:
         raise SourceDownloadError(
             "paper_source_resolution_unavailable",
@@ -902,10 +935,13 @@ def _process_pdf_task(
     skip_metadata_extraction: bool = False,
     repair_revision: str | None = None,
     local_pdf_path: str | None = None,
+    execution: FencedExecution | None = None,
 ) -> dict[str, Any]:
     """Run the shared claimed PDF workflow behind ingestion and repair tasks."""
     task_id = str(task.request.id)
-    if not _claim_job_with_retry(task, claim_url, task_id=task_id):
+    if execution is None and not _claim_job_with_retry(
+        task, claim_url, task_id=task_id
+    ):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
     progress: ProgressReporter | None = None
@@ -916,6 +952,7 @@ def _process_pdf_task(
         with ProgressReporter(
             task_id=task_id,
             progress_url=progress_url,
+            execution=execution,
         ) as progress:
             logger.info("job.pdf_processing.started", extra={"job_id": task_id})
             progress.update("Downloading PDF from S3")
@@ -927,8 +964,10 @@ def _process_pdf_task(
 
                 async def download_with_timer():
                     async with time_it("Downloading PDF from S3", job_id=task_id):
-                        return s3_service.download_file_to_path(
-                            s3_object_key, pdf_temp.name
+                        return await asyncio.to_thread(
+                            s3_service.download_file_to_path,
+                            s3_object_key,
+                            pdf_temp.name,
                         )
 
                 downloaded_size = asyncio.run(download_with_timer())
@@ -954,7 +993,9 @@ def _process_pdf_task(
                         s3_object_key,
                         task_id,
                         status_callback=progress.update,
-                        skip_metadata_extraction=skip_metadata_extraction,
+                        skip_metadata_extraction=(
+                            execution is not None or skip_metadata_extraction
+                        ),
                         repair_revision=repair_revision,
                         mineru_credential_loader=mineru.load,
                         mineru_outcome_callback=mineru.record,
@@ -974,21 +1015,24 @@ def _process_pdf_task(
                 "integration_events": mineru.events(),
             }
 
-            webhook_delivered = _deliver_pdf_webhook(
+            webhook_delivered = _deliver_pdf_result(
                 webhook_url,
                 webhook_payload,
                 task_id=task_id,
+                execution=execution,
+                success=True,
             )
             if not webhook_delivered:
                 webhook_payload["webhook_error"] = "webhook_delivery_failed"
 
             logger.info("job.pdf_processing.completed", extra={"job_id": task_id})
-            _cleanup_pdf_temp(pdf_temp_path)
             return webhook_payload
+
+    except (DeliveryUnavailable, ExecutionLost):
+        raise
 
     except JobCancelled:
         logger.info("job.pdf_processing.cancelled", extra={"job_id": task_id})
-        _cleanup_pdf_temp(pdf_temp_path)
         return {"task_id": task_id, "status": "cancelled"}
 
     except SoftTimeLimitExceeded:
@@ -1005,8 +1049,9 @@ def _process_pdf_task(
             "usage_events": usage_events,
             "integration_events": mineru.events(),
         }
-        _deliver_webhook(webhook_url, timeout_payload, task_id=task_id)
-        _cleanup_pdf_temp(pdf_temp_path)
+        _deliver_pdf_result(
+            webhook_url, timeout_payload, task_id=task_id, execution=execution
+        )
         raise
 
     except Exception as exc:
@@ -1050,9 +1095,27 @@ def _process_pdf_task(
             # independently deliverable instead of replaying that projection.
             failure_payload["usage_events"] = []
             failure_payload["integration_events"] = []
-        _deliver_webhook(webhook_url, failure_payload, task_id=task_id)
-        _cleanup_pdf_temp(pdf_temp_path)
+        _deliver_pdf_result(
+            webhook_url, failure_payload, task_id=task_id, execution=execution
+        )
         raise
+    finally:
+        _cleanup_pdf_temp(pdf_temp_path)
+
+
+def _deliver_pdf_result(
+    url: str,
+    payload: dict[str, Any],
+    *,
+    task_id: str,
+    execution: FencedExecution | None,
+    success: bool = False,
+) -> bool:
+    """Keep the draining legacy transport at the Jobs adapter boundary."""
+    if execution is not None:
+        return execution.complete(payload)
+    sender = _deliver_pdf_webhook if success else _deliver_webhook
+    return sender(url, payload, task_id=task_id)
 
 
 def _cleanup_pdf_temp(path: str | None) -> None:
@@ -1091,8 +1154,27 @@ def upload_and_process_file(
     credential_url: str,
     skip_metadata_extraction: bool = False,
     repair_revision: str | None = None,
+    delivery_protocol: Literal["legacy", "manifest-v1"] = "legacy",
 ) -> dict[str, Any]:
     """Process ordinary ingestion and already-accepted legacy repair jobs."""
+    if delivery_protocol == "manifest-v1":
+        return run_fenced_task(
+            self,
+            callback_url=webhook_url,
+            storage=s3_service,
+            resume_known_effect=can_resume_mineru,
+            work=lambda execution: _process_pdf_task(
+                self,
+                s3_object_key,
+                webhook_url,
+                progress_url,
+                None,
+                credential_url,
+                skip_metadata_extraction=True,
+                repair_revision=repair_revision,
+                execution=execution,
+            ),
+        )
     return _process_pdf_task(
         self,
         s3_object_key,
@@ -1122,12 +1204,54 @@ def ingest_source_and_process(
     credential_url: str,
     filename: str | None = None,
     source_resolve_url: str | None = None,
+    delivery_protocol: Literal["legacy", "manifest-v1"] = "legacy",
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = dict(
+        source=source,
+        staging_object_key=staging_object_key,
+        source_ready_url=source_ready_url,
+        webhook_url=webhook_url,
+        progress_url=progress_url,
+        claim_url=claim_url,
+        credential_url=credential_url,
+        filename=filename,
+        source_resolve_url=source_resolve_url,
+    )
+    if delivery_protocol == "manifest-v1":
+        return run_fenced_task(
+            self,
+            callback_url=webhook_url,
+            storage=s3_service,
+            resume_known_effect=can_resume_mineru,
+            work=lambda execution: _ingest_source(self, **kwargs, execution=execution),
+        )
+    return _ingest_source(self, **kwargs)
+
+
+def _ingest_source(
+    task: Task,
+    *,
+    source: dict[str, Any],
+    staging_object_key: str,
+    source_ready_url: str,
+    webhook_url: str,
+    progress_url: str,
+    claim_url: str,
+    credential_url: str,
+    filename: str | None,
+    source_resolve_url: str | None,
+    execution: FencedExecution | None = None,
 ) -> dict[str, Any]:
     """Materialize a URL/upload source and process its local file in one task."""
-    task_id = str(self.request.id)
-    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
+    task_id = str(task.request.id)
+    if execution is None and not _claim_job_with_retry(
+        task, claim_url, task_id=task_id
+    ):
         return {"task_id": task_id, "status": "duplicate"}
-    _post_source_progress(progress_url, task_id=task_id)
+    if execution is not None:
+        execution.report("downloading")
+    else:
+        _post_source_progress(progress_url, task_id=task_id)
     source_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     source_path.close()
     processing_started = False
@@ -1232,16 +1356,18 @@ def ingest_source_and_process(
                 checksum_sha256=digest,
             )
 
-        ready = _deliver_source_ready(
-            source_ready_url,
-            {
-                "task_id": task_id,
-                "source_sha256": digest,
-                "size_bytes": size,
-                "staging_object_key": staging_object_key,
-                "filename": filename,
-                "attempt": int(getattr(self.request, "retries", 0) or 0) + 1,
-            },
+        source_payload = {
+            "task_id": task_id,
+            "source_sha256": digest,
+            "size_bytes": size,
+            "staging_object_key": staging_object_key,
+            "filename": filename,
+            "attempt": min(3, int(getattr(task.request, "retries", 0) or 0) + 1),
+        }
+        ready = (
+            execution.source_ready(source_payload)
+            if execution is not None
+            else _deliver_source_ready(source_ready_url, source_payload)
         )
         canonical_key = ready.get("canonical_object_key")
         if not isinstance(canonical_key, str) or not canonical_key:
@@ -1251,42 +1377,51 @@ def ingest_source_and_process(
             return {"task_id": task_id, "status": "completed", "reused": True}
         processing_started = True
         result = _process_pdf_task(
-            self,
+            task,
             canonical_key,
             webhook_url,
             progress_url,
             claim_url=None,
             credential_url=credential_url,
             local_pdf_path=source_path.name,
+            execution=execution,
         )
         s3_service.delete_file(staging_object_key)
         return result
+    except (ExecutionLost, DeliveryUnavailable):
+        raise
     except SourceDownloadError as error:
         if error.retryable:
-            raise self.retry(
+            raise task.retry(
                 exc=error,
                 countdown=error.retry_after or 15,
                 max_retries=SOURCE_MAX_ATTEMPTS,
             ) from error
         s3_service.delete_file(staging_object_key)
         fail_url = claim_url.rsplit("/", 1)[0] + "/fail"
-        _deliver_webhook(
-            fail_url,
-            {"task_id": task_id, "error_code": error.error_code},
-            task_id=task_id,
-        )
+        if execution is not None:
+            execution.fail(error.error_code)
+        else:
+            _deliver_webhook(
+                fail_url,
+                {"task_id": task_id, "error_code": error.error_code},
+                task_id=task_id,
+            )
         raise
     except Exception:
         if not processing_started:
             fail_url = claim_url.rsplit("/", 1)[0] + "/fail"
-            _deliver_webhook(
-                fail_url,
-                {
-                    "task_id": task_id,
-                    "error_code": "paper_source_materialization_failed",
-                },
-                task_id=task_id,
-            )
+            if execution is not None:
+                execution.fail("paper_source_materialization_failed")
+            else:
+                _deliver_webhook(
+                    fail_url,
+                    {
+                        "task_id": task_id,
+                        "error_code": "paper_source_materialization_failed",
+                    },
+                    task_id=task_id,
+                )
         raise
     finally:
         _cleanup_source_temp(source_path.name, job_id=task_id)
@@ -1537,6 +1672,171 @@ def generate_document_reflow_task(
         }
         _deliver_webhook(webhook_url, payload, task_id=task_id)
         raise
+
+
+@celery_app.task(
+    bind=True, name="hydrate_document_bibliography", soft_time_limit=60, time_limit=90
+)
+def hydrate_document_bibliography_task(
+    self,
+    callback_url: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_bibliography_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        payload = execution.read_stage_input("/bibliography")
+        execution.complete({**payload, "task_id": execution.job_id})
+        return {"status": "completed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
+
+
+@celery_app.task(bind=True, name="enrich_document", soft_time_limit=180, time_limit=210)
+def enrich_document_task(
+    self,
+    callback_url: str,
+    parser_markdown_s3_key: str,
+    content_digest: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_enrichment_delivery_protocol_invalid")
+    return run_fenced_task(
+        self,
+        callback_url=callback_url,
+        storage=s3_service,
+        work=lambda execution: enrich_document(
+            execution,
+            storage=s3_service,
+            callback_url=callback_url,
+            parser_markdown_s3_key=parser_markdown_s3_key,
+            content_digest=content_digest,
+        ),
+    )
+
+
+@celery_app.task(
+    bind=True, name="index_document_metadata", soft_time_limit=90, time_limit=120
+)
+def index_document_metadata_task(
+    self,
+    callback_url: str,
+    semantic_text: str,
+    source_digest: str,
+    model_revision: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_metadata_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        try:
+            execution.check_cancelled()
+            if (
+                not semantic_text
+                or len(semantic_text) > 24000
+                or hashlib.sha256(semantic_text.encode()).hexdigest() != source_digest
+            ):
+                raise ValueError("document_metadata_source_invalid")
+            model = configured_embedder()
+            if model is None:
+                raise DeliveryUnavailable("document_metadata_inference_unavailable")
+            if model.revision != model_revision:
+                raise ValueError("document_metadata_revision_invalid")
+            vector = model.embed_passages([semantic_text])[0]
+            execution.check_cancelled()
+            execution.complete(
+                {
+                    "task_id": execution.job_id,
+                    "source_digest": source_digest,
+                    "model_revision": model_revision,
+                    "embedding": vector,
+                }
+            )
+            return {"status": "completed"}
+        except (EmbeddingUnavailable, BotoCoreError, ClientError, TimeoutError) as exc:
+            raise DeliveryUnavailable(
+                "document_metadata_dependency_unavailable"
+            ) from exc
+        except (DeliveryUnavailable, ExecutionLost):
+            raise
+        except Exception:
+            execution.fail("document_metadata_index_failed")
+            return {"status": "failed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
+
+
+@celery_app.task(bind=True, name="index_document", soft_time_limit=900, time_limit=960)
+def index_document_task(
+    self,
+    callback_url: str,
+    parser_markdown_s3_key: str,
+    content_digest: str,
+    model_revision: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    """Build a complete independent index without delaying basic readability."""
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_index_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        try:
+            execution.report("indexing")
+            embedder = configured_embedder()
+            if embedder is None:
+                raise DeliveryUnavailable("document_index_inference_unavailable")
+            if embedder.revision != model_revision:
+                raise ValueError("document_index_model_revision_mismatch")
+            raw_content = s3_service.download_bounded_bytes(
+                parser_markdown_s3_key, max_bytes=MAX_PDF_CALLBACK_RAW_CONTENT_BYTES
+            ).decode("utf-8")
+            projection = build_checkpointed_projection(
+                raw_content=raw_content,
+                content_digest=content_digest,
+                job_id=execution.job_id,
+                storage=s3_service,
+                embedder=embedder,
+                tokenizer=load_passage_tokenizer(),
+                check_cancelled=execution.check_cancelled,
+            )
+            execution.complete(
+                {
+                    "task_id": execution.job_id,
+                    "projection": projection.model_dump(mode="json"),
+                }
+            )
+            return {"status": "completed"}
+        except (EmbeddingUnavailable, BotoCoreError, ClientError, TimeoutError) as exc:
+            raise DeliveryUnavailable("document_index_dependency_unavailable") from exc
+        except (DeliveryUnavailable, ExecutionLost):
+            raise
+        except Exception as exc:
+            error_code = (
+                "document_index_limit_exceeded"
+                if isinstance(exc, PassageLimitExceeded)
+                else "document_index_failed"
+            )
+            logger.warning(
+                "job.document_index.failed",
+                extra={
+                    "job_id": execution.job_id,
+                    "error_code": error_code,
+                    "error_class": type(exc).__name__,
+                },
+            )
+            execution.fail(error_code)
+            return {"status": "failed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
 
 
 @celery_app.task(bind=True, name="postprocess_pdf")

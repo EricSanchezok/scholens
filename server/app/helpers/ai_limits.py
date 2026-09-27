@@ -221,6 +221,7 @@ async def release_concurrency(
     lease: AIConcurrencyLease,
     *,
     redis_url: str | None = None,
+    raise_on_error: bool = False,
 ) -> None:
     client = _redis_client(redis_url)
     if client is None or not lease.key:
@@ -233,6 +234,8 @@ async def release_concurrency(
             attributes={"dependency": "redis"},
         )
         logger.exception("dependency.redis.lease_release_failed")
+        if raise_on_error:
+            raise
 
 
 async def release_concurrency_by_id(
@@ -241,6 +244,7 @@ async def release_concurrency_by_id(
     category: str,
     operation_id: str,
     redis_url: str | None = None,
+    raise_on_error: bool = False,
 ) -> None:
     await release_concurrency(
         AIConcurrencyLease(
@@ -248,4 +252,5 @@ async def release_concurrency_by_id(
             member=operation_id,
         ),
         redis_url=redis_url,
+        raise_on_error=raise_on_error,
     )

@@ -1,5 +1,13 @@
 """Shared, service-neutral background-job contracts."""
 
+from scholens_job_contracts.results import (
+    EXECUTION_LEASE_SECONDS,
+    EXECUTION_HEARTBEAT_SECONDS,
+    JobExecutionClaim,
+    JobResultManifest,
+    JobResultReceipt,
+)
+
 from scholens_job_contracts.callbacks import (
     MAX_JOBS_CALLBACK_BODY_BYTES,
     MAX_PDF_CALLBACK_PAGE_OFFSET_MAP_BYTES,
@@ -51,6 +59,11 @@ from scholens_job_contracts.zotero import (
 )
 
 __all__ = [
+    "EXECUTION_LEASE_SECONDS",
+    "EXECUTION_HEARTBEAT_SECONDS",
+    "JobExecutionClaim",
+    "JobResultManifest",
+    "JobResultReceipt",
     "MAX_JOBS_CALLBACK_BODY_BYTES",
     "MAX_PDF_CALLBACK_PAGE_OFFSET_MAP_BYTES",
     "MAX_PDF_CALLBACK_RAW_CONTENT_BYTES",

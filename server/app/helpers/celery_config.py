@@ -12,6 +12,8 @@ DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
 SQS_QUEUE_ENVIRONMENT = {
     "conversation": "SQS_CONVERSATION_QUEUE_URL",
     "document": "SQS_DOCUMENT_QUEUE_URL",
+    "document-index": "SQS_DOCUMENT_INDEX_QUEUE_URL",
+    "document-enrichment": "SQS_DOCUMENT_ENRICHMENT_QUEUE_URL",
     "research": "SQS_RESEARCH_QUEUE_URL",
     "maintenance": "SQS_MAINTENANCE_QUEUE_URL",
 }

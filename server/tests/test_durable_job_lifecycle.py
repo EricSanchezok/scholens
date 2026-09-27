@@ -531,3 +531,30 @@ def test_dispatch_reservation_uses_a_versioned_publishing_lease() -> None:
     assert dispatch.attempt_count == 1
     assert dispatch.available_at > datetime.now(UTC)
     db.flush.assert_called_once()
+
+
+def test_fenced_execution_exhaustion_compensates_without_republishing():
+    job = _job(status=JobStatus.RUNNING)
+    job.payload = {"delivery_protocol": "manifest-v1"}
+    job.attempt_count = 4
+    job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    job.dispatch = JobDispatch(
+        job_id=job.id,
+        task_name="index_document",
+        queue="document",
+        kwargs={},
+        status="published",
+    )
+    db = MagicMock(spec=Session)
+    db.scalars.return_value.all.return_value = [job]
+
+    def compensate(_db, source):
+        source.status = "failed"
+
+    recovery = MagicMock(side_effect=compensate)
+    assert (
+        job_repository.recover_expired_leases(db, limit=10, recover_fenced=recovery)
+        == 1
+    )
+    recovery.assert_called_once_with(db, job)
+    assert job.status == "failed" and job.dispatch.status == "published"

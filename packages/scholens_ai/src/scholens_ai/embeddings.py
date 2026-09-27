@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING, Literal, Protocol, Sequence
 
 import numpy as np
 from tokenizers import Tokenizer
+from scholens_ai.model_artifacts import model_artifact, verify_artifacts
 
 if TYPE_CHECKING:
     import onnxruntime as ort  # type: ignore[import-untyped]
 
 EMBEDDING_DIMENSION = 384
 EMBEDDING_MODEL_ID = "intfloat/multilingual-e5-small"
-EMBEDDING_MODEL_REVISION = "multilingual-e5-small-onnx-o4-v1"
+EMBEDDING_MODEL_REVISION = model_artifact().revision
 EMBEDDING_MAX_TOKENS = 512
 
 
@@ -57,11 +58,14 @@ def semantic_source_digest(text: str) -> str:
 class LocalOnnxTextEmbedder:
     """Run multilingual E5 locally; never sends query or paper text over a network."""
 
-    def __init__(self, model_dir: str | Path | None = None) -> None:
+    def __init__(
+        self, model_dir: str | Path | None = None, *, variant: str | None = None
+    ) -> None:
         configured = model_dir or os.getenv("SCHOLENS_EMBEDDING_MODEL_PATH")
         if not configured:
             raise RuntimeError("SCHOLENS_EMBEDDING_MODEL_PATH is not configured")
         self._model_dir = Path(configured)
+        self._artifact = model_artifact(variant)
         self._tokenizer_path = self._model_dir / "tokenizer.json"
         self._model_path = self._model_dir / "model.onnx"
         if not self._tokenizer_path.is_file() or not self._model_path.is_file():
@@ -69,7 +73,7 @@ class LocalOnnxTextEmbedder:
 
     @property
     def revision(self) -> str:
-        return EMBEDDING_MODEL_REVISION
+        return self._artifact.revision
 
     @cached_property
     def _tokenizer(self) -> Tokenizer:
@@ -87,6 +91,8 @@ class LocalOnnxTextEmbedder:
         # Keep the runtime import lazy so image-build utilities can download the
         # pinned artifacts before the runtime-specific ONNX package is present.
         import onnxruntime as ort
+
+        verify_artifacts(self._model_dir, self._artifact)
 
         options = ort.SessionOptions()
         configured_threads = os.getenv("SCHOLENS_EMBEDDING_THREADS")
@@ -145,13 +151,24 @@ def try_local_embedder() -> LocalOnnxTextEmbedder | None:
         return None
 
 
+@lru_cache(maxsize=1)
+def configured_embedder() -> TextEmbedder | None:
+    """Production clients share a host process; local mode is explicit by absence."""
+    path = os.getenv("SCHOLENS_EMBEDDING_SOCKET")
+    if path:
+        from scholens_ai.inference_client import SocketTextEmbedder
+
+        return SocketTextEmbedder(path)
+    return try_local_embedder()
+
+
 def embed_text(
     text: str,
     *,
     kind: Literal["query", "passage"],
     embedder: TextEmbedder | None = None,
 ) -> list[float] | None:
-    selected = embedder or try_local_embedder()
+    selected = embedder or configured_embedder()
     if selected is None:
         return None
     if kind == "query":

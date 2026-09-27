@@ -10,11 +10,15 @@ from app.bootstrap.execution import get_application_executor
 from app.modules.jobs.application.authentication import VerifiedJobCallback
 from app.modules.jobs.application.contracts import (
     JobIntegrationCredentialResponse,
+    JobExecutionScopeRequest,
     ZoteroJobCredentialResponse,
 )
 from app.shared.application import ApplicationExecutor
-from app.transport.http.internal_v1.authentication import verify_jobs_webhook
-from fastapi import APIRouter, Depends
+from app.transport.http.internal_v1.authentication import (
+    verify_jobs_webhook,
+    parse_callback_model,
+)
+from fastapi import APIRouter, Depends, Request
 
 credentials_router = APIRouter()
 
@@ -25,14 +29,21 @@ credentials_router = APIRouter()
 )
 def get_mineru_credential(
     job_id: UUID,
+    request: Request,
     _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
 ) -> JobIntegrationCredentialResponse:
-    return executor.query(
-        lambda capabilities: capabilities.job_mineru_credential(job_id=job_id)
-    )
+    scope = parse_callback_model(request, JobExecutionScopeRequest)
+
+    def read(capabilities: ApplicationCapabilities) -> JobIntegrationCredentialResponse:
+        capabilities.job_results.require_transport(
+            job_id=job_id, generation=scope.claim_generation
+        )
+        return capabilities.job_mineru_credential(job_id=job_id)
+
+    return executor.query(read)
 
 
 @credentials_router.post(
@@ -41,14 +52,21 @@ def get_mineru_credential(
 )
 def get_zotero_credential(
     job_id: UUID,
+    request: Request,
     _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
 ) -> ZoteroJobCredentialResponse:
-    return executor.query(
-        lambda capabilities: capabilities.job_zotero_credential(job_id=job_id)
-    )
+    scope = parse_callback_model(request, JobExecutionScopeRequest)
+
+    def read(capabilities: ApplicationCapabilities) -> ZoteroJobCredentialResponse:
+        capabilities.job_results.require_transport(
+            job_id=job_id, generation=scope.claim_generation
+        )
+        return capabilities.job_zotero_credential(job_id=job_id)
+
+    return executor.query(read)
 
 
 @credentials_router.post(
@@ -57,11 +75,18 @@ def get_zotero_credential(
 )
 def get_deepseek_credential(
     job_id: UUID,
+    request: Request,
     _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
 ) -> JobIntegrationCredentialResponse:
-    return executor.query(
-        lambda capabilities: capabilities.job_deepseek_credential(job_id=job_id)
-    )
+    scope = parse_callback_model(request, JobExecutionScopeRequest)
+
+    def read(capabilities: ApplicationCapabilities) -> JobIntegrationCredentialResponse:
+        capabilities.job_results.require_transport(
+            job_id=job_id, generation=scope.claim_generation
+        )
+        return capabilities.job_deepseek_credential(job_id=job_id)
+
+    return executor.query(read)

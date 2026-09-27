@@ -32,6 +32,7 @@ dependencies = [
     "scholens-ai",
     "scholens-job-contracts",
     "scholens-runtime-contracts",
+    "scholens-storage",
     "opentelemetry-instrumentation-fastapi>=0.50b0,<1",
     "opentelemetry-instrumentation-httpx>=0.50b0,<1",
     "opentelemetry-instrumentation-requests>=0.50b0,<1",
@@ -44,6 +45,7 @@ scholens-observability = { path = "../packages/scholens_observability" }
 scholens-ai = { path = "../packages/scholens_ai" }
 scholens-job-contracts = { path = "../packages/scholens_job_contracts" }
 scholens-runtime-contracts = { path = "../packages/scholens_runtime_contracts" }
+scholens-storage = { path = "../packages/scholens_storage" }
 
 [project.scripts]
 start = "src:start"

@@ -1,3 +1,5 @@
+from scholens_ai import EMBEDDING_MODEL_REVISION, semantic_source_digest
+from app.modules.papers.application.contracts.search import PaperSearchEmbedding
 from datetime import UTC, datetime
 from typing import Callable
 from unittest.mock import Mock, patch
@@ -260,7 +262,8 @@ def test_composite_candidate_projection_never_hydrates_full_document_fields() ->
     assert "left(scholens.documents.title" in projection_sql
     assert "left(scholens.documents.abstract" in projection_sql
     assert "left(scholens.documents.summary" in projection_sql
-    assert "left(scholens.document_passages.content" in passage_sql
+    assert "left(searchable_passages.content" in passage_sql
+    assert "documents.raw_content" not in passage_sql
 
 
 @pytest.mark.parametrize(
@@ -555,19 +558,15 @@ def test_search_total_and_mode_use_only_accepted_semantic_candidates(
     db.scalars.return_value = lexical_rows
     db.scalar.side_effect = [0, 0, 0]
 
-    class _Embedder:
-        def embed_query(self, _query: str) -> list[float]:
-            return [0.0] * 384
-
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.paper_search.try_local_embedder",
-        lambda: _Embedder(),
-    )
-
     response = PostgresPaperSearch(db).search(
         actor=_actor(),
         request=PaperSearchQuery(
             query="approximate agent topic",
+            embedding=PaperSearchEmbedding(
+                query_digest=semantic_source_digest("approximate agent topic"),
+                model_revision=EMBEDDING_MODEL_REVISION,
+                vector=tuple([1.0] + [0.0] * 383),
+            ),
             collection=LibraryPaperCollection(),
             filters=PaperSearchFilters(),
             sort=PaperSearchSort.RELEVANCE,
@@ -783,10 +782,6 @@ def test_semantic_passage_lane_is_authorization_first(
     db = Mock(spec=Session)
     compiled_sql: list[str] = []
 
-    class _Embedder:
-        def embed_query(self, _query: str) -> list[float]:
-            return [1.0] + [0.0] * 383
-
     def compile_statement(statement: ClauseElement) -> str:
         compiled = " ".join(
             str(statement.compile(dialect=postgresql.dialect())).split()
@@ -800,15 +795,15 @@ def test_semantic_passage_lane_is_authorization_first(
     db.execute.side_effect = lambda statement: (compile_statement(statement), rows)[1]
     db.scalars.side_effect = lambda statement: (compile_statement(statement), rows)[1]
     db.scalar.side_effect = lambda statement: (compile_statement(statement), 0)[1]
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.paper_search.try_local_embedder",
-        lambda: _Embedder(),
-    )
-
     PostgresPaperSearch(db).search(
         actor=_actor(),
         request=PaperSearchQuery(
             query="跨语言的世界模型控制",
+            embedding=PaperSearchEmbedding(
+                query_digest=semantic_source_digest("跨语言的世界模型控制"),
+                model_revision=EMBEDDING_MODEL_REVISION,
+                vector=tuple([1.0] + [0.0] * 383),
+            ),
             collection=LibraryPaperCollection(),
             filters=PaperSearchFilters(),
             sort=PaperSearchSort.RELEVANCE,

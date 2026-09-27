@@ -119,5 +119,6 @@ class FollowUpSuggestionGenerator:
             output_type=FollowUpSuggestionSet,
             instructions=_INSTRUCTIONS,
         )
-        result = await agent.run(build_follow_up_prompt(seed))
+        async with agent:
+            result = await agent.run(build_follow_up_prompt(seed))
         return result.output.as_list()

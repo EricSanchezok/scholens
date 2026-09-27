@@ -15,7 +15,6 @@ from enum import StrEnum
 from typing import Any, Mapping, cast
 
 import httpx
-from openai import AsyncOpenAI
 from pydantic_ai import ModelSettings
 from pydantic_ai.models import Model, infer_model
 
@@ -257,13 +256,14 @@ def _provider(profile: AIProfile, *, api_key: str | None = None) -> Any:
 
         if base_url is None:
             base_url = "https://api.deepseek.com"
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=profile.request_timeout_seconds,
-            max_retries=profile.max_retries,
-        )
-        return DeepSeekProvider(openai_client=client)
+        # Let the provider own its HTTP transport so Agent/Model context exit
+        # closes it on the same event loop, including cancellation. Supplying an
+        # externally constructed SDK client relinquishes that ownership.
+        provider = DeepSeekProvider(api_key=api_key)
+        provider.client.base_url = base_url
+        provider.client.timeout = profile.request_timeout_seconds
+        provider.client.max_retries = profile.max_retries
+        return provider
     if profile.provider == "moonshotai":
         from pydantic_ai.providers.moonshotai import MoonshotAIProvider
 

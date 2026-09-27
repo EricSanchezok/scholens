@@ -1,6 +1,8 @@
 from uuid import UUID, uuid4
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.bootstrap.adapters.citation_provider import CitationProviderResult
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.llm.backend import LLMResponse
@@ -74,14 +76,15 @@ class QueryExecutor:
 
 
 class UnexpectedProvider:
-    def deterministic(self, **_kwargs: object) -> object:
+    async def deterministic(self, **_kwargs: object) -> object:
         raise AssertionError("cached citation must not call a provider")
 
-    def agentic(self, **_kwargs: object) -> object:
+    async def agentic(self, **_kwargs: object) -> object:
         raise AssertionError("cached citation must not call a provider")
 
 
-def test_cached_citation_does_not_call_external_metadata_paths() -> None:
+@pytest.mark.asyncio
+async def test_cached_citation_does_not_call_external_metadata_paths() -> None:
     executor = QueryExecutor(
         CitationFields(
             title="A Paper",
@@ -96,7 +99,7 @@ def test_cached_citation_does_not_call_external_metadata_paths() -> None:
         operation_factory=OperationContextFactory(),
     )
 
-    result = workflow.run(
+    result = await workflow.run(
         actor=actor(),
         operation=operation(),
         document_id=uuid4(),
@@ -108,7 +111,8 @@ def test_cached_citation_does_not_call_external_metadata_paths() -> None:
     assert executor.query_count == 1
 
 
-def test_resolution_combines_provider_patches_into_one_metadata_command() -> None:
+@pytest.mark.asyncio
+async def test_resolution_combines_provider_patches_into_one_metadata_command() -> None:
     class Citations:
         def __init__(self) -> None:
             self.fields = CitationFields(title="A Paper", authors=["A. Author"])
@@ -151,7 +155,7 @@ def test_resolution_combines_provider_patches_into_one_metadata_command() -> Non
             return callback(self.capabilities)  # type: ignore[operator]
 
     class Provider:
-        def deterministic(self, **_kwargs: object) -> CitationProviderResult:
+        async def deterministic(self, **_kwargs: object) -> CitationProviderResult:
             return CitationProviderResult(
                 patch=CitationMetadataPatch(
                     doi="10.1000/example",
@@ -160,7 +164,7 @@ def test_resolution_combines_provider_patches_into_one_metadata_command() -> Non
                 filled_fields={"doi": "10.1000/example", "journal": "Journal"},
             )
 
-        def agentic(self, **_kwargs: object) -> CitationProviderResult:
+        async def agentic(self, **_kwargs: object) -> CitationProviderResult:
             return CitationProviderResult(
                 patch=CitationMetadataPatch(publish_date="2026-08-24"),
                 filled_fields={"publish_date": "2026-08-24"},
@@ -174,7 +178,7 @@ def test_resolution_combines_provider_patches_into_one_metadata_command() -> Non
         operation_factory=OperationContextFactory(),
     )
 
-    result = workflow.run(
+    result = await workflow.run(
         actor=actor(),
         operation=operation(),
         document_id=uuid4(),
@@ -205,7 +209,8 @@ def test_citation_is_one_shared_public_paper_capability() -> None:
     )
 
 
-def test_http_citation_delegates_to_short_transaction_workflow() -> None:
+@pytest.mark.asyncio
+async def test_http_citation_delegates_to_short_transaction_workflow() -> None:
     document_id = uuid4()
     request_operation = operation()
     expected = CitationResult(
@@ -217,7 +222,7 @@ def test_http_citation_delegates_to_short_transaction_workflow() -> None:
     )
 
     class Workflow:
-        def run(
+        async def run(
             self,
             *,
             actor: Actor,
@@ -233,7 +238,7 @@ def test_http_citation_delegates_to_short_transaction_workflow() -> None:
             assert str(document_id) == expected.document_id
             return expected
 
-    result = get_document_citation(
+    result = await get_document_citation(
         document_id=document_id,
         style="APA",
         project_id=None,
@@ -245,9 +250,10 @@ def test_http_citation_delegates_to_short_transaction_workflow() -> None:
     assert result == expected
 
 
-def test_citation_recovery_stops_when_no_connector_tools_are_available() -> None:
+@pytest.mark.asyncio
+async def test_citation_recovery_stops_when_no_connector_tools_are_available() -> None:
     class Resolver:
-        def resolve_sync(self, **_kwargs: object) -> ResolvedConnectorToolSet:
+        async def resolve(self, **_kwargs: object) -> ResolvedConnectorToolSet:
             return ResolvedConnectorToolSet()
 
     recovery = object.__new__(MetadataRecoveryAgent)
@@ -255,7 +261,7 @@ def test_citation_recovery_stops_when_no_connector_tools_are_available() -> None
     generate = MagicMock(side_effect=AssertionError("LLM must not guess metadata"))
     recovery.generate_content = generate
 
-    result = recovery._run_research_loop(
+    result = await recovery._run_research_loop(
         actor(),
         CitationFields(title="A Paper", authors=["A. Author"]),
         ["journal"],
@@ -266,9 +272,10 @@ def test_citation_recovery_stops_when_no_connector_tools_are_available() -> None
     generate.assert_not_called()
 
 
-def test_citation_recovery_rejects_submission_without_remote_results() -> None:
+@pytest.mark.asyncio
+async def test_citation_recovery_rejects_submission_without_remote_results() -> None:
     class Resolver:
-        def resolve_sync(self, **_kwargs: object) -> ResolvedConnectorToolSet:
+        async def resolve(self, **_kwargs: object) -> ResolvedConnectorToolSet:
             return ResolvedConnectorToolSet(
                 declarations=(
                     {
@@ -294,7 +301,7 @@ def test_citation_recovery_rejects_submission_without_remote_results() -> None:
         )
     )
 
-    result = recovery._run_research_loop(
+    result = await recovery._run_research_loop(
         actor(),
         CitationFields(title="A Paper", authors=["A. Author"]),
         ["journal"],

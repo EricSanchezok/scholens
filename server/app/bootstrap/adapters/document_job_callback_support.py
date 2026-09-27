@@ -16,6 +16,9 @@ from app.modules.operation_journal.domain import (
 SAFE_PDF_FAILURE_CODES = frozenset(
     {
         "pdf_content_insufficient",
+        "job_execution_retry_exhausted",
+        "provider_outcome_unknown",
+        "job_owner_unavailable",
         "pdf_processing_timeout",
         "mineru_credential_required",
         "mineru_credential_invalid",
@@ -60,12 +63,18 @@ def complete_pdf_job(
     job_id: uuid.UUID,
     result: PDFProcessingResult,
     persisted_result: dict[str, JsonValue] | None = None,
+    compact: bool = False,
 ) -> bool:
     _, changed = job_repository.complete(
         db,
         job_id=job_id,
         result=(
-            result.model_dump(mode="json")
+            result.model_dump(
+                mode="json",
+                exclude={"raw_content", "page_offset_map", "metadata"}
+                if compact
+                else None,
+            )
             if persisted_result is None
             else persisted_result
         ),

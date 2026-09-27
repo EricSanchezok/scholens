@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    text,
     UUID,
     BigInteger,
     CheckConstraint,
@@ -47,6 +48,11 @@ class DurableJob(Base):
         Index("ix_jobs_requester_activity", "requested_by_id", "created_at"),
         Index("ix_jobs_project_status", "project_id", "status"),
         Index("ix_jobs_document_status", "document_id", "status"),
+        Index(
+            "ix_jobs_live_dispatch",
+            "id",
+            postgresql_where=text("status IN ('pending', 'running')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -139,6 +145,7 @@ class JobDispatch(Base):
             "status IN ('pending', 'publishing', 'published')",
             name="ck_job_dispatches_status",
         ),
+        Index("ix_job_dispatches_queue_status", "queue", "status", "available_at"),
         Index(
             "ix_job_dispatches_pending",
             "status",
@@ -192,6 +199,107 @@ class JobDispatch(Base):
         "DurableJob",
         back_populates="dispatch",
     )
+
+
+class JobDispatchCursor(Base):
+    """Durable requester rotation; independent of message and execution identity."""
+
+    __tablename__ = "job_dispatch_cursors"
+    queue: Mapped[str] = mapped_column(String(80), primary_key=True)
+    last_requester_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0"
+    )
+
+
+class JobExecution(Base):
+    """Execution fence for staged jobs; absent for accepted legacy deliveries."""
+
+    __tablename__ = "job_executions"
+    __table_args__ = (
+        CheckConstraint("claim_generation >= 0", name="ck_job_execution_generation"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+
+
+class JobResultInbox(Base):
+    """Durable acceptance, separate from the bounded application lease."""
+
+    __tablename__ = "job_result_inbox"
+    __table_args__ = (
+        CheckConstraint("claim_generation > 0", name="ck_job_result_generation"),
+        CheckConstraint(
+            "status IN ('pending', 'applying', 'applied', 'rejected')",
+            name="ck_job_result_status",
+        ),
+        CheckConstraint(
+            "(apply_claim_id IS NULL) = (apply_lease_expires_at IS NULL)",
+            name="ck_job_result_lease_pair",
+        ),
+        Index("ix_job_result_pending", "status", "available_at"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    manifest: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    delivery_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    apply_claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    apply_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class JobResultEffect(Base):
+    """Recoverable, idempotent external effects after a result transaction."""
+
+    __tablename__ = "job_result_effects"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'applying', 'applied')", name="ck_job_effect_status"
+        ),
+        CheckConstraint(
+            "(claim_id IS NULL) = (lease_expires_at IS NULL)",
+            name="ck_job_effect_lease_pair",
+        ),
+        Index("ix_job_effect_pending", "status", "available_at"),
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payload: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80))
 
 
 class JobsWebhookNonce(Base):

@@ -83,7 +83,7 @@ def test_pdf_postprocess_uploads_bounded_passage_embedding_artifact() -> None:
 
     with (
         patch("src.tasks._claim_job", return_value=True),
-        patch("src.tasks.try_local_embedder", return_value=_Embedder()),
+        patch("src.tasks.configured_embedder", return_value=_Embedder()),
         patch(
             "src.tasks.s3_service.download_file_to_bytes",
             return_value=source.encode(),

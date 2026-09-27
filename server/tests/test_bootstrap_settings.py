@@ -144,3 +144,16 @@ def test_production_cloudflare_trust_requires_a_valid_proxy_cidr(
             trust_cloudflare_client_ip=True,
             trusted_proxy_cidr=trusted_proxy_cidr,
         )
+
+
+def test_staged_document_producers_require_the_result_consumer() -> None:
+    with pytest.raises(ValidationError, match="JOB_RESULT_INBOX_ENABLED"):
+        AppSettings(
+            _env_file=None,
+            document_pipeline_enabled=True,
+            job_result_inbox_enabled=False,
+        )
+    enabled = AppSettings(
+        _env_file=None, document_pipeline_enabled=True, job_result_inbox_enabled=True
+    )
+    assert enabled.document_pipeline_enabled

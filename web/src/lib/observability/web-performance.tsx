@@ -22,6 +22,7 @@ type NetworkInformation = {
 
 type PendingNavigation = {
   feedbackReported: boolean;
+  primaryReported: boolean;
   fromRoute: WebPerformanceRouteGroup;
   startedAt: number;
   toPathname: string;
@@ -29,8 +30,10 @@ type PendingNavigation = {
 };
 
 let pendingNavigation: PendingNavigation | undefined;
-let completedNavigation:
-  Pick<PendingNavigation, "fromRoute" | "startedAt" | "toRoute"> | undefined;
+let completedNavigation: PendingNavigation | undefined;
+const initialPathname =
+  typeof window === "undefined" ? undefined : window.location.pathname;
+let hardPrimaryReported = false;
 const navigationListeners = new Set<() => void>();
 
 function notifyNavigationListeners() {
@@ -166,6 +169,7 @@ export function beginRouteNavigation(href: string) {
   }
   pendingNavigation = {
     feedbackReported: false,
+    primaryReported: false,
     fromRoute: performanceRouteGroup(window.location.pathname),
     startedAt: performance.now(),
     toPathname: target.pathname,
@@ -214,10 +218,18 @@ export function usePrimaryContentReady(ready: boolean) {
   React.useEffect(() => {
     if (!ready || reportedPathname.current === pathname) return;
     const toRoute = performanceRouteGroup(pathname);
+    // Match the exact destination, never another paper/project in the same
+    // coarse route group. Routes without an observed start have no duration.
     const navigation =
-      completedNavigation?.toRoute === toRoute
+      completedNavigation?.toPathname === pathname
         ? completedNavigation
-        : undefined;
+        : pendingNavigation?.toPathname === pathname
+          ? pendingNavigation
+          : undefined;
+    if (navigation?.primaryReported) return;
+    if (!navigation && (pathname !== initialPathname || hardPrimaryReported)) {
+      return;
+    }
     reportWebPerformance({
       from_route: navigation?.fromRoute,
       metric: "primary_content",
@@ -225,14 +237,17 @@ export function usePrimaryContentReady(ready: boolean) {
       to_route: toRoute,
       value: performance.now() - (navigation?.startedAt ?? 0),
     });
+    if (navigation) navigation.primaryReported = true;
+    else hardPrimaryReported = true;
     reportedPathname.current = pathname;
   }, [pathname, ready]);
 }
 
 export function reportCommittedRoute(pathname: string) {
+  if (completedNavigation?.toPathname !== pathname)
+    completedNavigation = undefined;
   const navigation = pendingNavigation;
-  const toRoute = performanceRouteGroup(pathname);
-  if (!navigation || navigation.toRoute !== toRoute) return;
+  if (!navigation || navigation.toPathname !== pathname) return;
   reportWebPerformance({
     from_route: navigation.fromRoute,
     metric: "route_commit",

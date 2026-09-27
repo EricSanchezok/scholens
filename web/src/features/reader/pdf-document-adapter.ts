@@ -9,9 +9,11 @@ import {
   type ReaderSearchMatch,
 } from "./reader-search";
 import { clientEnvironment } from "@/lib/env/client";
+import { pdfBitmapScale, retainPdfPage } from "./pdf-page-resources";
 
 let workerConfigured = false;
 const activeCanvasRenders = new WeakMap<HTMLCanvasElement, Promise<void>>();
+const canvasOwners = new WeakMap<HTMLCanvasElement, symbol>();
 const pdfjsRelease = clientEnvironment.NEXT_PUBLIC_RELEASE_SHA;
 export const PDFJS_WASM_URL = `/pdfjs/wasm/${encodeURIComponent(pdfjsRelease)}/`;
 const requiredCodecAssets = [
@@ -121,7 +123,21 @@ async function ensurePdfJsCodecAssets(pdfjs: { version: string }) {
   }
 }
 
+export type PdfSearchResult = {
+  matches: ReaderSearchMatch[];
+  limited: boolean;
+};
+const SEARCH_MATCH_LIMIT = 1_000;
+const SEARCH_CACHE_BYTES = 2 * 1024 * 1024;
+
 export class PdfDocumentAdapter {
+  private readonly searchCache = new Map<
+    number,
+    { items: string[]; bytes: number }
+  >();
+  private searchCacheBytes = 0;
+  private searchController: AbortController | undefined;
+
   private constructor(
     private readonly document: PDFDocumentProxy,
     private readonly loadingTask: PDFDocumentLoadingTask,
@@ -172,27 +188,101 @@ export class PdfDocumentAdapter {
     return (await this.document.getPageIndex(reference)) + 1;
   }
 
-  async search(query: string): Promise<ReaderSearchMatch[]> {
-    if (!query.trim()) return [];
-    const results: ReaderSearchMatch[] = [];
-    for (let pageNumber = 1; pageNumber <= this.pageCount; pageNumber += 1) {
-      const page = await this.getPage(pageNumber);
-      const content = await page.getTextContent();
-      results.push(
-        ...findReaderPageSearchMatches({
-          ordinalOffset: results.length,
-          pageNumber,
-          query,
-          textItems: content.items.map((item) =>
-            "str" in item ? item.str : "",
-          ),
-        }),
-      );
+  private async searchText(pageNumber: number, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const cached = this.searchCache.get(pageNumber);
+    if (cached) {
+      this.searchCache.delete(pageNumber);
+      this.searchCache.set(pageNumber, cached);
+      return cached.items;
     }
-    return results;
+    const page = await this.getPage(pageNumber);
+    signal.throwIfAborted();
+    const release = retainPdfPage(page);
+    const reader = page.streamTextContent().getReader();
+    const cancel = () => {
+      void reader.cancel().catch(() => undefined);
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+    const items: string[] = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        signal.throwIfAborted();
+        const { value, done } = await reader.read();
+        signal.throwIfAborted();
+        if (done) break;
+        for (const item of value.items) {
+          const text = "str" in item ? item.str : "";
+          bytes += text.length * 2 + 64;
+          if (bytes > 8 * 1024 * 1024) throw new Error("pdf_search_page_limit");
+          items.push(text);
+        }
+      }
+      if (bytes <= SEARCH_CACHE_BYTES) {
+        while (
+          this.searchCache.size >= 8 ||
+          this.searchCacheBytes + bytes > SEARCH_CACHE_BYTES
+        ) {
+          const oldest = this.searchCache.keys().next().value;
+          if (oldest === undefined) break;
+          this.searchCacheBytes -= this.searchCache.get(oldest)!.bytes;
+          this.searchCache.delete(oldest);
+        }
+        this.searchCache.set(pageNumber, { items, bytes });
+        this.searchCacheBytes += bytes;
+      }
+      return items;
+    } finally {
+      signal.removeEventListener("abort", cancel);
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+      release();
+    }
+  }
+
+  async search(query: string, signal?: AbortSignal): Promise<PdfSearchResult> {
+    this.searchController?.abort();
+    const controller = new AbortController();
+    this.searchController = controller;
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) controller.abort();
+    const matches: ReaderSearchMatch[] = [];
+    try {
+      if (!query.trim()) return { matches, limited: false };
+      for (let pageNumber = 1; pageNumber <= this.pageCount; pageNumber += 1) {
+        controller.signal.throwIfAborted();
+        const textItems = await this.searchText(pageNumber, controller.signal);
+        matches.push(
+          ...findReaderPageSearchMatches({
+            ordinalOffset: matches.length,
+            maxMatches: SEARCH_MATCH_LIMIT + 1 - matches.length,
+            pageNumber,
+            query,
+            textItems,
+          }),
+        );
+        if (matches.length > SEARCH_MATCH_LIMIT)
+          return {
+            matches: matches.slice(0, SEARCH_MATCH_LIMIT),
+            limited: true,
+          };
+        // Yield between pages so typing/cancellation and input feedback can run.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      }
+      return { matches, limited: false };
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      if (this.searchController === controller)
+        this.searchController = undefined;
+    }
   }
 
   destroy() {
+    this.searchController?.abort();
+    this.searchCache.clear();
+    this.searchCacheBytes = 0;
     return this.loadingTask.destroy();
   }
 }
@@ -221,6 +311,9 @@ export function renderPdfPage({
   textLayer: HTMLDivElement;
 }) {
   let cancelled = false;
+  const owner = Symbol("pdf-render");
+  canvasOwners.set(canvas, owner);
+  const releasePage = retainPdfPage(page);
   let cancelCanvasRender: (() => void) | undefined;
   let cancelTextRender: (() => void) | undefined;
 
@@ -236,7 +329,11 @@ export function renderPdfPage({
     await activeCanvasRenders.get(canvas);
     assertActive();
     const viewport = page.getViewport({ scale });
-    const outputScale = window.devicePixelRatio || 1;
+    const outputScale = pdfBitmapScale(
+      viewport.width,
+      viewport.height,
+      window.devicePixelRatio || 1,
+    );
     const context = canvas.getContext("2d", { alpha: false });
     if (!context) throw new Error("Canvas 2D context is unavailable");
 
@@ -396,6 +493,20 @@ export function renderPdfPage({
       cancelled = true;
       cancelCanvasRender?.();
       cancelTextRender?.();
+      return Promise.allSettled([
+        promise,
+        activeCanvasRenders.get(canvas),
+      ]).then(() => {
+        releasePage();
+        // A new zoom/render may already own this same canvas.
+        if (canvasOwners.get(canvas) !== owner) return false;
+        canvasOwners.delete(canvas);
+        canvas.width = 0;
+        canvas.height = 0;
+        textLayer.replaceChildren();
+        annotationLayer.replaceChildren();
+        return true;
+      });
     },
     promise,
   };

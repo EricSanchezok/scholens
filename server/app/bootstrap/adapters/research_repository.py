@@ -1203,31 +1203,6 @@ class ResearchRepository:
                 kind=FailureKind.INVALID_ARGUMENT,
             )
 
-    def has_assistant_annotation(
-        self,
-        db: Session,
-        *,
-        document_id: uuid.UUID,
-        user_id: int,
-    ) -> bool:
-        return (
-            db.scalar(
-                select(ResearchItem.id)
-                .join(
-                    AnnotationThread,
-                    AnnotationThread.research_item_id == ResearchItem.id,
-                )
-                .where(
-                    ResearchItem.target_document_id == document_id,
-                    ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
-                    ResearchItem.created_by_id == user_id,
-                    AnnotationThread.role == RoleType.ASSISTANT.value,
-                )
-                .limit(1)
-            )
-            is not None
-        )
-
     def create_citation(
         self,
         db: Session,

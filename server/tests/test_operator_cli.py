@@ -110,6 +110,8 @@ def test_production_doctor_checks_predefined_sqs_queues(
 ) -> None:
     queue_urls = {
         "SQS_CONVERSATION_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/conversation",
+        "SQS_DOCUMENT_INDEX_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/document-index",
+        "SQS_DOCUMENT_ENRICHMENT_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/document-enrichment",
         "SQS_DOCUMENT_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/document",
         "SQS_RESEARCH_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/research",
         "SQS_MAINTENANCE_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/maintenance",
@@ -128,9 +130,16 @@ def test_production_doctor_checks_predefined_sqs_queues(
     assert result == {
         "reachable": True,
         "transport": "sqs",
-        "queues": ["conversation", "document", "maintenance", "research"],
+        "queues": [
+            "conversation",
+            "document",
+            "document-enrichment",
+            "document-index",
+            "maintenance",
+            "research",
+        ],
     }
-    assert client.get_queue_attributes.call_count == 4
+    assert client.get_queue_attributes.call_count == 6
     assert {
         call.kwargs["QueueUrl"] for call in client.get_queue_attributes.call_args_list
     } == set(queue_urls.values())
@@ -514,3 +523,72 @@ def test_every_sqladmin_business_view_is_read_only() -> None:
     assert all(view.can_create is False for view in views)
     assert all(view.can_edit is False for view in views)
     assert all(view.can_delete is False for view in views)
+
+
+def test_metadata_repair_computes_between_closed_transactions(monkeypatch):
+    from uuid import uuid4
+    from app.operator_cli import maintenance
+    from app.modules.papers.application.maintenance import (
+        SearchEmbeddingCandidate,
+        SearchEmbeddingSnapshot,
+        SearchEmbeddingBackfillResult,
+    )
+    from scholens_ai import EMBEDDING_MODEL_REVISION
+
+    events = []
+    capabilities = MagicMock()
+    capabilities.search_embedding_maintenance.candidates.return_value = (
+        SearchEmbeddingSnapshot(
+            1, (SearchEmbeddingCandidate(uuid4(), "a" * 64, "title"),), None
+        )
+    )
+    capabilities.search_embedding_maintenance.apply_embeddings.return_value = (
+        SearchEmbeddingBackfillResult(1, 0)
+    )
+    executor = MagicMock()
+
+    def query(callback):
+        events.append("query_open")
+        result = callback(capabilities)
+        events.append("query_closed")
+        return result
+
+    def command(callback):
+        assert events[-1] == "inference"
+        events.append("write")
+        return callback(capabilities)
+
+    executor.query.side_effect = query
+    executor.command.side_effect = command
+    model = MagicMock(revision=EMBEDDING_MODEL_REVISION)
+
+    def embed(inputs):
+        assert events[-1] == "query_closed"
+        events.append("inference")
+        assert inputs == ["title"]
+        return [[1.0] + [0.0] * 383]
+
+    model.embed_passages.side_effect = embed
+    monkeypatch.setattr(maintenance, "executor", lambda: executor)
+    monkeypatch.setattr(maintenance, "configured_embedder", lambda: model)
+    monkeypatch.setattr(maintenance, "load_user", lambda _email: MagicMock(id=1))
+    monkeypatch.setattr(
+        maintenance, "current_admin", lambda _capabilities, _id: MagicMock()
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "maintenance",
+            "backfill-search-embeddings",
+            "--actor-email",
+            "admin@example.com",
+            "--batch-size",
+            "1",
+            "--apply",
+            "--yes",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert events == ["query_open", "query_closed", "inference", "write"]
+    assert json.loads(result.output)["indexed_documents"] == 1

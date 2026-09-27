@@ -565,6 +565,35 @@ updates, so previewing a card or updating a comment does not clear and repaint
 the document. The feature does not imply WebSocket delivery,
 mentions, notifications, unread counts, reactions, or recursive replies.
 
+### Bounded PDF resources and search
+
+The Reader feature owns viewport resource lifetimes. Pages retain their measured
+CSS geometry after eviction; leaving the one-viewport overscan cancels rendering,
+waits for settlement, then releases the bitmap, text and PDF link layers. A newer
+render of the same canvas cannot be cleared by an older cleanup. PDF.js page
+resources have shared leases across viewport, thumbnail and search consumers.
+The last consumer requests PDF.js cleanup. Each bitmap is capped at four million
+pixels without changing CSS geometry or text-selection coordinates. The thumbnail
+rail also evicts canvases outside its overscan instead of accumulating every
+visited page. An active native cross-page selection pins already rendered pages
+until the gesture and selection commit finish; committed normalized overlays can
+be reconstructed after eviction.
+
+PDF search cancels the previous PDF worker text stream when the query changes or
+the document closes. Its text cache retains at most eight pages and 2 MiB of
+estimated string/item storage; one page above 8 MiB fails visibly. Text position
+lookup stores fragment spans instead of an object per character, including correct
+original offsets when Unicode lowercasing changes length. Matching yields between
+pages and stops after 1,000 results plus one truncation witness. The toolbar shows
+`1000+` with localized refinement guidance; pending and failed searches never
+masquerade as an empty result. Search does not send paper text to telemetry.
+
+The existing Figma Reader hierarchy and selection intent are retained. The finite
+search states are runtime additions represented by `ReaderToolbar/SearchPending`,
+`SearchFailed` and `SearchLimited`, alongside `SearchOpen`; there is no new route
+or control. Resource ownership and cancellation have direct unit coverage;
+continuous scrolling and cross-page selection are browser acceptance boundaries.
+
 ## Contextual conversations
 
 Reader in personal context lists only conversations whose scope is the current
@@ -766,3 +795,28 @@ scroll, zoom, search traversal, text selection, and streamed translations are
 not decorative motion targets. Smooth programmatic outline navigation becomes
 direct in Reduced mode; spatial panel/layout animation and perpetual loading
 also stop while page, selection, draft, annotation, and URL state remain intact.
+
+## Background processing status
+
+The Reader owns a fixed-height disclosure below its toolbar. Readability stays
+independent of search indexing, AI information, and citation details. The
+TanStack Query status endpoint polls every three seconds while work is active,
+pauses in the background, and refreshes on focus. Completion invalidates the
+paper metadata and annotation queries. The PDF stays mounted throughout.
+
+The disclosed state is requester-scoped. Failed stages retry independently;
+AI retry explicitly accepts a new provider charge, while a missing DeepSeek
+connection opens the existing Connections surface. Changed source/version or
+ambiguous network completion refreshes state and preserves the PDF. Unknown
+failures include the request ID. Unavailable status has its own refresh action.
+
+This extends the existing Reader status hierarchy with a runtime disclosure;
+no token, layout system, selection behavior, or decorative motion changes. The
+canonical Reader frames above retain their reading intent. Runtime acceptance
+is `reader-processingstatus--working`, `--failed`, `--retrying`, `--retry-failed`,
+`--ready`, `--loading`, `--unavailable`, and `--narrow-chinese`. Stories exercise
+keyboard disclosure, charge-aware retry, disabled pending actions and reconnect,
+plus the shared Light/Dark locale controls. The Reader browser test verifies
+that a retry sends the exact stage/Job and charge acknowledgement while the PDF
+remains visible. Physical-device acceptance remains separate from browser
+emulation; no physical-device measurement is claimed by this change.

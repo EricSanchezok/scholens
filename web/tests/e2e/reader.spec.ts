@@ -4,6 +4,7 @@ import { mockBillingUsage } from "./billing-fixture";
 import { focusThroughTab } from "./focus";
 import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 import path from "node:path";
+import { attachReaderPerformanceProbe } from "./reader-performance-probe";
 
 import { libraryPapers } from "../../src/features/library/api/fixtures";
 import {
@@ -338,6 +339,26 @@ async function mockReader(page: Page) {
       route.fulfill({
         contentType: "application/json",
         body: JSON.stringify(paperDocument),
+      }),
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: paperDocument.document_id,
+          readable: true,
+          stages: [
+            { stage: "index", status: "completed", can_retry: false },
+            { stage: "enrichment", status: "not_requested", can_retry: false },
+            {
+              stage: "bibliography",
+              status: "not_requested",
+              can_retry: false,
+            },
+          ],
+        }),
       }),
   );
   await page.route(
@@ -1154,6 +1175,103 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await expect(page).toHaveTitle("Scholens");
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("bounds PDF bitmap residency across repeated long-document navigation", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const performanceProbe =
+    process.env.SCHOLENS_READER_PERFORMANCE === "1"
+      ? await attachReaderPerformanceProbe(page)
+      : undefined;
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  await waitForPdfTextLayer(page, 1);
+  const pageCount = await page.locator("[data-pdf-page-number]").count();
+  const firstHeight = await page
+    .locator('[data-pdf-page-number="1"]')
+    .evaluate((element) => element.getBoundingClientRect().height);
+  const destinations = Array.from(
+    new Set(
+      Array.from(
+        { length: 12 },
+        (_, index) => 1 + Math.floor((index * (pageCount - 1)) / 11),
+      ),
+    ),
+  );
+  destinations.push(1);
+  let peakPixels = 0;
+  let peakResidentPages = 0;
+  for (let cycle = 0; cycle < (performanceProbe ? 3 : 1); cycle++) {
+    for (const number of destinations) {
+      await page
+        .locator(`[data-pdf-page-number="${number}"]`)
+        .scrollIntoViewIfNeeded();
+      await waitForPdfTextLayer(page, number);
+      await expect
+        .poll(async () =>
+          page
+            .locator("[data-pdf-page-number] > canvas")
+            .evaluateAll(
+              (elements) =>
+                elements.filter(
+                  (element) => (element as HTMLCanvasElement).width > 0,
+                ).length,
+            ),
+        )
+        .toBeLessThanOrEqual(8);
+      const pixels = await page
+        .locator("[data-pdf-page-number] > canvas")
+        .evaluateAll((elements) =>
+          elements.map((element) => {
+            const canvas = element as HTMLCanvasElement;
+            return canvas.width * canvas.height;
+          }),
+        );
+      expect(Math.max(...pixels)).toBeLessThanOrEqual(4_000_000);
+      peakPixels = Math.max(
+        peakPixels,
+        pixels.reduce((sum, value) => sum + value, 0),
+      );
+      peakResidentPages = Math.max(
+        peakResidentPages,
+        pixels.filter(Boolean).length,
+      );
+      expect(peakPixels).toBeLessThanOrEqual(32_000_000);
+    }
+    if (performanceProbe) {
+      await page
+        .getByRole("button", { name: "Search PDF", exact: true })
+        .click();
+      const search = page.getByRole("textbox", { name: "Search PDF" });
+      await search.pressSequentially("reasoning");
+      await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
+      await page.getByRole("button", { name: "Close PDF search" }).click();
+      await page.locator('[data-pdf-page-number="1"]').scrollIntoViewIfNeeded();
+      await waitForPdfTextLayer(page, 1);
+      await performanceProbe.checkpoint();
+    }
+  }
+  expect(
+    await page
+      .locator('[data-pdf-page-number="1"]')
+      .evaluate((element) => element.getBoundingClientRect().height),
+  ).toBe(firstHeight);
+  test.info().annotations.push({
+    type: "bounded-pdf-residency",
+    description: JSON.stringify({ pageCount, peakResidentPages, peakPixels }),
+  });
+  if (performanceProbe) {
+    const result = await performanceProbe.finish();
+    await test.info().attach("reader-performance.json", {
+      body: JSON.stringify(result),
+      contentType: "application/json",
+    });
+    test.info().annotations.push({
+      type: "reader-performance",
+      description: JSON.stringify(result),
+    });
+  }
 });
 
 test("keeps the PDF zoom percentage synchronized with the rendered page", async ({
@@ -2406,3 +2524,71 @@ for (const width of [320, 390]) {
     expect(results.violations).toEqual([]);
   });
 }
+
+test("retries only the failed stage while the PDF remains readable", async ({
+  page,
+}) => {
+  const jobId = "90000000-0000-4000-8000-000000000001";
+  let retried = false;
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: paperDocument.document_id,
+          readable: true,
+          stages: [
+            { stage: "index", status: "completed", can_retry: false },
+            {
+              stage: "enrichment",
+              status: retried ? "pending" : "failed",
+              job_id: jobId,
+              can_retry: !retried,
+            },
+            { stage: "bibliography", status: "completed", can_retry: false },
+          ],
+        }),
+      }),
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing/retry`,
+    async (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        stage: "enrichment",
+        job_id: jobId,
+        acknowledge_provider_charge: true,
+      });
+      retried = true;
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          stage: "enrichment",
+          status: "pending",
+          job_id: jobId,
+          can_retry: false,
+        }),
+      });
+    },
+  );
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  await expect(
+    page.locator("[data-pdf-page-number] > canvas").first(),
+  ).toBeVisible();
+  const processingSummary = page.locator("summary").filter({
+    hasText: "Ready to read · Some background work needs attention",
+  });
+  await processingSummary.focus();
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("button", { name: "Retry AI with provider charges" })
+    .click();
+  await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry AI with provider charges" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator("[data-pdf-page-number] > canvas").first(),
+  ).toBeVisible();
+});

@@ -22,6 +22,8 @@ callback_base_url()
 LOCAL_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
 QUEUE_ENVIRONMENT = {
     JobQueue.DOCUMENT: "SQS_DOCUMENT_QUEUE_URL",
+    JobQueue.DOCUMENT_INDEX: "SQS_DOCUMENT_INDEX_QUEUE_URL",
+    JobQueue.DOCUMENT_ENRICHMENT: "SQS_DOCUMENT_ENRICHMENT_QUEUE_URL",
     JobQueue.RESEARCH: "SQS_RESEARCH_QUEUE_URL",
     JobQueue.MAINTENANCE: "SQS_MAINTENANCE_QUEUE_URL",
 }
@@ -81,6 +83,10 @@ celery_app.conf.update(
         "ingest_source_and_process": {"queue": JobQueue.DOCUMENT},
         PDF_TEXT_REPAIR_TASK_NAME: {"queue": JobQueue.DOCUMENT},
         "postprocess_pdf": {"queue": JobQueue.DOCUMENT},
+        "index_document": {"queue": JobQueue.DOCUMENT_INDEX},
+        "index_document_metadata": {"queue": JobQueue.DOCUMENT_INDEX},
+        "enrich_document": {"queue": JobQueue.DOCUMENT_ENRICHMENT},
+        "hydrate_document_bibliography": {"queue": JobQueue.DOCUMENT_ENRICHMENT},
         "generate_document_reflow": {"queue": JobQueue.DOCUMENT},
         "generate_audio_overview": {"queue": JobQueue.RESEARCH},
         "process_data_table": {"queue": JobQueue.RESEARCH},
@@ -94,7 +100,23 @@ celery_app.conf.update(
     broker_transport_options=_transport_options(BROKER_URL),
     worker_prefetch_multiplier=1,
     task_acks_late=True,
-    reject_on_worker_lost=True,
+    task_reject_on_worker_lost=False,
+    task_annotations={
+        "*": {"resultrepr_maxsize": 0},
+        **{
+            name: {"reject_on_worker_lost": True}
+            for name in (
+                "upload_and_process_file",
+                "ingest_source_and_process",
+                PDF_TEXT_REPAIR_TASK_NAME,
+                "postprocess_pdf",
+                "index_document",
+                "index_document_metadata",
+                "enrich_document",
+                "hydrate_document_bibliography",
+            )
+        },
+    },
     task_acks_on_failure_or_timeout=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
     worker_soft_shutdown_timeout=120.0,

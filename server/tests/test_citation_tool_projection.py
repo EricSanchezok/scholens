@@ -253,7 +253,7 @@ class _PreparedCitationWorkflow:
         self.apply_calls = 0
         self.prepare_calls = 0
 
-    def prepare(self, **_kwargs: object) -> object:
+    async def prepare(self, **_kwargs: object) -> object:
         self.prepare_calls += 1
         return object()
 

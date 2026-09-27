@@ -55,6 +55,34 @@ describe("web performance telemetry route", () => {
     expect(logged).not.toHaveProperty("user_id");
   });
 
+  it.each([
+    [undefined, "unknown"],
+    ["XX", "unknown"],
+    ["T1", "unknown"],
+    ["invalid", "unknown"],
+    ["US", "non-CN"],
+    ["cn", "CN"],
+  ])(
+    "classifies country %s without inventing a non-China sample",
+    async (country, expected) => {
+      const info = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => undefined);
+      await POST(
+        request(validEvent, {
+          ...(country ? { "cf-ipcountry": country } : {}),
+          "cf-ray": "untrusted-free-text",
+        }),
+      );
+      expect(JSON.parse(info.mock.calls[0]![0] as string)).toMatchObject({
+        country_group: expected,
+      });
+      expect(JSON.parse(info.mock.calls[0]![0] as string)).not.toHaveProperty(
+        "cf_colo",
+      );
+    },
+  );
+
   it("rejects unknown fields and ignores cross-site submissions", async () => {
     expect(
       await POST(request({ ...validEvent, title: "private" })),

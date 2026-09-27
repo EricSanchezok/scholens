@@ -1494,6 +1494,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/processing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Processing */
+        get: operations["get_document_processing_api_v1_papers__document_id__processing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/processing/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Document Stage */
+        post: operations["retry_document_stage_api_v1_papers__document_id__processing_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/projects": {
         parameters: {
             query?: never;
@@ -3803,6 +3837,18 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentProcessingStatusResponse */
+        DocumentProcessingStatusResponse: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Readable */
+            readable: boolean;
+            /** Stages */
+            stages: components["schemas"]["DocumentStageStatus"][];
+        };
         /** DocumentReflowAssetResponse */
         DocumentReflowAssetResponse: {
             /** Checksum */
@@ -3957,6 +4003,28 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DocumentStageStatus */
+        DocumentStageStatus: {
+            /**
+             * Can Retry
+             * @default false
+             */
+            can_retry: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /** Required Integration */
+            required_integration?: "deepseek" | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "pending" | "running" | "completed" | "failed" | "cancelled" | "stale";
+        };
         /** DoiPaperSource */
         DoiPaperSource: {
             /**
@@ -4089,7 +4157,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
+        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_index" | "document_search_index" | "document_enrich" | "document_bibliography" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -6082,10 +6150,33 @@ export interface components {
              */
             index: number;
             /**
+             * Segment Id
+             * @description The supplied evidence segment ID containing this verbatim quote.
+             */
+            segment_id?: string | null;
+            /**
              * Text
-             * @description The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.
+             * @description An exact verbatim quote from the source. Never paraphrase evidence.
              */
             text: string;
+        };
+        /** RetryDocumentStage */
+        RetryDocumentStage: {
+            /**
+             * Acknowledge Provider Charge
+             * @default false
+             */
+            acknowledge_provider_charge: boolean;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
         };
         /** SelectedPaperCollection */
         SelectedPaperCollection: {
@@ -10306,6 +10397,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaperInsightsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_processing_api_v1_papers__document_id__processing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentProcessingStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_document_stage_api_v1_papers__document_id__processing_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryDocumentStage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentStageStatus"];
                 };
             };
             /** @description Validation Error */

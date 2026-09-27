@@ -14,7 +14,10 @@ from app.modules.jobs.application.contracts import (
     JobFailureCallback,
     SourceReadyCallback,
     JobSourceUrlResponse,
+    JobExecutionScopeRequest,
+    ExecutionProgressRequest,
 )
+from app.bootstrap.adapters.document_bibliography import DocumentBibliographyResolution
 from app.shared.application import (
     ApplicationExecutor,
     OperationContextFactory,
@@ -32,15 +35,34 @@ terminal_router = APIRouter()
 
 
 @terminal_router.post(
+    "/jobs/{job_id}/bibliography", response_model=DocumentBibliographyResolution
+)
+async def resolve_document_bibliography(
+    job_id: uuid.UUID,
+    request: Request,
+    verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    processor: JobCompletionProcessor = Depends(get_job_completion_processor),
+) -> DocumentBibliographyResolution:
+    scope = parse_callback_model(request, ExecutionProgressRequest)
+    return await processor.resolve_bibliography(
+        job_id=job_id, generation=scope.claim_generation, verified=verified
+    )
+
+
+@terminal_router.post(
     "/jobs/{job_id}/source-url",
     response_model=JobSourceUrlResponse,
 )
 async def resolve_source_url(
     job_id: uuid.UUID,
+    request: Request,
     verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     processor: JobCompletionProcessor = Depends(get_job_completion_processor),
 ) -> JobSourceUrlResponse:
-    return await processor.resolve_source_url(job_id=job_id, verified=verified)
+    scope = parse_callback_model(request, JobExecutionScopeRequest)
+    return await processor.resolve_source_url(
+        job_id=job_id, verified=verified, generation=scope.claim_generation
+    )
 
 
 @terminal_router.post("/jobs/{job_id}/source-ready")
