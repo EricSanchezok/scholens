@@ -1,0 +1,346 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Bounded business metrics and alarms derived from existing personal-host
+  logs; no application exporter or compute.
+Parameters:
+  AlertTopicArn:
+    Type: String
+    AllowedPattern: ^arn:aws:sns:ap-south-2:669409472143:[A-Za-z0-9_-]+$
+Rules:
+  Destination:
+    Assertions:
+    - Assert:
+        Fn::Equals:
+        - Ref: AWS::AccountId
+        - '669409472143'
+      AssertDescription: Only the approved personal account is supported.
+    - Assert:
+        Fn::Equals:
+        - Ref: AWS::Region
+        - ap-south-2
+      AssertDescription: Only the approved personal region is supported.
+Resources:
+  HttpRequestsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "http.request.completed" && $.route != "/livez"
+        }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: HttpRequests
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  HttpServerErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "http.request.completed" && $.status_code >= 500
+        }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: HttpServerErrors
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  HttpStreamFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "http.request.completed" && $.stream_failed IS TRUE
+        }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: HttpStreamFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  HttpHealthChecksFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "http.request.completed" && $.route = "/livez" &&
+        $.status_code = 200 }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: HttpHealthChecks
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  McpInternalErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "mcp.request.error" && ( $.error_kind = "internal"
+        || $.error_kind = "unavailable" ) }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: McpInternalErrors
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  McpResultBudgetErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "mcp.request.error" && $.error_code = "tool_result_budget_exceeded"
+        }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: McpResultBudgetErrors
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  ResultReceiptDurationFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "http.request.completed" && $.route = "/internal/v1/jobs/{job_id}/results"
+        && $.status_code = 200 && $.duration_ms >= 0 }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: ResultReceiptDuration
+        MetricValue: $.duration_ms
+        Unit: Milliseconds
+  ResultConsumerFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "jobs.result.apply_failed" || $.event = "jobs.result.effect_failed"
+        || $.event = "jobs.result.consumer_failed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: ResultConsumerFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentJobExecutionsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-worker
+      FilterPattern: '{ $.event = "job.task.completed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobExecutions
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentJobFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-worker
+      FilterPattern: '{ $.event = "job.task.completed" && $.state = "FAILURE" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentIndexJobExecutionsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-index-worker
+      FilterPattern: '{ $.event = "job.task.completed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobExecutions
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentIndexJobFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-index-worker
+      FilterPattern: '{ $.event = "job.task.completed" && $.state = "FAILURE" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentEnrichmentJobExecutionsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-enrichment-worker
+      FilterPattern: '{ $.event = "job.task.completed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobExecutions
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DocumentEnrichmentJobFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-enrichment-worker
+      FilterPattern: '{ $.event = "job.task.completed" && $.state = "FAILURE" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  ResearchJobExecutionsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/research-worker
+      FilterPattern: '{ $.event = "job.task.completed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobExecutions
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  ResearchJobFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/research-worker
+      FilterPattern: '{ $.event = "job.task.completed" && $.state = "FAILURE" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  MaintenanceJobExecutionsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/maintenance-worker
+      FilterPattern: '{ $.event = "job.task.completed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobExecutions
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  MaintenanceJobFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/maintenance-worker
+      FilterPattern: '{ $.event = "job.task.completed" && $.state = "FAILURE" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: JobFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  InferenceQueryDurationFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/inference
+      FilterPattern: '{ $.event = "inference.request.completed" && $.kind = "query"
+        && $.status = "success" && $.duration_ms >= 0 }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: InferenceQueryDuration
+        MetricValue: $.duration_ms
+        Unit: Milliseconds
+  InferenceFailedResponsesFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/inference
+      FilterPattern: '{ $.event = "inference.request.completed" && $.kind != "health"
+        && $.status != "success" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: InferenceFailedResponses
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  HttpServerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Server HTTP failures; inspect normalized routes and request
+        references.
+      Namespace: Scholens/Personal
+      MetricName: HttpServerErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+  McpInternalErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: MCP internal or unavailable results can have HTTP 200; inspect
+        tool and error code.
+      Namespace: Scholens/Personal
+      MetricName: McpInternalErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+  ResultConsumerFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Durable result application, effect or consumer failures require
+        recovery investigation.
+      Namespace: Scholens/Personal
+      MetricName: ResultConsumerFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+  JobFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Repeated business task failures; inspect task type and stable
+        error code, not ECS exit status.
+      Namespace: Scholens/Personal
+      MetricName: JobFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+  HttpHealthMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: No successful API liveness completion has reached logs for
+        five consecutive minutes. Check service health and the log delivery path.
+      Namespace: Scholens/Personal
+      MetricName: HttpHealthChecks
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+  ResultReceiptLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Metadata-only result receipts exceed the one-second p95 budget
+        in two consecutive populated five-minute periods.
+      Namespace: Scholens/Personal
+      MetricName: ResultReceiptDuration
+      ExtendedStatistic: p95
+      EvaluateLowSampleCountPercentile: ignore
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
