@@ -146,3 +146,35 @@ def test_transport_retry_keeps_claim_identity_and_never_runs_work():
         "trace": "kept",
         "execution_claim_token": runtime.claim_token,
     }
+
+
+def test_unknown_paid_outcome_cannot_repeat_with_the_same_claim_generation():
+    from src.execution_delivery import run_fenced_task
+
+    runtime, storage, _post = execution()
+    runtime.begin_external_effect()
+    assert storage.upload_bytes_to_key.call_args.args[1] == runtime.external_effect_key
+    # The provider returned, but result storage failed before result.json existed.
+    # The retry retains generation 1; generation-only replay policy is insufficient.
+    storage.object_exists.side_effect = lambda key: key == runtime.external_effect_key
+    runtime.fail = MagicMock(return_value=True)
+    task, work = MagicMock(), MagicMock()
+    task.request.headers = {}
+    with patch("src.execution_delivery.FencedExecution", return_value=runtime):
+        result = run_fenced_task(
+            task,
+            callback_url=runtime.base_url + "/complete",
+            storage=storage,
+            work=work,
+        )
+    assert runtime.generation == 1
+    assert result["status"] == "failed"
+    runtime.fail.assert_called_once_with("provider_outcome_unknown")
+    work.assert_not_called()
+
+
+def test_external_effect_never_starts_when_intent_cannot_be_persisted():
+    runtime, storage, _post = execution()
+    storage.upload_bytes_to_key.side_effect = OSError("storage unavailable")
+    with pytest.raises(DeliveryUnavailable):
+        runtime.begin_external_effect()

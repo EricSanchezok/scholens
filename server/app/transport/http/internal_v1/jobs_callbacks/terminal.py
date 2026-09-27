@@ -14,6 +14,7 @@ from app.modules.jobs.application.contracts import (
     JobFailureCallback,
     SourceReadyCallback,
     JobSourceUrlResponse,
+    JobExecutionScopeRequest,
 )
 from app.shared.application import (
     ApplicationExecutor,
@@ -37,10 +38,14 @@ terminal_router = APIRouter()
 )
 async def resolve_source_url(
     job_id: uuid.UUID,
+    request: Request,
     verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
     processor: JobCompletionProcessor = Depends(get_job_completion_processor),
 ) -> JobSourceUrlResponse:
-    return await processor.resolve_source_url(job_id=job_id, verified=verified)
+    scope = parse_callback_model(request, JobExecutionScopeRequest)
+    return await processor.resolve_source_url(
+        job_id=job_id, verified=verified, generation=scope.claim_generation
+    )
 
 
 @terminal_router.post("/jobs/{job_id}/source-ready")

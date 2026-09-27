@@ -160,9 +160,16 @@ class JobCompletionProcessor:
         *,
         job_id: UUID,
         verified: VerifiedJobCallback,
+        generation: int | None = None,
     ) -> JobSourceUrlResponse:
         """Resolve a provider-backed source only after its durable job is running."""
 
+        await asyncio.to_thread(
+            self._executor.query,
+            lambda capabilities: capabilities.job_results.require_transport(
+                job_id=job_id, generation=generation
+            ),
+        )
         facts = await asyncio.to_thread(self._causality, job_id=job_id)
         resumed = await asyncio.to_thread(self._resume, facts=facts, verified=verified)
         if facts.operation is not JobOperation.PDF_PROCESS:
@@ -186,6 +193,12 @@ class JobCompletionProcessor:
             operation=resumed.operation,
             kind=source.kind,
             value=source.value,
+        )
+        await asyncio.to_thread(
+            self._executor.query,
+            lambda capabilities: capabilities.job_results.require_transport(
+                job_id=job_id, generation=generation
+            ),
         )
         return JobSourceUrlResponse(resolved_url=resolved_url)
 

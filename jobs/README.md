@@ -457,3 +457,13 @@ bounded binary vectors and exact spans, and Server rechecks access and canonical
 source before atomic adoption. Basic readability is independent of index success.
 The new task remains unproduced until the staged pipeline rollout; its consumer
 must deploy before any producer or dedicated index queue is enabled.
+
+Fenced execution scope propagates its generation to just-in-time credentials and
+source resolution, including async credential lookup threads. Legacy jobs send
+an empty scope and remain accepted only when they have no fenced execution row.
+Paid stage implementations must call `begin_external_effect` immediately before
+provider work. Its durable intent precedes the external effect: if output cannot
+be checkpointed, even a retry with the same claim token must report
+`provider_outcome_unknown` instead of invoking the provider again. Persisted
+complete results are replayed first. This bounds duplicate execution across job
+retries; it does not claim exactly-once semantics from an external provider.

@@ -103,3 +103,10 @@ Real PostgreSQL tests prove commit-before-effect restart recovery, lost effect
 acknowledgement, stale effect-owner rejection, and cleanup retention/effect
 dependencies. A Redis failure test proves strict delivery cannot acknowledge a
 failed release; namespace tests prevent cleanup crossing a job boundary.
+
+Paid stage adapters persist an external-effect intent before calling a provider.
+Generation fencing alone is insufficient: a same-token retry after failed result
+storage could otherwise call the provider twice. Replays first seek a complete
+checkpoint; a surviving intent without a result produces an explicit unknown
+outcome. Just-in-time credential and source-resolution requests carry and verify
+the same generation, so an expired worker cannot continue acquiring dependencies.

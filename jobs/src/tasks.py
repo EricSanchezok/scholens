@@ -74,6 +74,7 @@ from src.execution_delivery import (
     ExecutionLost,
     FencedExecution,
     run_fenced_task,
+    execution_scope_payload,
 )
 from src.token_usage import collect_token_usage
 from src.utils import time_it
@@ -516,7 +517,9 @@ def _log_data_table_progress(task_id: str, status: str) -> None:
 def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
     response: requests.Response | None = None
     try:
-        response = post_signed_json(credential_url, {}, timeout=30)
+        response = post_signed_json(
+            credential_url, execution_scope_payload(), timeout=30
+        )
     except requests.RequestException as exc:
         raise ParserTransientError(
             "Could not obtain the job-scoped MinerU credential",
@@ -638,7 +641,7 @@ def _response_error_code(response: requests.Response, default: str) -> str:
 def _resolve_source_url(url: str) -> str:
     response: requests.Response | None = None
     try:
-        response = post_signed_json(url, {}, timeout=30)
+        response = post_signed_json(url, execution_scope_payload(), timeout=30)
     except requests.RequestException as exc:
         raise SourceDownloadError(
             "paper_source_resolution_unavailable",

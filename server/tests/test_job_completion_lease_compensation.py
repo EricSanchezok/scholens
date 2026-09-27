@@ -104,8 +104,9 @@ async def test_source_url_resolution_resumes_the_owned_durable_job() -> None:
         kind="doi", value="10.1000/example"
     )
     executor = MagicMock()
+    fences = MagicMock()
     executor.query.side_effect = lambda operation: operation(
-        SimpleNamespace(paper_ingestion=source_port)
+        SimpleNamespace(paper_ingestion=source_port, job_results=fences)
     )
     resolver = MagicMock()
     resolver.resolve = AsyncMock(return_value="https://repository.example/paper.pdf")
@@ -129,6 +130,8 @@ async def test_source_url_resolution_resumes_the_owned_durable_job() -> None:
         verified=MagicMock(),
     )
 
+    assert fences.require_transport.call_count == 2
+    fences.require_transport.assert_called_with(job_id=facts.job_id, generation=None)
     assert result.resolved_url == "https://repository.example/paper.pdf"
     source_port.source_for_resolution.assert_called_once_with(
         actor=actor,

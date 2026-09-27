@@ -964,3 +964,8 @@ It rechecks current document access and source before adoption, stores only
 counts/revisions in the durable job result, and leaves document processing status
 unchanged on index failure. Full result artifacts follow the fenced inbox and
 terminal artifact-retention policy.
+
+Signed credential and source-resolution requests accept an optional execution
+generation. Fenced jobs require the live generation before access; source
+resolution rechecks after external work. N-1 callers without a generation remain
+valid only for legacy jobs. The signature alone is not an execution lease.

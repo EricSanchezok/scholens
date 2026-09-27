@@ -89,6 +89,11 @@ class ClaimExecutionRequest(BaseModel):
     claim_token: UUID
 
 
+class JobExecutionScopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_generation: int | None = Field(default=None, ge=1)
+
+
 class ExecutionProgressRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     claim_generation: int = Field(ge=1)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import threading
@@ -22,6 +24,24 @@ from scholens_job_contracts import (
 )
 
 from src.webhook_signing import post_signed_json
+
+_execution_generation: ContextVar[int | None] = ContextVar(
+    "job_execution_generation", default=None
+)
+
+
+@contextmanager
+def execution_scope(generation: int | None) -> Iterator[None]:
+    token = _execution_generation.set(generation)
+    try:
+        yield
+    finally:
+        _execution_generation.reset(token)
+
+
+def execution_scope_payload() -> dict[str, int]:
+    generation = _execution_generation.get()
+    return {} if generation is None else {"claim_generation": generation}
 
 
 class ResultStorage(Protocol):
@@ -75,6 +95,35 @@ class FencedExecution:
     @property
     def checkpoint_key(self) -> str:
         return f"jobs/checkpoints/{self.job_id}/result.json"
+
+    @property
+    def external_effect_key(self) -> str:
+        return f"jobs/checkpoints/{self.job_id}/external-effect.json"
+
+    def external_effect_started(self) -> bool:
+        try:
+            return self._storage.object_exists(self.external_effect_key)
+        except Exception as exc:
+            raise DeliveryUnavailable("job_external_effect_state_unavailable") from exc
+
+    def begin_external_effect(self) -> None:
+        """Persist intent before a paid call, including same-generation retries.
+
+        A provider success followed by failed result storage has an unknown
+        outcome. Never turn that ambiguity into an automatic second paid call.
+        """
+        self.check_cancelled()
+        if self.external_effect_started():
+            raise DeliveryUnavailable("job_external_effect_already_started")
+        try:
+            self._storage.upload_bytes_to_key(
+                callback_json_bytes({"claim_generation": self.generation}),
+                self.external_effect_key,
+                "application/json",
+            )
+        except Exception as exc:
+            raise DeliveryUnavailable("job_external_effect_intent_unavailable") from exc
+        self.check_cancelled()
 
     @property
     def claim_token(self) -> str:
@@ -275,10 +324,10 @@ def run_fenced_task(
     try:
         if not runtime.claim():
             return {"task_id": runtime.job_id, "status": "duplicate"}
-        with runtime:
+        with runtime, execution_scope(runtime.generation):
             if runtime.resume_result():
                 return {"task_id": runtime.job_id, "status": "replayed"}
-            if runtime.recover_only:
+            if runtime.recover_only or runtime.external_effect_started():
                 runtime.fail("provider_outcome_unknown")
                 return {"task_id": runtime.job_id, "status": "failed"}
             result = work(runtime)
