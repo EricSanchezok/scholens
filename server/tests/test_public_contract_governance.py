@@ -847,3 +847,46 @@ def test_expand_migration_policy_rejects_destructive_batch_operations(
         "0002_expand.py:5 uses op.drop_column",
         "0002_expand.py:6 adds a required column without a server default",
     ]
+
+
+def test_expand_sql_review_is_bound_to_exact_literal_and_evidence(
+    tmp_path: Path,
+) -> None:
+    import hashlib
+
+    checker = _script("migration_policy_compatibility.py")
+    sql = "CREATE FUNCTION scholens.f() RETURNS int AS $$ SELECT 1 $$ LANGUAGE SQL"
+    migration = tmp_path / "revision.py"
+    migration.write_text(f"def upgrade():\n    op.execute({sql!r})\n")
+    digest = hashlib.sha256(sql.encode()).hexdigest()
+    review = {
+        digest: {
+            "reason": "Adds an independent function; old writes are unchanged.",
+            "compatibility_test": "server/tests/test_token_projection_repository.py",
+        }
+    }
+    assert checker._expand_failures(migration, reviewed_sql=review) == []
+    assert checker._expand_failures(migration)
+
+    migration.write_text(f"def upgrade():\n    op.execute({(sql + ' ')!r})\n")
+    assert checker._expand_failures(migration, reviewed_sql=review)
+    migration.write_text("def upgrade():\n    op.execute(SQL)\n")
+    assert checker._expand_failures(migration, reviewed_sql=review)
+    migration.write_text(f"def upgrade():\n    op.execute({sql!r})\n")
+    assert checker._expand_failures(migration, reviewed_sql={digest: {}})
+
+
+def test_expand_sql_review_cannot_allow_table_destruction(tmp_path: Path) -> None:
+    import hashlib
+
+    checker = _script("migration_policy_compatibility.py")
+    sql = "DROP TABLE scholens.documents"
+    migration = tmp_path / "revision.py"
+    migration.write_text(f"def upgrade():\n    op.execute({sql!r})\n")
+    review = {
+        hashlib.sha256(sql.encode()).hexdigest(): {
+            "reason": "Not an additive function or trigger.",
+            "compatibility_test": "server/tests/test_token_projection_repository.py",
+        }
+    }
+    assert checker._expand_failures(migration, reviewed_sql=review)

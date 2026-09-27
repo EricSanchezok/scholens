@@ -148,6 +148,55 @@ def test_unrelated_metadata_update_preserves_digest_and_projection(database):
         )
 
 
+def test_n_minus_one_writes_preserve_weighted_search_and_nullable_source(database):
+    engine, doc_id = database
+    with Session(engine) as db, db.begin():
+        # No new column appears in this writer, matching the deployed application.
+        db.execute(
+            text(
+                "UPDATE scholens.documents SET title = 'Weighted title', "
+                "authors = ARRAY['Ada'], keywords = ARRAY['science'], "
+                "abstract = 'Abstract methods', raw_content = 'Body findings' "
+                "WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+        before = db.scalar(
+            text("SELECT ts_vector::text FROM scholens.documents WHERE id = :id"),
+            {"id": doc_id},
+        )
+        assert before == db.scalar(
+            text(
+                "SELECT (setweight(to_tsvector('pg_catalog.english', 'Weighted title'), 'A') "
+                "|| setweight(to_tsvector('pg_catalog.english', 'Ada'), 'A') "
+                "|| setweight(to_tsvector('pg_catalog.english', 'science'), 'B') "
+                "|| setweight(to_tsvector('pg_catalog.english', 'Abstract methods'), 'C') "
+                "|| setweight(to_tsvector('pg_catalog.english', 'Body findings'), 'D'))::text"
+            )
+        )
+        db.execute(
+            text(
+                "UPDATE scholens.documents SET summary = 'only metadata' WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+        assert before == db.scalar(
+            text("SELECT ts_vector::text FROM scholens.documents WHERE id = :id"),
+            {"id": doc_id},
+        )
+        db.execute(
+            text("UPDATE scholens.documents SET raw_content = NULL WHERE id = :id"),
+            {"id": doc_id},
+        )
+        assert (
+            db.scalar(
+                text("SELECT content_digest FROM scholens.documents WHERE id = :id"),
+                {"id": doc_id},
+            )
+            is None
+        )
+
+
 def test_search_uses_one_current_projection_without_old_revision_or_stale_fallback(
     database,
 ):
