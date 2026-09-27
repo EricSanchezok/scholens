@@ -1,8 +1,55 @@
 """Provider-neutral AI profile and model construction primitives."""
 
+from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from scholens_ai.embedding_contract import (
+        EMBEDDING_DIMENSION as EMBEDDING_DIMENSION,
+        EMBEDDING_MODEL_ID as EMBEDDING_MODEL_ID,
+        EMBEDDING_MODEL_REVISION as EMBEDDING_MODEL_REVISION,
+    )
+    from scholens_ai.embeddings import (
+        LocalOnnxTextEmbedder as LocalOnnxTextEmbedder,
+        TextEmbedder as TextEmbedder,
+        embed_text as embed_text,
+        configured_embedder as configured_embedder,
+        semantic_document_text as semantic_document_text,
+        semantic_source_digest as semantic_source_digest,
+        try_local_embedder as try_local_embedder,
+    )
+    from scholens_ai.passages import (
+        MAX_PASSAGE_EMBEDDINGS as MAX_PASSAGE_EMBEDDINGS,
+        MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES as MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES,
+        PASSAGE_EMBEDDING_BATCH_SIZE as PASSAGE_EMBEDDING_BATCH_SIZE,
+        PASSAGE_STRIDE_LINES as PASSAGE_STRIDE_LINES,
+        DecodedPassageEmbeddingArtifact as DecodedPassageEmbeddingArtifact,
+        DocumentPassageWindow as DocumentPassageWindow,
+        PassageEmbeddingRecord as PassageEmbeddingRecord,
+        build_document_passages as build_document_passages,
+        decode_passage_embedding_artifact as decode_passage_embedding_artifact,
+        encode_passage_embedding_artifact as encode_passage_embedding_artifact,
+    )
+    from scholens_ai.token_passages import (
+        TOKEN_PASSAGE_REVISION as TOKEN_PASSAGE_REVISION,
+        TokenPassage as TokenPassage,
+        PassageLimitExceeded as PassageLimitExceeded,
+        iter_token_passages as iter_token_passages,
+        load_passage_tokenizer as load_passage_tokenizer,
+    )
+    from scholens_ai.token_projection import (
+        TokenProjection as TokenProjection,
+        TokenSpan as TokenSpan,
+        ProjectedTokenPassage as ProjectedTokenPassage,
+    )
+    from scholens_ai.evidence import (
+        EVIDENCE_REVISION as EVIDENCE_REVISION,
+        EvidenceAnchor as EvidenceAnchor,
+        EvidenceResolution as EvidenceResolution,
+        EvidenceSegment as EvidenceSegment,
+        evidence_segments as evidence_segments,
+        resolve_evidence as resolve_evidence,
+    )
     from scholens_ai.profiles import (
         AIProfile as AIProfile,
         AIProfileName as AIProfileName,
@@ -14,120 +61,82 @@ if TYPE_CHECKING:
         resolve_profile as resolve_profile,
     )
 
-from scholens_ai.embeddings import (
-    EMBEDDING_DIMENSION,
-    EMBEDDING_MODEL_ID,
-    EMBEDDING_MODEL_REVISION,
-    LocalOnnxTextEmbedder,
-    TextEmbedder,
-    embed_text,
-    configured_embedder,
-    semantic_document_text,
-    semantic_source_digest,
-    try_local_embedder,
-)
-from scholens_ai.passages import (
-    MAX_PASSAGE_EMBEDDINGS,
-    MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES,
-    PASSAGE_EMBEDDING_BATCH_SIZE,
-    PASSAGE_STRIDE_LINES,
-    DecodedPassageEmbeddingArtifact,
-    DocumentPassageWindow,
-    PassageEmbeddingRecord,
-    build_document_passages,
-    decode_passage_embedding_artifact,
-    encode_passage_embedding_artifact,
-)
 
-from scholens_ai.token_passages import (
-    TOKEN_PASSAGE_REVISION,
-    TokenPassage,
-    PassageLimitExceeded,
-    iter_token_passages,
-    load_passage_tokenizer,
-)
-from scholens_ai.token_projection import (
-    TokenProjection,
-    TokenSpan,
-    ProjectedTokenPassage,
-)
+# Keep command entrypoints independent of optional runtime stacks.
+_EXPORTS = {
+    name: module
+    for module, names in {
+        "scholens_ai.embedding_contract": (
+            "EMBEDDING_DIMENSION",
+            "EMBEDDING_MODEL_ID",
+            "EMBEDDING_MODEL_REVISION",
+        ),
+        "scholens_ai.embeddings": (
+            "LocalOnnxTextEmbedder",
+            "TextEmbedder",
+            "embed_text",
+            "configured_embedder",
+            "semantic_document_text",
+            "semantic_source_digest",
+            "try_local_embedder",
+        ),
+        "scholens_ai.passages": (
+            "MAX_PASSAGE_EMBEDDINGS",
+            "MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES",
+            "PASSAGE_EMBEDDING_BATCH_SIZE",
+            "PASSAGE_STRIDE_LINES",
+            "DecodedPassageEmbeddingArtifact",
+            "DocumentPassageWindow",
+            "PassageEmbeddingRecord",
+            "build_document_passages",
+            "decode_passage_embedding_artifact",
+            "encode_passage_embedding_artifact",
+        ),
+        "scholens_ai.token_passages": (
+            "TOKEN_PASSAGE_REVISION",
+            "TokenPassage",
+            "PassageLimitExceeded",
+            "iter_token_passages",
+            "load_passage_tokenizer",
+        ),
+        "scholens_ai.token_projection": (
+            "TokenProjection",
+            "TokenSpan",
+            "ProjectedTokenPassage",
+        ),
+        "scholens_ai.evidence": (
+            "EVIDENCE_REVISION",
+            "EvidenceAnchor",
+            "EvidenceResolution",
+            "EvidenceSegment",
+            "evidence_segments",
+            "resolve_evidence",
+        ),
+        "scholens_ai.profiles": (
+            "AIProfile",
+            "AIProfileName",
+            "AIThinkingEffort",
+            "AIThinkingMode",
+            "ProviderConfigurationError",
+            "build_model",
+            "profile_model_settings",
+            "resolve_profile",
+        ),
+    }.items()
+    for name in names
+}
 
-from scholens_ai.evidence import (
-    EVIDENCE_REVISION,
-    EvidenceAnchor,
-    EvidenceResolution,
-    EvidenceSegment,
-    evidence_segments,
-    resolve_evidence,
-)
-
-__all__ = [
-    "TokenProjection",
-    "TokenSpan",
-    "ProjectedTokenPassage",
-    "EVIDENCE_REVISION",
-    "EvidenceAnchor",
-    "EvidenceResolution",
-    "EvidenceSegment",
-    "evidence_segments",
-    "resolve_evidence",
-    "TOKEN_PASSAGE_REVISION",
-    "TokenPassage",
-    "PassageLimitExceeded",
-    "iter_token_passages",
-    "load_passage_tokenizer",
-    "EMBEDDING_DIMENSION",
-    "EMBEDDING_MODEL_ID",
-    "EMBEDDING_MODEL_REVISION",
-    "AIProfile",
-    "AIProfileName",
-    "AIThinkingEffort",
-    "AIThinkingMode",
-    "ProviderConfigurationError",
-    "LocalOnnxTextEmbedder",
-    "TextEmbedder",
-    "build_model",
-    "embed_text",
-    "configured_embedder",
-    "profile_model_settings",
-    "resolve_profile",
-    "semantic_document_text",
-    "semantic_source_digest",
-    "try_local_embedder",
-    "MAX_PASSAGE_EMBEDDING_ARTIFACT_BYTES",
-    "MAX_PASSAGE_EMBEDDINGS",
-    "PASSAGE_EMBEDDING_BATCH_SIZE",
-    "PASSAGE_STRIDE_LINES",
-    "DecodedPassageEmbeddingArtifact",
-    "DocumentPassageWindow",
-    "PassageEmbeddingRecord",
-    "build_document_passages",
-    "decode_passage_embedding_artifact",
-    "encode_passage_embedding_artifact",
-]
-
-
-_PROFILE_EXPORTS = frozenset(
-    {
-        "AIProfile",
-        "AIProfileName",
-        "AIThinkingEffort",
-        "AIThinkingMode",
-        "ProviderConfigurationError",
-        "build_model",
-        "profile_model_settings",
-        "resolve_profile",
-    }
-)
+__all__ = list(_EXPORTS)
 
 
 def __getattr__(name: str) -> Any:
-    # The inference owner needs no provider SDKs, credentials or Agent graph.
-    # Keep the public import API while loading model providers only on use.
-    if name not in _PROFILE_EXPORTS:
+    module = _EXPORTS.get(name)
+    if module is None:
         raise AttributeError(name)
-    from scholens_ai import profiles
-
-    value = getattr(profiles, name)
+    value = getattr(import_module(module), name)
     globals()[name] = value
     return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

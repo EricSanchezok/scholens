@@ -7,12 +7,128 @@ from pathlib import Path
 import tempfile
 import threading
 import time
+import subprocess
+import sys
+import json
 
 import pytest
 
 from scholens_ai.inference import InferenceServer
 from scholens_ai.inference_client import EmbeddingUnavailable, SocketTextEmbedder
 from scholens_ai.inference_protocol import FRAME_HEADER, MAX_FRAME_BYTES
+from scholens_ai.inference_health import check_health
+
+
+@pytest.mark.parametrize("matching_revision", [True, False])
+def test_health_command_checks_readiness_without_model_or_provider_imports(
+    matching_revision,
+):
+    from scholens_ai import EMBEDDING_MODEL_REVISION
+
+    async def scenario():
+        model = Model()
+        model.revision = EMBEDDING_MODEL_REVISION if matching_revision else "other"
+        async with running(model) as (path, _service):
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, "-c", _LIGHTWEIGHT_HEALTH_COMMAND, path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        assert "Health probe imported" not in result.stderr, result.stderr
+        assert result.returncode == (0 if matching_revision else 1), result.stderr
+        if not matching_revision:
+            assert "inference_revision" in result.stderr
+        assert model.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_health_command_rejects_missing_owner_without_loading_a_model():
+    with tempfile.TemporaryDirectory(prefix="si-", dir="/tmp") as directory:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _LIGHTWEIGHT_HEALTH_COMMAND,
+                f"{directory}/missing.sock",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    assert result.returncode == 1
+    assert "Health probe imported" not in result.stderr, result.stderr
+    assert "inference_unavailable" in result.stderr
+
+
+_LIGHTWEIGHT_HEALTH_COMMAND = """
+import importlib.abc
+import runpy
+import sys
+
+class NoModelOrProvider(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'numpy', 'tokenizers', 'onnxruntime', 'pydantic', 'pydantic_ai', 'openai', 'httpx', 'boto3'}:
+            raise AssertionError(f'Health probe imported {fullname}')
+
+sys.meta_path.insert(0, NoModelOrProvider())
+sys.argv = ['scholens_ai.inference', '--check', '--socket', sys.argv[1]]
+runpy.run_module('scholens_ai.inference', run_name='__main__')
+"""
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"model_revision": "test-revision", "unexpected": True},
+        {"model_revision": "test-revision", "vectors": [[1.0]]},
+        {"model_revision": "test-revision", "error": "stopping"},
+        {"model_revision": "test-revision", "vectors": None},
+    ],
+)
+def test_health_rejects_malformed_or_failed_responses(response):
+    async def scenario():
+        async def handle(reader, writer):
+            size = FRAME_HEADER.unpack(await reader.readexactly(FRAME_HEADER.size))[0]
+            await reader.readexactly(size)
+            body = json.dumps(response).encode()
+            writer.write(FRAME_HEADER.pack(len(body)) + body)
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        with tempfile.TemporaryDirectory(prefix="si-", dir="/tmp") as directory:
+            path = f"{directory}/model.sock"
+            server = await asyncio.start_unix_server(handle, path=path)
+            async with server:
+                with pytest.raises(EmbeddingUnavailable):
+                    await asyncio.to_thread(
+                        check_health, path, revision="test-revision"
+                    )
+
+    asyncio.run(scenario())
+
+
+def test_health_deadline_bounds_an_unresponsive_owner():
+    async def scenario():
+        async def handle(reader, writer):
+            await reader.read()
+            writer.close()
+            await writer.wait_closed()
+
+        with tempfile.TemporaryDirectory(prefix="si-", dir="/tmp") as directory:
+            path = f"{directory}/model.sock"
+            server = await asyncio.start_unix_server(handle, path=path)
+            async with server:
+                with pytest.raises(EmbeddingUnavailable):
+                    await asyncio.wait_for(
+                        asyncio.to_thread(check_health, path, timeout=0.05), 1
+                    )
+
+    asyncio.run(scenario())
 
 
 class Model:

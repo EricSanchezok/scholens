@@ -33,6 +33,12 @@ the interactive deadline. A client deadline yields lexical search; it must never
 fallback model in the API process. Prepare query vectors before database work,
 and require query digest/model revision agreement before semantic SQL ranking.
 
+Periodic readiness checks use a standard-library command path and shared socket
+framing/deadlines. The narrow health response requires an exact revision, no
+vectors and no error; the server retains its full request validation. Model,
+provider, validation and telemetry runtimes load only for their owning operation.
+This avoids repeated imports competing with user requests on the shared CPU.
+
 Add token windows as a separately versioned projection primitive. Bound tokenizer
 lookahead, preserve exact source character and line coordinates, and prefer
 paragraph boundaries. Existing five-line projections remain available through

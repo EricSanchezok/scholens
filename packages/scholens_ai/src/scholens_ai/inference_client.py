@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-import socket
 import time
 from typing import Literal
 
-from scholens_ai.embeddings import EMBEDDING_MODEL_REVISION
+from scholens_ai.embedding_contract import EMBEDDING_MODEL_REVISION
 from scholens_ai.inference_protocol import (
-    FRAME_HEADER,
     MAX_FRAME_BYTES,
     InferenceRequest,
     InferenceResponse,
-    frame,
 )
 
-
-class EmbeddingUnavailable(RuntimeError):
-    """A stable degradation signal containing no query or document content."""
+from scholens_ai.inference_health import check_health
+from scholens_ai.inference_transport import (
+    EmbeddingUnavailable as EmbeddingUnavailable,
+    exchange,
+    remaining,
+)
 
 
 class SocketTextEmbedder:
@@ -48,7 +48,7 @@ class SocketTextEmbedder:
         return self._call("passage", texts, self._passage_timeout)
 
     def health(self) -> None:
-        self._call("health", [], self._query_timeout)
+        check_health(self._path, revision=self.revision, timeout=self._query_timeout)
 
     def _call(
         self,
@@ -76,23 +76,12 @@ class SocketTextEmbedder:
         self, request: InferenceRequest, deadline: float
     ) -> list[list[float]]:
         request = request.model_copy(
-            update={"deadline_ms": max(1, int(_remaining(deadline) * 1000))}
+            update={"deadline_ms": max(1, int(remaining(deadline) * 1000))}
         )
-        data = frame(request.model_dump_json().encode())
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                connection.settimeout(_remaining(deadline))
-                connection.connect(self._path)
-                connection.settimeout(_remaining(deadline))
-                connection.sendall(data)
-                size = FRAME_HEADER.unpack(
-                    _read(connection, FRAME_HEADER.size, deadline)
-                )[0]
-                if not 0 < size <= MAX_FRAME_BYTES:
-                    raise EmbeddingUnavailable("inference_response_bound")
-                response = InferenceResponse.model_validate_json(
-                    _read(connection, size, deadline)
-                )
+            response = InferenceResponse.model_validate_json(
+                exchange(self._path, request.model_dump_json().encode(), deadline)
+            )
             if response.model_revision != self.revision:
                 raise EmbeddingUnavailable("inference_revision")
             if response.error is not None:
@@ -100,7 +89,7 @@ class SocketTextEmbedder:
             if len(response.vectors) != len(request.texts):
                 raise EmbeddingUnavailable("inference_response_count")
             return response.vectors
-        except (OSError, ValueError) as exc:
+        except ValueError as exc:
             raise EmbeddingUnavailable("inference_unavailable") from exc
 
 
@@ -115,21 +104,3 @@ def _bounded_requests(request: InferenceRequest) -> Iterator[InferenceRequest]:
     middle = len(request.texts) // 2
     for texts in (request.texts[:middle], request.texts[middle:]):
         yield from _bounded_requests(request.model_copy(update={"texts": texts}))
-
-
-def _remaining(deadline: float) -> float:
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise EmbeddingUnavailable("inference_deadline")
-    return remaining
-
-
-def _read(connection: socket.socket, size: int, deadline: float) -> bytes:
-    data = bytearray()
-    while len(data) < size:
-        connection.settimeout(_remaining(deadline))
-        received = connection.recv(size - len(data))
-        if not received:
-            raise EmbeddingUnavailable("inference_connection_closed")
-        data.extend(received)
-    return bytes(data)
