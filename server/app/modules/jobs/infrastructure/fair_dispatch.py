@@ -25,12 +25,30 @@ def select_fair_dispatches(
     # No waiting lock and no network publication while the lock is held.
     if not db.scalar(text("SELECT pg_try_advisory_xact_lock(1935896428, 2714)")):
         return []
+    # Probe only fixed queue names before hydrating cursors or constructing the
+    # requester plans. Idle polling must not pay six queues' planning cost in
+    # the foreground API process. This snapshot is never cached: work accepted
+    # after the probe is visible to the next normal wakeup/poll.
+    due_queues = db.scalars(
+        select(JobDispatch.queue)
+        .join(DurableJob, DurableJob.id == JobDispatch.job_id)
+        .where(
+            JobDispatch.queue.in_(sorted(JOB_QUEUE_NAMES)),
+            JobDispatch.status.in_(("pending", "publishing")),
+            JobDispatch.available_at <= now,
+            DurableJob.status == "pending",
+        )
+        .distinct()
+    ).all()
+    if not due_queues:
+        return []
     active: dict[str, list[int]] = defaultdict(list)
     owner = func.coalesce(DurableJob.requested_by_id, 0)
     for queue, requester in db.execute(
         select(JobDispatch.queue, owner)
         .join(DurableJob, DurableJob.id == JobDispatch.job_id)
         .where(
+            JobDispatch.queue.in_(due_queues),
             DurableJob.status.in_(("pending", "running")),
             or_(
                 JobDispatch.status == "published",
@@ -42,7 +60,7 @@ def select_fair_dispatches(
     ):
         active[queue].append(requester)
     selected: list[JobDispatch] = []
-    for queue in sorted(JOB_QUEUE_NAMES):
+    for queue in sorted(due_queues):
         slots = min(limit - len(selected), QUEUE_IN_FLIGHT_LIMIT - len(active[queue]))
         if slots <= 0:
             continue
