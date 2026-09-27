@@ -279,3 +279,153 @@ def test_exhausted_pdf_compensation_commits_terminal_state_and_durable_release(
         assert any(
             effect.payload["kind"] == "release_concurrency" for effect in effects
         )
+
+
+def test_stage_retry_is_owned_source_fenced_and_idempotent(pipeline_database):
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from app.modules.papers.application.processing import RetryDocumentStage
+    from app.shared.domain import AppError
+
+    engine, doc_id, _parent, actor, operation, _source, ids = pipeline_database
+    previous_id = ids[JobOperation.DOCUMENT_INDEX.value]
+    with Session(engine) as db, db.begin():
+        previous = db.get(DurableJob, previous_id)
+        previous.status = "failed"
+        gateway = SqlDocumentProcessing(db, enabled=True)
+        before = gateway.get(actor=actor, document_id=doc_id)
+        assert before.readable
+        assert before.stages[0].can_retry
+        request = RetryDocumentStage(job_id=previous_id, stage="index")
+        first, created = gateway.retry(
+            actor=actor, operation=operation, document_id=doc_id, request=request
+        )
+        second, repeated = gateway.retry(
+            actor=actor, operation=operation, document_id=doc_id, request=request
+        )
+        assert created and not repeated
+        assert first.job_id == second.job_id != previous_id
+        new = db.get(DurableJob, first.job_id)
+        assert str(new.id) in new.dispatch.kwargs["callback_url"]
+        assert db.get(JobExecution, new.id) is not None
+        assert db.get(Document, doc_id).processing_status == "completed"
+        assert previous.status == "failed"
+        other = Actor(
+            id=actor.id + 1,
+            email="other@example.com",
+            status="active",
+            email_verified=True,
+        )
+        with pytest.raises(AppError, match="paper_not_found"):
+            gateway.get(actor=other, document_id=doc_id)
+
+
+def test_stage_retry_rejects_changed_source_and_live_job(pipeline_database):
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from app.modules.papers.application.processing import RetryDocumentStage
+    from app.shared.domain import AppError
+
+    engine, doc_id, _parent, actor, operation, _source, ids = pipeline_database
+    previous_id = ids[JobOperation.DOCUMENT_INDEX.value]
+    with Session(engine) as db, db.begin():
+        gateway = SqlDocumentProcessing(db, enabled=True)
+        request = RetryDocumentStage(job_id=previous_id, stage="index")
+        with pytest.raises(AppError, match="document_stage_not_retryable"):
+            gateway.retry(
+                actor=actor, operation=operation, document_id=doc_id, request=request
+            )
+        db.get(DurableJob, previous_id).status = "failed"
+        db.get(Document, doc_id).raw_content = "new source"
+        db.flush()
+        with pytest.raises(AppError, match="document_stage_not_retryable"):
+            gateway.retry(
+                actor=actor, operation=operation, document_id=doc_id, request=request
+            )
+        assert not gateway.get(actor=actor, document_id=doc_id).stages[0].can_retry
+
+
+def test_ai_stage_retry_requires_explicit_paid_consent(pipeline_database):
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from app.modules.papers.application.processing import (
+        DocumentProcessing,
+        RetryDocumentStage,
+    )
+    from app.shared.domain import AppError
+    from unittest.mock import Mock
+
+    engine, doc_id, _parent, actor, operation, _source, ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        job_id = ids[JobOperation.DOCUMENT_ENRICH.value]
+        db.get(DurableJob, job_id).status = "failed"
+        journal = Mock()
+        capability = DocumentProcessing(
+            SqlDocumentProcessing(db, enabled=True), journal=journal, enabled=True
+        )
+        with pytest.raises(AppError, match="provider_charge_confirmation_required"):
+            capability.retry(
+                actor=actor,
+                operation=operation,
+                document_id=doc_id,
+                request=RetryDocumentStage(stage="enrichment", job_id=job_id),
+            )
+        result = capability.retry(
+            actor=actor,
+            operation=operation,
+            document_id=doc_id,
+            request=RetryDocumentStage(
+                stage="enrichment", job_id=job_id, acknowledge_provider_charge=True
+            ),
+        )
+        assert result.job_id != job_id
+        journal.append.assert_called_once()
+
+
+def test_processing_status_hides_other_requesters_and_does_not_load_source(
+    pipeline_database,
+):
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from sqlalchemy import inspect
+
+    engine, doc_id, _parent, actor, _operation, _source, ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        for job_id in ids.values():
+            db.get(DurableJob, job_id).requested_by_id = None
+        db.flush()
+        document = SqlDocumentProcessing(db, enabled=True)._document(
+            actor=actor, document_id=doc_id
+        )
+        assert "raw_content" in inspect(document).unloaded
+        status = SqlDocumentProcessing(db, enabled=True).get(
+            actor=actor, document_id=doc_id
+        )
+        assert all(
+            stage.status == "not_requested" and stage.job_id is None
+            for stage in status.stages
+        )
+        # Restore ownership for the fixture's cleanup.
+        for job_id in ids.values():
+            db.get(DurableJob, job_id).requested_by_id = actor.id
+
+
+def test_concurrent_retry_has_one_execution(pipeline_database):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
+    from app.modules.papers.application.processing import RetryDocumentStage
+
+    engine, doc_id, _parent, actor, operation, _source, ids = pipeline_database
+    job_id = ids[JobOperation.DOCUMENT_INDEX.value]
+    with Session(engine) as db, db.begin():
+        db.get(DurableJob, job_id).status = "failed"
+
+    def submit():
+        with Session(engine) as db, db.begin():
+            return SqlDocumentProcessing(db, enabled=True).retry(
+                actor=actor,
+                operation=operation,
+                document_id=doc_id,
+                request=RetryDocumentStage(stage="index", job_id=job_id),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first, second = list(workers.map(lambda _: submit(), range(2)))
+    assert first[0].job_id == second[0].job_id
+    assert sum([first[1], second[1]]) == 1

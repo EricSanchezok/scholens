@@ -1200,3 +1200,22 @@ The current connection catalog is `/api/v1/me/connections`, including user-owned
 DeepSeek keys. `/api/v1/me/integrations` remains a deprecated HTTP adapter with
 its original provider/category enums until the registered retirement conditions
 are met. Both adapters delegate to the same connection application capability.
+
+### Independent document stage recovery
+
+`GET /api/v1/papers/{document_id}/processing` returns readability separately
+from index, enrichment, and bibliography state. It authorizes current document
+access, reads bounded metadata, and exposes only the caller's latest Jobs.
+The shared index is complete only when its head matches the current source and
+model revision. Historical documents without staged work report `not_requested`.
+
+`POST /api/v1/papers/{document_id}/processing/retry` accepts the failed/cancelled
+stage's exact job ID. The composition adapter locks Job then Document, requires
+current access, requester ownership, current source digest, and the latest stage,
+and creates one fresh execution/outbox entry with an idempotency key derived
+from the original Job. Duplicate submissions return the same replacement.
+It preserves readable content and the original terminal audit record. Enrichment
+requires explicit `acknowledge_provider_charge`: a new provider request may
+charge again even when the earlier paid result was lost. No automatic AI replay
+is inferred from this user action. Retry requires the result inbox consumer to
+be enabled and is independent of the admission percentage for new uploads.

@@ -341,6 +341,26 @@ async function mockReader(page: Page) {
       }),
   );
   await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: paperDocument.document_id,
+          readable: true,
+          stages: [
+            { stage: "index", status: "completed", can_retry: false },
+            { stage: "enrichment", status: "not_requested", can_retry: false },
+            {
+              stage: "bibliography",
+              status: "not_requested",
+              can_retry: false,
+            },
+          ],
+        }),
+      }),
+  );
+  await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/projects`,
     (route) =>
       route.fulfill({
@@ -2474,3 +2494,71 @@ for (const width of [320, 390]) {
     expect(results.violations).toEqual([]);
   });
 }
+
+test("retries only the failed stage while the PDF remains readable", async ({
+  page,
+}) => {
+  const jobId = "90000000-0000-4000-8000-000000000001";
+  let retried = false;
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          document_id: paperDocument.document_id,
+          readable: true,
+          stages: [
+            { stage: "index", status: "completed", can_retry: false },
+            {
+              stage: "enrichment",
+              status: retried ? "pending" : "failed",
+              job_id: jobId,
+              can_retry: !retried,
+            },
+            { stage: "bibliography", status: "completed", can_retry: false },
+          ],
+        }),
+      }),
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/processing/retry`,
+    async (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        stage: "enrichment",
+        job_id: jobId,
+        acknowledge_provider_charge: true,
+      });
+      retried = true;
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          stage: "enrichment",
+          status: "pending",
+          job_id: jobId,
+          can_retry: false,
+        }),
+      });
+    },
+  );
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  await expect(
+    page.locator("[data-pdf-page-number] > canvas").first(),
+  ).toBeVisible();
+  const processingSummary = page.locator("summary").filter({
+    hasText: "Ready to read · Some background work needs attention",
+  });
+  await processingSummary.focus();
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("button", { name: "Retry AI with provider charges" })
+    .click();
+  await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry AI with provider charges" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator("[data-pdf-page-number] > canvas").first(),
+  ).toBeVisible();
+});

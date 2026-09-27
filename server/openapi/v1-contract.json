@@ -286,6 +286,12 @@
     "/api/v1/papers/{document_id}/insights": [
       "get"
     ],
+    "/api/v1/papers/{document_id}/processing": [
+      "get"
+    ],
+    "/api/v1/papers/{document_id}/processing/retry": [
+      "post"
+    ],
     "/api/v1/papers/{document_id}/projects": [
       "get"
     ],

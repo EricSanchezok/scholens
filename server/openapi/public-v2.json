@@ -4498,6 +4498,33 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentProcessingStatusResponse": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "readable": {
+            "title": "Readable",
+            "type": "boolean"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentStageStatus"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "readable",
+          "stages"
+        ],
+        "title": "DocumentProcessingStatusResponse",
+        "type": "object"
+      },
       "DocumentReflowAssetResponse": {
         "properties": {
           "checksum": {
@@ -5041,6 +5068,67 @@
           "updated_at"
         ],
         "title": "DocumentResponse",
+        "type": "object"
+      },
+      "DocumentStageStatus": {
+        "properties": {
+          "can_retry": {
+            "default": false,
+            "title": "Can Retry",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "required_integration": {
+            "anyOf": [
+              {
+                "const": "deepseek",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Integration"
+          },
+          "stage": {
+            "enum": [
+              "index",
+              "enrichment",
+              "bibliography"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "status"
+        ],
+        "title": "DocumentStageStatus",
         "type": "object"
       },
       "DoiPaperSource": {
@@ -11025,6 +11113,35 @@
           "index"
         ],
         "title": "ResponseCitation",
+        "type": "object"
+      },
+      "RetryDocumentStage": {
+        "properties": {
+          "acknowledge_provider_charge": {
+            "default": false,
+            "title": "Acknowledge Provider Charge",
+            "type": "boolean"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "index",
+              "enrichment",
+              "bibliography"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "job_id"
+        ],
+        "title": "RetryDocumentStage",
         "type": "object"
       },
       "SelectedPaperCollection": {

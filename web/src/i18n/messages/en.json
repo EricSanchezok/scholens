@@ -1167,6 +1167,36 @@
       "retry": "Retry session check",
       "unavailableDescription": "Reconnect to the server, then retry.",
       "unavailableTitle": "Reader is temporarily unavailable"
+    },
+    "processingStages": {
+      "checking": "Ready to read · Checking background work",
+      "ready": "Ready to read",
+      "working": "Ready to read · Background work in progress",
+      "attention": "Ready to read · Some background work needs attention",
+      "unavailable": "Ready to read · Processing status unavailable",
+      "details": "Details",
+      "description": "You can keep reading while these stages finish. Retry an individual stage without importing the PDF again.",
+      "refresh": "Refresh status",
+      "retry": "Retry stage",
+      "retryPaid": "Retry AI with provider charges",
+      "connect": "Connect DeepSeek",
+      "paidNotice": "Retrying AI information makes a new request using your DeepSeek connection and may incur another provider charge, even if the previous result was lost.",
+      "retryFailed": "Retry was not confirmed. Refresh the status or try again.",
+      "changed": "This stage changed. Review its refreshed status before retrying.",
+      "name": {
+        "index": "Search index",
+        "enrichment": "AI information",
+        "bibliography": "Citation details"
+      },
+      "status": {
+        "not_requested": "Not requested",
+        "pending": "Queued",
+        "running": "Processing",
+        "completed": "Complete",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "stale": "Source changed"
+      }
     }
   },
   "AsyncFeedback": {

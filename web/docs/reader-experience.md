@@ -795,3 +795,28 @@ scroll, zoom, search traversal, text selection, and streamed translations are
 not decorative motion targets. Smooth programmatic outline navigation becomes
 direct in Reduced mode; spatial panel/layout animation and perpetual loading
 also stop while page, selection, draft, annotation, and URL state remain intact.
+
+## Background processing status
+
+The Reader owns a fixed-height disclosure below its toolbar. Readability stays
+independent of search indexing, AI information, and citation details. The
+TanStack Query status endpoint polls every three seconds while work is active,
+pauses in the background, and refreshes on focus. Completion invalidates the
+paper metadata and annotation queries. The PDF stays mounted throughout.
+
+The disclosed state is requester-scoped. Failed stages retry independently;
+AI retry explicitly accepts a new provider charge, while a missing DeepSeek
+connection opens the existing Connections surface. Changed source/version or
+ambiguous network completion refreshes state and preserves the PDF. Unknown
+failures include the request ID. Unavailable status has its own refresh action.
+
+This extends the existing Reader status hierarchy with a runtime disclosure;
+no token, layout system, selection behavior, or decorative motion changes. The
+canonical Reader frames above retain their reading intent. Runtime acceptance
+is `reader-processingstatus--working`, `--failed`, `--retrying`, `--retry-failed`,
+`--ready`, `--loading`, `--unavailable`, and `--narrow-chinese`. Stories exercise
+keyboard disclosure, charge-aware retry, disabled pending actions and reconnect,
+plus the shared Light/Dark locale controls. The Reader browser test verifies
+that a retry sends the exact stage/Job and charge acknowledgement while the PDF
+remains visible. Physical-device acceptance remains separate from browser
+emulation; no physical-device measurement is claimed by this change.

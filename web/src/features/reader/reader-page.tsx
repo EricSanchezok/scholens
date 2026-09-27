@@ -80,6 +80,7 @@ import {
   readerSelectionTurnContext,
   type ReaderSelection,
 } from "./reader-selection";
+import { ReaderProcessing } from "./reader-processing";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
 import {
   ReaderMobileReflowNudge,
@@ -1271,6 +1272,7 @@ function ReaderDocumentWorkspace({
                   view={readerView}
                   zoomPercent={zoomPercent}
                 />
+                <ReaderProcessing documentId={documentId} key={documentId} />
                 {reflowNudge.visible ? (
                   <ReaderMobileReflowNudge
                     onDismiss={reflowNudge.dismiss}

@@ -2514,6 +2514,7 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "POST /api/v1/me/reading-activity/paper-summaries",
         "PUT /api/v1/me/reading-activity-preferences",
         "POST /api/v1/papers/{document_id}/reading-sessions",
+        "POST /api/v1/papers/{document_id}/processing/retry",
         "POST /api/v1/projects/{project_id}/invitations",
         "PATCH /api/v1/projects/{project_id}/members/{user_id}",
         "POST /api/v1/projects/{project_id}/papers",

@@ -9,6 +9,11 @@ from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor, get_citation_workflow
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.modules.papers.application.contracts.citation import CitationResult
+from app.modules.papers.application.processing import (
+    DocumentProcessingStatusResponse,
+    DocumentStageStatus,
+    RetryDocumentStage,
+)
 from app.modules.papers.application.contracts.documents import (
     CollectPublicPaperResponse,
     DocumentContentResponse,
@@ -353,5 +358,46 @@ def collect_public_paper(
             actor=current_user,
             operation=operation,
             share_token=share_token,
+        )
+    )
+
+
+@document_router.get(
+    "/{document_id}/processing", response_model=DocumentProcessingStatusResponse
+)
+def get_document_processing(
+    document_id: UUID,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> DocumentProcessingStatusResponse:
+    return executor.query(
+        lambda capabilities: capabilities.document_processing.get(
+            actor=current_user, document_id=document_id
+        )
+    )
+
+
+@document_router.post(
+    "/{document_id}/processing/retry",
+    response_model=DocumentStageStatus,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retry_document_stage(
+    document_id: UUID,
+    request: RetryDocumentStage,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+) -> DocumentStageStatus:
+    return executor.command(
+        lambda capabilities: capabilities.document_processing.retry(
+            actor=current_user,
+            operation=operation,
+            document_id=document_id,
+            request=request,
         )
     )

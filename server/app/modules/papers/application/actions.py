@@ -6,6 +6,7 @@ DOCUMENT_DELETED = OperationAction("document.deleted")
 DOCUMENT_METADATA_HYDRATED = OperationAction("document.metadata_hydrated")
 DOCUMENT_PROCESSING_COMPLETED = OperationAction("document.processing_completed")
 DOCUMENT_PROCESSING_FAILED = OperationAction("document.processing_failed")
+DOCUMENT_STAGE_RETRIED = OperationAction("document.stage_retried")
 LIBRARY_PAPER_COLLECTED = OperationAction("library.paper_collected")
 LIBRARY_PAPER_REMOVED = OperationAction("library.paper_removed")
 LIBRARY_PAPER_SHARED = OperationAction("library.paper_shared")
@@ -17,6 +18,7 @@ __all__ = [
     "DOCUMENT_METADATA_HYDRATED",
     "DOCUMENT_PROCESSING_COMPLETED",
     "DOCUMENT_PROCESSING_FAILED",
+    "DOCUMENT_STAGE_RETRIED",
     "LIBRARY_PAPER_COLLECTED",
     "LIBRARY_PAPER_REMOVED",
     "LIBRARY_PAPER_SHARED",

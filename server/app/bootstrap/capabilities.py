@@ -23,6 +23,7 @@ from app.bootstrap.container import (
     build_paper_content,
     build_paper_collection_access,
     build_paper_details,
+    build_document_processing,
     build_document_reflows,
     build_paper_discovery,
     build_paper_download,
@@ -75,6 +76,7 @@ from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.content import PaperContentCapabilities
 from app.modules.papers.application.collection_access import RequirePaperInCollection
 from app.modules.papers.application.details import GetPaperDetails
+from app.modules.papers.application.processing import DocumentProcessing
 from app.modules.papers.application.discovery import DiscoverPapers
 from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.application.ingestion import IngestPaper
@@ -251,6 +253,14 @@ class ApplicationCapabilities:
         return build_paper_list_preferences(
             db=self._session,
             journal=self._journal,
+        )
+
+    @cached_property
+    def document_processing(self) -> DocumentProcessing:
+        return build_document_processing(
+            db=self._session,
+            journal=self._journal,
+            enabled=self._settings.job_result_inbox_enabled,
         )
 
     @cached_property

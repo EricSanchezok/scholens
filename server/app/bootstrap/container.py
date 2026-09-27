@@ -80,6 +80,8 @@ from app.modules.papers.infrastructure.discovery import (
     PostHogDiscoveryEventRecorder,
     SqlDiscoveryDocumentGateway,
 )
+from app.modules.papers.application.processing import DocumentProcessing
+from app.bootstrap.adapters.document_processing import SqlDocumentProcessing
 from app.modules.papers.application.details import GetPaperDetails
 from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.library import PaperLibrary
@@ -286,6 +288,14 @@ def build_paper_download(*, db: Session) -> GetPaperDownload:
         build_paper_content(db=db),
         S3PaperDownloadSigner(),
         expires_in_seconds=DEFAULT_SIGNED_URL_TTL_SECONDS,
+    )
+
+
+def build_document_processing(
+    *, db: Session, journal: OperationJournal, enabled: bool
+) -> DocumentProcessing:
+    return DocumentProcessing(
+        SqlDocumentProcessing(db, enabled=enabled), journal=journal, enabled=enabled
     )
 
 

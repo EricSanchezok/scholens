@@ -1759,6 +1759,18 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentProcessingStatusResponse */
+        DocumentProcessingStatusResponse: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Readable */
+            readable: boolean;
+            /** Stages */
+            stages: components["schemas"]["DocumentStageStatus"][];
+        };
         /** DocumentReflowAssetResponse */
         DocumentReflowAssetResponse: {
             /** Checksum */
@@ -1912,6 +1924,28 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** DocumentStageStatus */
+        DocumentStageStatus: {
+            /**
+             * Can Retry
+             * @default false
+             */
+            can_retry: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /** Required Integration */
+            required_integration?: "deepseek" | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "pending" | "running" | "completed" | "failed" | "cancelled" | "stale";
         };
         /** DoiPaperSource */
         DoiPaperSource: {
@@ -4047,6 +4081,24 @@ export interface components {
              * @description An exact verbatim quote from the source. Never paraphrase evidence.
              */
             text: string;
+        };
+        /** RetryDocumentStage */
+        RetryDocumentStage: {
+            /**
+             * Acknowledge Provider Charge
+             * @default false
+             */
+            acknowledge_provider_charge: boolean;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "index" | "enrichment" | "bibliography";
         };
         /** SelectedPaperCollection */
         SelectedPaperCollection: {
