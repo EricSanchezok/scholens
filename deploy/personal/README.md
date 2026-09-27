@@ -200,11 +200,15 @@ credentials and database passwords never appear in workflow inputs or artifacts.
 Deploy `application-monitoring.yml` as `scholens-personal-application-monitoring`
 after the runtime log groups exist, passing the confirmed shared alert topic as
 `AlertTopicArn`. Create and review its exact CloudFormation change set before
-execution. It owns only 20 log metric filters and six alarms: 12 fixed custom
-metrics in `Scholens/Personal`, with no dynamic dimensions or exporter containers.
-The runtime retains logs for 30 days. Metric filters and alarms have CloudWatch
-charges. Follow the actual-ingestion verification and signal limitations in the
-[observability runbook](../../docs/operations/AWS_OBSERVABILITY_SETUP.md).
+execution. It owns application log metric filters and alarms in
+`Scholens/Personal`, without exporter containers. The runtime retains logs for
+30 days. Metric filters and alarms have CloudWatch charges. The
+[observability runbook](../../docs/operations/AWS_OBSERVABILITY_SETUP.md) owns
+the signal inventory, bounded queue dimensions, actual-ingestion verification
+and limitations. Deploy and verify the durable-backlog reporter before enabling
+its snapshot-silence alarm. Before rolling back to an application without that
+reporter, remove the reporter-dependent alarms through a reviewed monitoring
+change set as described in that runbook.
 Rollback of this monitoring stack does not change application tasks or stored
 data; application rollback does not require removing additive filters.
 
