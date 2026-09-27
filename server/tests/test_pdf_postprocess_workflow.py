@@ -274,3 +274,24 @@ async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> N
     assert result.value == "done"
     assert events == ["read", "external", "finalize"]
     assert callbacks.resolution == PdfPostprocessResolution()
+
+
+@pytest.mark.asyncio
+async def test_independent_bibliography_never_falls_through_to_paid_agentic_provider():
+    from unittest.mock import AsyncMock
+
+    provider = _Provider([])
+    provider.agentic = AsyncMock(side_effect=AssertionError("paid provider forbidden"))
+    workflow = PdfPostprocessWorkflow(
+        executor=_Executor(_Capabilities(_Callbacks([]))),
+        reader=_Reader([]),
+        provider=provider,
+        operation_factory=OperationContextFactory(),
+    )
+    result = await workflow.deterministic_bibliography(
+        actor=_actor(),
+        operation=_operation(),
+        fields=CitationFields(title="A paper", authors=["Ada"]),
+    )
+    assert result.doi == "10.1/example"
+    provider.agentic.assert_not_awaited()

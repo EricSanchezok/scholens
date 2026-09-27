@@ -15,6 +15,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.bootstrap.adapters.document_stage_dispatch import enqueue_document_stages
+
 from app.bootstrap.adapters.document_gc import (
     collect_document_if_due,
     schedule_document_gc,
@@ -815,6 +817,7 @@ def handle_paper_processing_webhook(
             kind=FailureKind.CONFLICT,
         )
 
+    staged_processing = durable_job.payload.get("delivery_protocol") == "manifest-v1"
     normalized_job_id = str(upload_job.id)
     job_uuid = upload_job.id
     post_commit = _pdf_post_commit_actions(
@@ -920,6 +923,7 @@ def handle_paper_processing_webhook(
                                 db,
                                 job_id=job_uuid,
                                 result=result,
+                                compact=staged_processing,
                             )
                             salvage_changes = [
                                 _document_change(
@@ -970,6 +974,7 @@ def handle_paper_processing_webhook(
                             db,
                             job_id=job_uuid,
                             result=result,
+                            compact=staged_processing,
                         )
                         zotero_changes = [
                             _document_change(
@@ -981,6 +986,33 @@ def handle_paper_processing_webhook(
                                 resources=(ResourceRef("document", str(finalized)),),
                             ),
                         ]
+                        if staged_processing:
+                            document = db.get(Document, uuid.UUID(finalized))
+                            if document is not None:
+                                stages = enqueue_document_stages(
+                                    db,
+                                    document=document,
+                                    actor=actor,
+                                    operation=operation,
+                                    ingestion_job_id=job_uuid,
+                                    enrich=False,
+                                )
+                                durable_job.result = {
+                                    **(durable_job.result or {}),
+                                    "stage_job_ids": [
+                                        str(stage.job.id) for stage in stages
+                                    ],
+                                }
+                                zotero_changes.extend(
+                                    OperationChange(
+                                        action=JOB_CREATED,
+                                        resources=(
+                                            ResourceRef("job", str(stage.job.id)),
+                                        ),
+                                    )
+                                    for stage in stages
+                                    if stage.created
+                                )
                         zotero_post_commit = _pdf_post_commit_actions(
                             actor_id=actor.id,
                             job_id=job_uuid,
@@ -1112,6 +1144,7 @@ def handle_paper_processing_webhook(
                     db,
                     job_id=job_uuid,
                     result=result,
+                    compact=staged_processing,
                 )
                 semantic_text = semantic_document_text(
                     title=paper.title,
@@ -1119,17 +1152,36 @@ def handle_paper_processing_webhook(
                     summary=metadata.summary if metadata else None,
                     abstract=metadata.abstract if metadata else None,
                 )
-                postprocess_job = _enqueue_pdf_postprocess(
-                    db,
-                    ingestion_job_id=job_uuid,
-                    document_id=paper.id,
-                    user_id=actor.id,
-                    origin_operation_id=operation.trace.operation_id,
-                    correlation_id=operation.trace.correlation_id,
-                    semantic_text=semantic_text,
-                    semantic_digest=semantic_source_digest(semantic_text),
-                    parser_markdown_s3_key=result.parser_markdown_s3_key,
-                )
+                if staged_processing:
+                    postprocess_jobs = enqueue_document_stages(
+                        db,
+                        document=paper,
+                        actor=actor,
+                        operation=operation,
+                        ingestion_job_id=job_uuid,
+                        enrich=not bool(
+                            durable_job.payload.get("skip_metadata_extraction")
+                        ),
+                    )
+                    durable_job.result = {
+                        **(durable_job.result or {}),
+                        "stage_job_ids": [
+                            str(stage.job.id) for stage in postprocess_jobs
+                        ],
+                    }
+                else:
+                    postprocess_job = _enqueue_pdf_postprocess(
+                        db,
+                        ingestion_job_id=job_uuid,
+                        document_id=paper.id,
+                        user_id=actor.id,
+                        origin_operation_id=operation.trace.operation_id,
+                        correlation_id=operation.trace.correlation_id,
+                        semantic_text=semantic_text,
+                        semantic_digest=semantic_source_digest(semantic_text),
+                        parser_markdown_s3_key=result.parser_markdown_s3_key,
+                    )
+                    postprocess_jobs = (postprocess_job,)
                 changes: list[OperationChange] = []
                 if completed:
                     changes.append(
@@ -1157,18 +1209,14 @@ def handle_paper_processing_webhook(
                     )
                     for comment_id in created_comment_ids
                 )
-                if postprocess_job.created:
-                    changes.append(
-                        OperationChange(
-                            action=JOB_CREATED,
-                            resources=(
-                                ResourceRef(
-                                    "job",
-                                    str(postprocess_job.job.id),
-                                ),
-                            ),
-                        )
+                changes.extend(
+                    OperationChange(
+                        action=JOB_CREATED,
+                        resources=(ResourceRef("job", str(stage.job.id)),),
                     )
+                    for stage in postprocess_jobs
+                    if stage.created
+                )
                 end_time = datetime.now(timezone.utc)
                 success_post_commit = _pdf_post_commit_actions(
                     actor_id=actor.id,

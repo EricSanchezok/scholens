@@ -40,6 +40,7 @@ def finalize_reserved_document(
     source_sha256: str | None = None,
     size_bytes: int | None = None,
     dispatch_processing: bool = True,
+    staged_processing: bool = False,
 ) -> IngestionFinalization:
     """Attach one upload to a content-addressed Document and process it once."""
     if pdf_bytes is None:
@@ -206,6 +207,7 @@ def finalize_reserved_document(
             job=durable_job,
             task_name="upload_and_process_file",
             queue=JobQueue.DOCUMENT,
+            execution_replay="deterministic" if staged_processing else None,
             kwargs={
                 "s3_object_key": document.s3_object_key,
                 "webhook_url": (

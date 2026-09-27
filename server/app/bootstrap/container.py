@@ -289,11 +289,13 @@ def build_paper_download(*, db: Session) -> GetPaperDownload:
     )
 
 
-def build_paper_ingestion(*, db: Session, journal: OperationJournal) -> IngestPaper:
+def build_paper_ingestion(
+    *, db: Session, journal: OperationJournal, staged_processing: bool = False
+) -> IngestPaper:
     return IngestPaper(
         validator=DefaultPdfInputValidator(),
         limits=DefaultPaperIngestionLimits(),
-        gateway=SqlPaperIngestionGateway(db),
+        gateway=SqlPaperIngestionGateway(db, staged_processing=staged_processing),
         journal=journal,
     )
 
@@ -619,6 +621,12 @@ def build_job_callbacks(
     from app.bootstrap.adapters.document_stage_callbacks import (
         DocumentIndexCallback,
         DocumentIndexCompletion,
+        DocumentEnrichmentCallback,
+        DocumentEnrichmentCompletion,
+    )
+    from app.bootstrap.adapters.document_bibliography import (
+        DocumentBibliographyCallback,
+        DocumentBibliographyCompletion,
     )
 
     return JobCallbacks(
@@ -632,6 +640,12 @@ def build_job_callbacks(
             ),
             JobOperation.DOCUMENT_INDEX: RegisteredJobCallback(
                 DocumentIndexCallback, DocumentIndexCompletion(db)
+            ),
+            JobOperation.DOCUMENT_ENRICH: RegisteredJobCallback(
+                DocumentEnrichmentCallback, DocumentEnrichmentCompletion(db)
+            ),
+            JobOperation.DOCUMENT_BIBLIOGRAPHY: RegisteredJobCallback(
+                DocumentBibliographyCallback, DocumentBibliographyCompletion(db)
             ),
             JobOperation.DOCUMENT_GC: RegisteredJobCallback(
                 JobCallbackIdentity, DocumentGcCompletion(db)

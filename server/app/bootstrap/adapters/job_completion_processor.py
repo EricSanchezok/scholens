@@ -12,6 +12,10 @@ from uuid import UUID
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.workflows.pdf_postprocess import PdfPostprocessWorkflow
 from app.bootstrap.workflows.zotero import ZoteroBackgroundWorkflow
+from app.bootstrap.adapters.document_bibliography import (
+    DocumentBibliographyResolution,
+    bibliography_snapshot,
+)
 from app.database.product_analytics import track_event
 from app.helpers.ai_limits import release_concurrency_by_id
 from app.modules.jobs.application.authentication import VerifiedJobCallback
@@ -22,6 +26,7 @@ from app.modules.jobs.application.contracts import (
     SourceReadyCallback,
 )
 from app.modules.papers.application.ingestion import SourceReadyResult
+from app.modules.papers.domain.citations import CitationFields
 from app.modules.jobs.application.callbacks import (
     JobCompletionResult,
     JobPostCommitAction,
@@ -201,6 +206,52 @@ class JobCompletionProcessor:
             ),
         )
         return JobSourceUrlResponse(resolved_url=resolved_url)
+
+    async def resolve_bibliography(
+        self,
+        *,
+        job_id: UUID,
+        generation: int,
+        verified: VerifiedJobCallback,
+    ) -> DocumentBibliographyResolution:
+        async def require_generation() -> None:
+            await asyncio.to_thread(
+                self._executor.query,
+                lambda capabilities: capabilities.job_results.require_transport(
+                    job_id=job_id, generation=generation
+                ),
+            )
+
+        await require_generation()
+        facts = await asyncio.to_thread(self._causality, job_id=job_id)
+        resumed = await asyncio.to_thread(self._resume, facts=facts, verified=verified)
+        if resumed.actor is None:
+            raise AppError(
+                code="job_owner_missing",
+                message="Job owner is unavailable",
+                kind=FailureKind.CONFLICT,
+            )
+        actor = resumed.actor
+
+        def snapshot() -> tuple[DocumentBibliographyResolution, CitationFields | None]:
+            with self._session_factory() as db:
+                return bibliography_snapshot(db, job_id=job_id, actor=actor)
+
+        result, fields = await asyncio.to_thread(snapshot)
+        if fields is not None:
+            try:
+                patch = await self._pdf_postprocess.deterministic_bibliography(
+                    actor=actor, operation=resumed.operation, fields=fields
+                )
+            except Exception as exc:
+                raise AppError(
+                    code="document_bibliography_unavailable",
+                    message="Bibliography provider is temporarily unavailable",
+                    kind=FailureKind.DEPENDENCY_FAILURE,
+                ) from exc
+            result = result.model_copy(update={"patch": patch})
+        await require_generation()
+        return result
 
     async def complete(
         self,

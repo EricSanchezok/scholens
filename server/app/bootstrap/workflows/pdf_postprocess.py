@@ -151,6 +151,22 @@ class PdfPostprocessWorkflow:
                 )
         return result
 
+    async def deterministic_bibliography(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        fields: CitationFields,
+    ) -> CitationMetadataPatch:
+        """Independent bibliography stage never invokes paid agentic recovery."""
+        if not bibliographic_gaps(fields):
+            return CitationMetadataPatch()
+        async with asyncio.timeout(25):
+            resolved = await self._provider.deterministic(
+                actor=actor, operation=operation, fields=fields
+            )
+        return resolved.patch
+
     @staticmethod
     def _load_passage_embeddings(
         callback: PdfPostprocessCallback,

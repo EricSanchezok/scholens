@@ -6,7 +6,7 @@ from uuid import UUID
 from scholens_ai.token_projection import TokenProjection
 from sqlalchemy import and_, delete, exists, insert, select, union_all
 from sqlalchemy.sql.selectable import Subquery
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.modules.papers.infrastructure.models import (
     Document,
@@ -73,7 +73,17 @@ class TokenProjectionRepository:
 
     def adopt(self, *, document_id: UUID, projection: TokenProjection) -> bool:
         document = self._db.scalar(
-            select(Document).where(Document.id == document_id).with_for_update()
+            select(Document)
+            .options(
+                load_only(
+                    Document.id,
+                    Document.raw_content,
+                    Document.content_digest,
+                    raiseload=True,
+                )
+            )
+            .where(Document.id == document_id)
+            .with_for_update()
         )
         if document is None or document.raw_content is None:
             return False

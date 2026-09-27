@@ -866,11 +866,13 @@ def test_unicode_repair_invalidates_completed_or_inflight_reflow(
 
 @pytest.mark.parametrize("include_page_count", [False, True])
 @pytest.mark.parametrize("include_metadata", [False, True])
+@pytest.mark.parametrize("staged", [False, True])
 @pytest.mark.asyncio
 async def test_pdf_completion_persists_summary_without_creating_conversation(
     monkeypatch: pytest.MonkeyPatch,
     include_page_count: bool,
     include_metadata: bool,
+    staged: bool,
 ) -> None:
     job_id = uuid4()
     document_id = uuid4()
@@ -880,6 +882,8 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         operation=JobOperation.PDF_PROCESS.value,
         requested_by_id=actor.id,
         status=JobStatus.RUNNING.value,
+        payload={"delivery_protocol": "manifest-v1"} if staged else {},
+        result=None,
     )
     existing_paper = SimpleNamespace(
         id=document_id,
@@ -934,6 +938,13 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
                 created=False,
             )
         ),
+    )
+    stage_jobs = tuple(
+        PersistedJob(job=SimpleNamespace(id=uuid4()), created=True) for _ in range(3)
+    )
+    enqueue_stages = MagicMock(return_value=stage_jobs)
+    monkeypatch.setattr(
+        document_job_callbacks, "enqueue_document_stages", enqueue_stages
     )
     citation = ResponseCitation(index=1, text="Supporting passage")
     result = PDFProcessingResult(
@@ -995,6 +1006,20 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
     assert all(
         not str(change.action).startswith("conversation.") for change in handled.changes
     )
+
+    assert (
+        document_job_callbacks._complete_pdf_job.call_args.kwargs["compact"] is staged
+    )
+    if staged:
+        document_job_callbacks._enqueue_pdf_postprocess.assert_not_called()
+        assert enqueue_stages.call_args.kwargs["document"] is completed_paper
+        assert enqueue_stages.call_args.kwargs["enrich"] is True
+        assert durable_job.result["stage_job_ids"] == [
+            str(stage.job.id) for stage in stage_jobs
+        ]
+    else:
+        enqueue_stages.assert_not_called()
+        document_job_callbacks._enqueue_pdf_postprocess.assert_called_once()
 
 
 def test_zotero_pdf_callback_omission_preserves_existing_page_count(
@@ -1065,6 +1090,7 @@ async def test_terminal_pdf_callback_does_not_rewrite_document(
                 operation=JobOperation.PDF_PROCESS.value,
                 requested_by_id=actor.id,
                 status=JobStatus.COMPLETED.value,
+                payload={},
             )
         ),
     )
@@ -1197,6 +1223,8 @@ async def test_pdf_completion_rejects_mismatched_object_key(
         operation=JobOperation.PDF_PROCESS.value,
         requested_by_id=actor.id,
         status=JobStatus.RUNNING.value,
+        payload={},
+        result=None,
     )
     existing_paper = SimpleNamespace(
         id=document_id,

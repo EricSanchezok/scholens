@@ -44,6 +44,7 @@ from scholens_job_contracts import (
 )
 from botocore.exceptions import BotoCoreError, ClientError
 from src.indexing import build_checkpointed_projection
+from src.document_enrichment import enrich_document
 
 from src.audio import generate_audio
 from src.celery_app import celery_app
@@ -1666,6 +1667,51 @@ def generate_document_reflow_task(
         }
         _deliver_webhook(webhook_url, payload, task_id=task_id)
         raise
+
+
+@celery_app.task(
+    bind=True, name="hydrate_document_bibliography", soft_time_limit=60, time_limit=90
+)
+def hydrate_document_bibliography_task(
+    self,
+    callback_url: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_bibliography_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        payload = execution.read_stage_input("/bibliography")
+        execution.complete({**payload, "task_id": execution.job_id})
+        return {"status": "completed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
+
+
+@celery_app.task(bind=True, name="enrich_document", soft_time_limit=180, time_limit=210)
+def enrich_document_task(
+    self,
+    callback_url: str,
+    parser_markdown_s3_key: str,
+    content_digest: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_enrichment_delivery_protocol_invalid")
+    return run_fenced_task(
+        self,
+        callback_url=callback_url,
+        storage=s3_service,
+        work=lambda execution: enrich_document(
+            execution,
+            storage=s3_service,
+            callback_url=callback_url,
+            parser_markdown_s3_key=parser_markdown_s3_key,
+            content_digest=content_digest,
+        ),
+    )
 
 
 @celery_app.task(bind=True, name="index_document", soft_time_limit=900, time_limit=960)

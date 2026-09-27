@@ -60,12 +60,18 @@ def complete_pdf_job(
     job_id: uuid.UUID,
     result: PDFProcessingResult,
     persisted_result: dict[str, JsonValue] | None = None,
+    compact: bool = False,
 ) -> bool:
     _, changed = job_repository.complete(
         db,
         job_id=job_id,
         result=(
-            result.model_dump(mode="json")
+            result.model_dump(
+                mode="json",
+                exclude={"raw_content", "page_offset_map", "metadata"}
+                if compact
+                else None,
+            )
             if persisted_result is None
             else persisted_result
         ),

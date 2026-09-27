@@ -110,3 +110,15 @@ storage could otherwise call the provider twice. Replays first seek a complete
 checkpoint; a surviving intent without a result produces an explicit unknown
 outcome. Just-in-time credential and source-resolution requests carry and verify
 the same generation, so an expired worker cannot continue acquiring dependencies.
+
+## Independent readable-first stages
+
+New producers are separately gated by `DOCUMENT_PIPELINE_ENABLED`, which requires
+the inbox consumer. Extraction commits readable content and three independent
+stage jobs. Deterministic indexing and bibliography may recover from checkpoints;
+paid enrichment records intent before the external effect and fails closed on
+unknown outcomes. All result writes verify current source/access, bibliography
+also verifies citation identity, and enrichment only fills canonical gaps. This
+keeps a provider outage or a manual edit from invalidating successful extraction.
+Zotero imports retain authoritative metadata and omit automatic paid enrichment.
+Legacy accepted envelopes keep their original behavior for the drain window.

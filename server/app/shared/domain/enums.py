@@ -61,6 +61,8 @@ class JobOperation(str, Enum):
     PDF_PROCESS = "pdf_process"
     PDF_POSTPROCESS = "pdf_postprocess"
     DOCUMENT_INDEX = "document_index"
+    DOCUMENT_ENRICH = "document_enrich"
+    DOCUMENT_BIBLIOGRAPHY = "document_bibliography"
     DOCUMENT_REFLOW = "document_reflow"
     AUDIO_GENERATE = "audio_generate"
     DATA_TABLE_GENERATE = "data_table_generate"

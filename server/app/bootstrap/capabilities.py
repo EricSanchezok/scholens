@@ -189,7 +189,11 @@ class ApplicationCapabilities:
 
     @cached_property
     def paper_ingestion(self) -> IngestPaper:
-        return build_paper_ingestion(db=self._session, journal=self._journal)
+        return build_paper_ingestion(
+            db=self._session,
+            journal=self._journal,
+            staged_processing=self._settings.document_pipeline_enabled,
+        )
 
     @cached_property
     def paper_uploads(self) -> PaperUploadSessions:

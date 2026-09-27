@@ -178,3 +178,24 @@ def test_external_effect_never_starts_when_intent_cannot_be_persisted():
     storage.upload_bytes_to_key.side_effect = OSError("storage unavailable")
     with pytest.raises(DeliveryUnavailable):
         runtime.begin_external_effect()
+
+
+def test_stage_read_stops_on_fence_rejection_and_closes_the_response():
+    runtime, storage, post = execution()
+    post.return_value.status_code = 409
+    post.return_value.json.return_value = {"code": "job_execution_fence_rejected"}
+    with pytest.raises(ExecutionLost):
+        runtime.read_stage_input("/bibliography")
+    with pytest.raises(ExecutionLost):
+        runtime.begin_external_effect()
+    storage.upload_bytes_to_key.assert_not_called()
+    post.return_value.close.assert_called()
+
+
+def test_stage_read_dependency_failure_retains_transport_retry():
+    runtime, _, post = execution()
+    post.return_value.status_code = 503
+    post.return_value.raise_for_status.side_effect = requests.HTTPError()
+    with pytest.raises(DeliveryUnavailable):
+        runtime.read_stage_input("/bibliography")
+    runtime.check_cancelled()

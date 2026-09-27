@@ -224,9 +224,10 @@ this cleanup scope. Migration `2026_09_27_1200` adds the effects table without
 rewriting existing jobs; older applications ignore it while new consumers drain.
 
 This is a consumer-first expansion: `JOB_RESULT_INBOX_ENABLED` defaults to false,
-and existing dispatch producers retain their accepted callback protocol. Enable
-only after the matching staged producers, cleanup and failure recovery are
-verified. The jobs module owns the old transport until all previously accepted
+and `DOCUMENT_PIPELINE_ENABLED` separately controls new ingestion producers.
+The producer flag requires the inbox consumer flag. Disabled producers retain
+their accepted callback protocol. Enable only after matching consumers, queues,
+cleanup, failure recovery and rollback drain are verified. The jobs module owns the old transport until all previously accepted
 jobs drain and the application rollback window closes. Existing jobs without an
 execution row continue through the legacy callback path. Migration
 `2026_09_27_1000` adds independent tables; it does not rewrite existing job rows.
@@ -969,3 +970,23 @@ Signed credential and source-resolution requests accept an optional execution
 generation. Fenced jobs require the live generation before access; source
 resolution rechecks after external work. N-1 callers without a generation remain
 valid only for legacy jobs. The signature alone is not an execution lease.
+
+### Independent document stages
+
+`DOCUMENT_PIPELINE_ENABLED` selects fenced deterministic PDF extraction for new
+imports. Canonical content becomes readable before independent `document_index`,
+`document_enrich` and `document_bibliography` jobs are transactionally dispatched.
+Repeated application uses durable idempotency keys. Optional stages cannot change
+the completed basic processing state. The parent result references stage job IDs
+and retains bounded audit fields, excluding duplicate body/page-map/AI payloads.
+
+Enrichment has a source digest and the requester's credential scope. Missing AI
+credentials do not prevent import. It fills only absent metadata, except an
+untouched filename placeholder explicitly marked by provenance. Human and Zotero
+values remain authoritative; personal annotations and summary citations require
+verbatim evidence from the current source. Zotero imports do not automatically
+schedule paid enrichment. Bibliography uses deterministic providers only, outside
+SQL transactions, with a 25-second deadline and execution checks before and after
+provider work. Application rechecks access, source and citation identity, then
+fills gaps without replacing current values. Independent index results follow
+the same source/access fencing. Failure leaves the readable document intact.

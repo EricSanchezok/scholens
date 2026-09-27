@@ -552,6 +552,7 @@ class DocumentRepository:
                 size_bytes=size_bytes,
                 s3_object_key=s3_object_key,
                 title=original_filename,
+                field_provenance={"title": {"source": "filename"}},
                 created_by_id=created_by_id,
                 processing_status=DocumentProcessingStatus.PROCESSING.value,
                 processing_job_id=processing_job_id,

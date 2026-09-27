@@ -273,8 +273,9 @@ class DefaultPaperIngestionLimits:
 
 
 class SqlPaperIngestionGateway:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, *, staged_processing: bool = False) -> None:
         self._db = db
+        self._staged_processing = staged_processing
 
     @staticmethod
     def response(
@@ -370,6 +371,7 @@ class SqlPaperIngestionGateway:
                 upload_job=reservation,
                 user=actor,
                 db=self._db,
+                staged_processing=self._staged_processing,
             )
             accepted_terminal = finalization.job_completed
             if original_reservation is not None:
@@ -502,6 +504,7 @@ class SqlPaperIngestionGateway:
                 job=durable_job,
                 task_name="ingest_source_and_process",
                 queue="document",
+                execution_replay="deterministic" if self._staged_processing else None,
                 kwargs={
                     "source": source,
                     "staging_object_key": staging_key,

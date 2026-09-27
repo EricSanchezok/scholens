@@ -268,3 +268,64 @@ async def test_unclaimed_invalid_callback_does_not_release_lease() -> None:
 
     assert result.claimed is False
     release.assert_not_awaited()
+
+
+@pytest.mark.parametrize("lose_fence", [False, True])
+@pytest.mark.asyncio
+async def test_bibliography_has_no_open_transaction_during_provider_and_rechecks_fence(
+    lose_fence,
+):
+    import threading
+    from app.bootstrap.adapters.document_bibliography import (
+        DocumentBibliographyResolution,
+    )
+    from app.modules.papers.domain.citations import CitationFields
+    from app.modules.papers.application.citations import CitationMetadataPatch
+    from app.bootstrap.adapters import job_completion_processor as module
+
+    facts = _facts(JobOperation.DOCUMENT_BIBLIOGRAPHY)
+    processor, _ = _processor(facts=facts, completion_error=AssertionError())
+    fences = MagicMock()
+    processor._executor.query.side_effect = lambda fn: fn(
+        SimpleNamespace(job_results=fences)
+    )
+    closed = []
+    processor._session_factory.return_value.__exit__.side_effect = lambda *args: (
+        closed.append(True)
+    )
+    thread_id = threading.get_ident()
+    snapshot = DocumentBibliographyResolution(
+        content_digest="a" * 64, identity_digest="b" * 64
+    )
+
+    def read(*args, **kwargs):
+        assert threading.get_ident() != thread_id
+        return snapshot, CitationFields(title="Title", authors=["Ada"])
+
+    async def resolve(**kwargs):
+        assert threading.get_ident() == thread_id
+        assert closed == [True]
+        if lose_fence:
+            fences.require_transport.side_effect = AppError(
+                code="job_execution_fence_rejected",
+                message="Lost",
+                kind=FailureKind.CONFLICT,
+            )
+        return CitationMetadataPatch(doi="10.1000/test")
+
+    processor._pdf_postprocess.deterministic_bibliography = AsyncMock(
+        side_effect=resolve
+    )
+    with patch.object(module, "bibliography_snapshot", side_effect=read):
+        if lose_fence:
+            with pytest.raises(AppError, match="job_execution_fence_rejected"):
+                await processor.resolve_bibliography(
+                    job_id=facts.job_id, generation=3, verified=MagicMock()
+                )
+        else:
+            result = await processor.resolve_bibliography(
+                job_id=facts.job_id, generation=3, verified=MagicMock()
+            )
+            assert result.patch.doi == "10.1000/test"
+    assert fences.require_transport.call_count == 2
+    fences.require_transport.assert_called_with(job_id=facts.job_id, generation=3)

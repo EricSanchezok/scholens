@@ -129,10 +129,22 @@ class FencedExecution:
     def claim_token(self) -> str:
         return str(self._claim_token)
 
-    def _send(self, suffix: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _send(
+        self, suffix: str, payload: dict[str, Any], *, timeout_seconds: int = 5
+    ) -> dict[str, Any]:
         response = None
         try:
-            response = self._post(self.base_url + suffix, payload, timeout=5)
+            response = self._post(
+                self.base_url + suffix, payload, timeout=timeout_seconds
+            )
+            if response.status_code == 409:
+                error = response.json()
+                if (
+                    isinstance(error, dict)
+                    and error.get("code") == "job_execution_fence_rejected"
+                ):
+                    self._lost.set()
+                    raise ExecutionLost("job_execution_lost")
             response.raise_for_status()
             value = response.json()
             if not isinstance(value, dict):
@@ -303,6 +315,14 @@ class FencedExecution:
         return self._send(
             "/source-ready", {**payload, "claim_generation": self.generation}
         )
+
+    def read_stage_input(self, suffix: str) -> dict[str, Any]:
+        self.check_cancelled()
+        result = self._send(
+            suffix, {"claim_generation": self.generation}, timeout_seconds=35
+        )
+        self.check_cancelled()
+        return result
 
 
 def run_fenced_task(

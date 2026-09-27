@@ -217,6 +217,7 @@ class JobCallbacks:
         permitted = (
             {
                 JobOperation.PDF_PROCESS,
+                JobOperation.DOCUMENT_ENRICH,
                 JobOperation.DATA_TABLE_GENERATE,
                 JobOperation.AUDIO_GENERATE,
             }

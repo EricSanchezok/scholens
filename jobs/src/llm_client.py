@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import json
+import asyncio
 from typing import Any, Callable, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
@@ -39,6 +40,7 @@ class AIExtractionClient:
         schema: type[T],
         feature: str,
         idempotency_suffix: str,
+        before_provider: Callable[[], None] | None = None,
     ) -> T:
         agent: Agent[None, T] = Agent(
             build_model(self.profile, api_key=await current_deepseek_key()),
@@ -51,6 +53,8 @@ class AIExtractionClient:
         )
         try:
             async with agent:
+                if before_provider is not None:
+                    await asyncio.to_thread(before_provider)
                 result = await agent.run(prompt[: self.profile.max_input_chars])
         except ValidationError as exc:
             raise ValueError(
@@ -70,6 +74,7 @@ class AIExtractionClient:
         paper_content: str,
         job_id: str,
         status_callback: Callable[[str], None] | None = None,
+        before_provider: Callable[[], None] | None = None,
     ) -> PaperMetadataExtraction:
         if status_callback:
             status_callback("Extracting paper metadata")
@@ -100,6 +105,7 @@ class AIExtractionClient:
                 schema=PaperMetadataExtraction,
                 feature="paper_metadata",
                 idempotency_suffix="paper_metadata",
+                before_provider=before_provider,
             )
 
         if status_callback:

@@ -455,8 +455,10 @@ text digests and model revision. Corruption fails explicitly; an unavailable
 owner/storage retries with the existing claim token. The complete result carries
 bounded binary vectors and exact spans, and Server rechecks access and canonical
 source before atomic adoption. Basic readability is independent of index success.
-The new task remains unproduced until the staged pipeline rollout; its consumer
-must deploy before any producer or dedicated index queue is enabled.
+Server produces this task when `DOCUMENT_PIPELINE_ENABLED` is enabled. Both this
+flag and `JOB_RESULT_INBOX_ENABLED` default to false; the consumer must deploy
+before the producer is activated. Legacy accepted messages retain their original
+route and protocol until drained.
 
 Fenced execution scope propagates its generation to just-in-time credentials and
 source resolution, including async credential lookup threads. Legacy jobs send
@@ -467,3 +469,29 @@ be checkpointed, even a retry with the same claim token must report
 `provider_outcome_unknown` instead of invoking the provider again. Persisted
 complete results are replayed first. This bounds duplicate execution across job
 retries; it does not claim exactly-once semantics from an external provider.
+
+## Readable-first document stages
+
+With the staged producer enabled, PDF extraction persists canonical readable
+content before independently enqueuing `index_document`, `enrich_document`, and
+`hydrate_document_bibliography`. Each has its own job, execution fence, checkpoint,
+terminal outcome and cleanup. Optional-stage failure never changes basic document
+readability. Job status results retain small audit facts rather than a second
+copy of Markdown, page maps and extracted metadata.
+
+Enrichment downloads and verifies the exact canonical content snapshot, then
+obtains the requester's DeepSeek credential just in time. Missing credentials
+produce an optional-stage failure; import and deterministic stages remain usable.
+Paid-call intent is persisted immediately before provider execution. A lost result
+with a recorded intent becomes `provider_outcome_unknown` and cannot trigger
+another automatic paid call. Server fills only missing metadata; a filename title
+is replaceable only when its provenance still identifies the filename placeholder.
+Human/Zotero values and provenance survive. Personal annotations and summary
+citations require source-bound exact evidence. A changed source rejects the result.
+
+Bibliography is deterministic only. A signed, generation-scoped request snapshots
+citation identity in a short database read, resolves providers asynchronously under
+a 25-second deadline, then rechecks the generation. The worker persists the small
+resolution before delivery. Server rechecks source, access and citation identity
+before filling gaps. Enrichment can enqueue a fresh identity-specific bibliography
+job after improving metadata. Zotero imports skip automatic paid enrichment.
