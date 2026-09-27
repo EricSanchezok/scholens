@@ -861,7 +861,11 @@ def build_mcp_transport(
             permissions=authenticated.permissions,
         )
         return [
-            compiled_tools[definition.name].model_copy(deep=True)
+            # The transport owns these actor-independent values. The SDK reads
+            # them to serialize the response and cache definitions; it never
+            # mutates schemas. Copying the entire 700-KiB tree per request spends
+            # most of tools/list on Python allocation and garbage collection.
+            compiled_tools[definition.name]
             for definition in catalog.definitions_for(access)
         ]
 

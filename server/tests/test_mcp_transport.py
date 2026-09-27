@@ -227,6 +227,12 @@ async def test_tool_catalog_compiles_before_requests_and_rechecks_permissions(
         raise AssertionError("Schema generation must not run on the request loop")
 
     monkeypatch.setattr(BaseModel, "model_json_schema", unexpected_schema)
+    from mcp.types import Tool
+
+    def unexpected_copy(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Static tool schemas must not be deep-copied per request")
+
+    monkeypatch.setattr(Tool, "model_copy", unexpected_copy)
     async with application.router.lifespan_context(application):
         async with AsyncClient(
             transport=ASGITransport(app=application), base_url="http://testserver"

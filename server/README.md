@@ -84,9 +84,11 @@ the current Actor. MCP resources expose bounded manifests at
 annotation-thread, and research-output URIs.
 
 The transport compiles its actor-independent tool schemas at construction time.
-Each tools/list request filters the current access-key permissions and returns
-an isolated copy of those schemas; no schema generation runs on the request
-event loop. Tool failures record their bounded tool name and, for output-budget
+Each tools/list request filters the current access-key permissions and serializes
+the transport-owned read-only schema snapshot. It never generates schemas or
+deep-copies the full tree on the request event loop. The SDK's tool cache owns no
+permission decision: every call still checks the current key and resource access.
+Tool failures record their bounded tool name and, for output-budget
 failures, the actual and maximum serialized UTF-8 byte counts. Diagnostics never
 include the tool arguments or returned paper text. HTTP transport success is
 separate from the `scholens.mcp.errors` business-failure signal.
