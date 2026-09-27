@@ -260,6 +260,7 @@ class JobCallbacks:
         if actor is None and job_operation in {
             JobOperation.PDF_PROCESS,
             JobOperation.DOCUMENT_INDEX,
+            JobOperation.DOCUMENT_SEARCH_INDEX,
             JobOperation.DOCUMENT_ENRICH,
             JobOperation.DOCUMENT_BIBLIOGRAPHY,
         }:

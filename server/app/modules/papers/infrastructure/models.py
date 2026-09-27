@@ -247,6 +247,12 @@ class Document(Base):
         server_default=FetchedValue(),
         server_onupdate=FetchedValue(),
     )
+    search_revision: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
+        server_default=text("0"),
+        server_onupdate=FetchedValue(),
+    )
     parser_markdown_s3_key: Mapped[str | None] = mapped_column(String, nullable=True)
     parser_archive_s3_key: Mapped[str | None] = mapped_column(String, nullable=True)
     parser_backend: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -400,6 +406,7 @@ class DocumentSearchEmbedding(Base):
     )
     model_revision: Mapped[str] = mapped_column(String(128), primary_key=True)
     source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
     indexed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

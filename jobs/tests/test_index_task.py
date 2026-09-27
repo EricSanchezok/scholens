@@ -54,3 +54,37 @@ def test_independent_index_preserves_readability_and_retries_only_transient_work
     storage.download_bounded_bytes.assert_called_once_with(
         "canonical.md", max_bytes=40 * 1024 * 1024
     )
+
+
+@pytest.mark.parametrize("failure", [None, "receipt", "inference", "digest"])
+def test_metadata_index_is_fenced_and_never_calls_paid_providers(monkeypatch, failure):
+    import hashlib
+
+    runtime = MagicMock(job_id=str(uuid4()))
+    monkeypatch.setattr(
+        tasks, "run_fenced_task", lambda _task, **kwargs: kwargs["work"](runtime)
+    )
+    model = MagicMock(revision="test-v1")
+    model.embed_passages.return_value = [[1.0] + [0.0] * 383]
+    monkeypatch.setattr(tasks, "configured_embedder", lambda: model)
+    if failure == "receipt":
+        runtime.complete.side_effect = DeliveryUnavailable("receipt_lost")
+    if failure == "inference":
+        model.embed_passages.side_effect = EmbeddingUnavailable("owner_down")
+    text = "Metadata title and abstract"
+    kwargs = dict(
+        callback_url="https://server/complete",
+        semantic_text=text,
+        source_digest="a" * 64
+        if failure == "digest"
+        else hashlib.sha256(text.encode()).hexdigest(),
+        model_revision="test-v1",
+    )
+    if failure in {"receipt", "inference"}:
+        with pytest.raises(DeliveryUnavailable):
+            tasks.index_document_metadata_task.run(**kwargs)
+        runtime.fail.assert_not_called()
+    else:
+        result = tasks.index_document_metadata_task.run(**kwargs)
+        assert result["status"] == ("failed" if failure == "digest" else "completed")
+    runtime.begin_external_effect.assert_not_called()

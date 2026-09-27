@@ -511,3 +511,12 @@ submission is treated as an unknown provider outcome rather than submitted again
 The legacy parser checkpoint protocol remains accepted for N-1 deliveries. The
 Server bounds fenced recovery by worker generations and elapsed execution age;
 exhaustion is terminal and transactionally releases its concurrency reservation.
+
+Metadata search vectors run in `index_document_metadata` on the index queue.
+The producer supplies at most 24,000 characters and the source/model identities;
+the deterministic worker verifies them, calls the shared local model, and stores
+its small result through the fenced inbox. No provider credential or paid intent
+is involved. Server accepts only current metadata and records its semantic
+revision. Metadata changes do not force re-parsing or re-embedding the PDF body.
+Finite S3 operation timeouts in index/enrichment preparation are transient
+execution failures; they retain the same source/paid-intent recovery policy.

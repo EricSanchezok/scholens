@@ -1716,6 +1716,60 @@ def enrich_document_task(
     )
 
 
+@celery_app.task(
+    bind=True, name="index_document_metadata", soft_time_limit=90, time_limit=120
+)
+def index_document_metadata_task(
+    self,
+    callback_url: str,
+    semantic_text: str,
+    source_digest: str,
+    model_revision: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_metadata_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        try:
+            execution.check_cancelled()
+            if (
+                not semantic_text
+                or len(semantic_text) > 24000
+                or hashlib.sha256(semantic_text.encode()).hexdigest() != source_digest
+            ):
+                raise ValueError("document_metadata_source_invalid")
+            model = configured_embedder()
+            if model is None:
+                raise DeliveryUnavailable("document_metadata_inference_unavailable")
+            if model.revision != model_revision:
+                raise ValueError("document_metadata_revision_invalid")
+            vector = model.embed_passages([semantic_text])[0]
+            execution.check_cancelled()
+            execution.complete(
+                {
+                    "task_id": execution.job_id,
+                    "source_digest": source_digest,
+                    "model_revision": model_revision,
+                    "embedding": vector,
+                }
+            )
+            return {"status": "completed"}
+        except (EmbeddingUnavailable, BotoCoreError, ClientError, TimeoutError) as exc:
+            raise DeliveryUnavailable(
+                "document_metadata_dependency_unavailable"
+            ) from exc
+        except (DeliveryUnavailable, ExecutionLost):
+            raise
+        except Exception:
+            execution.fail("document_metadata_index_failed")
+            return {"status": "failed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
+
+
 @celery_app.task(bind=True, name="index_document", soft_time_limit=900, time_limit=960)
 def index_document_task(
     self,
@@ -1756,7 +1810,7 @@ def index_document_task(
                 }
             )
             return {"status": "completed"}
-        except (EmbeddingUnavailable, BotoCoreError, ClientError) as exc:
+        except (EmbeddingUnavailable, BotoCoreError, ClientError, TimeoutError) as exc:
             raise DeliveryUnavailable("document_index_dependency_unavailable") from exc
         except (DeliveryUnavailable, ExecutionLost):
             raise

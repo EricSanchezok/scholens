@@ -634,6 +634,10 @@ def build_job_callbacks(
     )
     from app.shared.domain.enums import JobOperation
 
+    from app.bootstrap.adapters.document_search_projection import (
+        DocumentSearchIndexCallback,
+        DocumentSearchIndexCompletion,
+    )
     from app.bootstrap.adapters.document_stage_callbacks import (
         DocumentIndexCallback,
         DocumentIndexCompletion,
@@ -653,6 +657,9 @@ def build_job_callbacks(
             ),
             JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
                 PdfPostprocessCallback, PdfPostprocessCompletion(db)
+            ),
+            JobOperation.DOCUMENT_SEARCH_INDEX: RegisteredJobCallback(
+                DocumentSearchIndexCallback, DocumentSearchIndexCompletion(db)
             ),
             JobOperation.DOCUMENT_INDEX: RegisteredJobCallback(
                 DocumentIndexCallback, DocumentIndexCompletion(db)

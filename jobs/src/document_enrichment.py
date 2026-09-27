@@ -34,7 +34,7 @@ def enrich_document(
             source = storage.download_bounded_bytes(
                 parser_markdown_s3_key, max_bytes=MAX_PDF_CALLBACK_RAW_CONTENT_BYTES
             ).decode("utf-8")
-        except (BotoCoreError, ClientError) as exc:
+        except (BotoCoreError, ClientError, TimeoutError) as exc:
             raise DeliveryUnavailable("document_enrichment_source_unavailable") from exc
         if hashlib.sha256(source.encode()).hexdigest() != content_digest:
             execution.fail("document_stage_source_changed")

@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from app.modules.jobs.application.callbacks import JobHandlerResult, SettleJobUsage
 from app.modules.jobs.application.contracts import TokenUsageEventPayload
 from app.modules.jobs.application.actions import JOB_CREATED
+from app.bootstrap.adapters.document_search_projection import (
+    enqueue_metadata_projection,
+)
 from app.bootstrap.adapters.document_stage_dispatch import enqueue_document_bibliography
 from app.modules.jobs.infrastructure.models import JobExecution
 from app.modules.jobs.infrastructure.repository import job_repository
@@ -226,6 +229,16 @@ class DocumentEnrichmentCompletion:
             )
             for identity in annotations.comment_ids
         )
+        metadata_index = enqueue_metadata_projection(
+            self._db, document=document, actor=actor, operation=operation
+        )
+        if metadata_index is not None and metadata_index.created:
+            changes.append(
+                OperationChange(
+                    action=JOB_CREATED,
+                    resources=(ResourceRef("job", str(metadata_index.job.id)),),
+                )
+            )
         bibliography = enqueue_document_bibliography(
             self._db, document=document, actor=actor, operation=operation
         )

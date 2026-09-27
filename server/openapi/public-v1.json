@@ -5519,6 +5519,7 @@
           "pdf_process",
           "pdf_postprocess",
           "document_index",
+          "document_search_index",
           "document_enrich",
           "document_bibliography",
           "document_reflow",

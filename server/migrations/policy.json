@@ -76,6 +76,19 @@
     },
     "2026_09_27_1400": {
       "phase": "expand"
+    },
+    "2026_09_27_1500": {
+      "phase": "expand",
+      "reviewed_sql": {
+        "9e91451918e0822a205988382e6b741962ce291c12bdbd28fca4c00ac2a4d93b": {
+          "reason": "Adds a metadata revision guard for N-1 writers. Only changes to title, keywords, summary or abstract advance the additive revision; unrelated reference and status writes preserve it. Legacy vectors remain readable at revision zero.",
+          "compatibility_test": "server/tests/test_document_pipeline_postgres.py"
+        },
+        "4ffd10aaf06746a1d3a55932bbe7c47aa2cf9efbd5341664c27fbde15f36351a": {
+          "reason": "Adds a metadata revision guard for N-1 writers. Only changes to title, keywords, summary or abstract advance the additive revision; unrelated reference and status writes preserve it. Legacy vectors remain readable at revision zero.",
+          "compatibility_test": "server/tests/test_document_pipeline_postgres.py"
+        }
+      }
     }
   }
 }

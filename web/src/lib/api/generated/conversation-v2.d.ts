@@ -2079,7 +2079,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_index" | "document_enrich" | "document_bibliography" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
+        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_index" | "document_search_index" | "document_enrich" | "document_bibliography" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */

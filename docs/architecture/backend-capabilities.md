@@ -881,6 +881,17 @@ the database transaction and writes revalidate content digests. Retrieval
 responses report their active mode, per-result retrieval modes, and document
 and passage semantic coverage; raw user queries are not written to analytics
 telemetry.
+The staged pipeline produces metadata vectors as independent deterministic
+`document_search_index` maintenance Jobs on the index queue. Initial readability
+and accepted AI metadata each enqueue the current semantic revision. Immutable
+results use the same fenced inbox as body indexing. Adoption locks the document,
+checks the metadata digest and active model, and records its search revision.
+Retrieval accepts only the matching revision. Migration `2026_09_27_1500` adds a
+nullable revision and N-1-safe trigger: only title, keywords, summary or abstract
+changes advance it; old vectors at revision zero remain compatible. Metadata
+repair uses an explicit UUID cursor and finite page, with inference outside SQL
+transactions and compare-before-write adoption in batches of eight.
+
 `PAPER_SEARCH_BACKEND` is validated at startup. HTTP, Agent, and MCP consumers
 continue to depend only on the application port and public search contract.
 

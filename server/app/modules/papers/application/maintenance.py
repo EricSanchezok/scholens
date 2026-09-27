@@ -24,9 +24,30 @@ class PassageBackfillResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SearchEmbeddingCandidate:
+    document_id: UUID
+    source_digest: str
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class SearchEmbeddingSnapshot:
+    scanned: int
+    items: tuple[SearchEmbeddingCandidate, ...]
+    next_cursor: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchEmbeddingWrite:
+    document_id: UUID
+    source_digest: str
+    embedding: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SearchEmbeddingBackfillResult:
-    candidates: int
     indexed_documents: int
+    stale_documents: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,9 +97,13 @@ class PassageBackfillGateway(Protocol):
 
 
 class SearchEmbeddingBackfillGateway(Protocol):
-    def backfill(
-        self, *, batch_size: int, apply: bool
-    ) -> SearchEmbeddingBackfillResult: ...
+    def candidates(
+        self, *, batch_size: int, after_document_id: UUID | None
+    ) -> SearchEmbeddingSnapshot: ...
+
+    def apply_embeddings(
+        self, *, records: tuple[SearchEmbeddingWrite, ...], model_revision: str
+    ) -> tuple[int, int]: ...
 
 
 class PassageMaintenance:
@@ -175,13 +200,27 @@ class SearchEmbeddingMaintenance:
         self._gateway = gateway
         self._journal = journal
 
-    def backfill_search_embeddings(
+    def candidates(
+        self, *, actor: Actor, batch_size: int, after_document_id: UUID | None = None
+    ) -> SearchEmbeddingSnapshot:
+        require_administrator(
+            AccountAccessFacts(
+                status=actor.status,
+                is_blocked=actor.is_blocked,
+                is_admin=actor.is_admin,
+            )
+        )
+        return self._gateway.candidates(
+            batch_size=batch_size, after_document_id=after_document_id
+        )
+
+    def apply_embeddings(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
-        batch_size: int,
-        apply: bool,
+        records: tuple[SearchEmbeddingWrite, ...],
+        model_revision: str,
     ) -> SearchEmbeddingBackfillResult:
         require_administrator(
             AccountAccessFacts(
@@ -190,8 +229,10 @@ class SearchEmbeddingMaintenance:
                 is_admin=actor.is_admin,
             )
         )
-        result = self._gateway.backfill(batch_size=batch_size, apply=apply)
-        if apply and result.indexed_documents:
+        indexed, stale = self._gateway.apply_embeddings(
+            records=records, model_revision=model_revision
+        )
+        if indexed:
             self._journal.append(
                 actor=actor,
                 operation=operation,
@@ -200,7 +241,9 @@ class SearchEmbeddingMaintenance:
                     ResourceRef("paper_search_index", "document_search_embeddings"),
                 ),
             )
-        return result
+        return SearchEmbeddingBackfillResult(
+            indexed_documents=indexed, stale_documents=stale
+        )
 
 
 __all__ = [

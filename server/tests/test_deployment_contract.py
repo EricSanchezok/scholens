@@ -2291,6 +2291,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_09_27_0628_durable_job_result_effects.py",
         "2026_09_27_0650_token_projection_source_revisions.py",
         "2026_09_27_0730_fair_job_dispatch.py",
+        "2026_09_27_0920_metadata_projection_revision.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

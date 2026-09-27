@@ -427,19 +427,23 @@ Existing or stale semantic projections are maintained with a bounded dry-run
 first:
 
 ```bash
-uv run scholens maintenance backfill-search-embeddings --batch-size 100 --json
-uv run scholens maintenance backfill-search-embeddings --batch-size 100 --apply --yes --json
+uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --json
+uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --apply --yes --json
 uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --json
 uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --apply --yes --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --apply --yes --json
 ```
 
-Repeat each apply command until `candidates` reaches zero. Both semantic
-projections are versioned and digest-bound, so a model or source-text change is
-reindexed without rewriting canonical Document content. Passage inference runs
-outside the database transaction and the apply command revalidates each content
-digest before updating it.
+Metadata repair scans at most `--batch-size` Documents per page. Pass the returned
+`next_cursor` as `--after-document-id` until it is null, including pages with zero
+candidates. Dry-run counts describe that page, not the whole database. Apply
+embeds at most eight texts between short transactions, rechecks administrator
+access and each source digest before writing, and reports stale/deleted rows.
+Passage repair repeats until `candidates` reaches zero. Both projections are
+versioned and digest-bound; neither invokes a paid provider or rewrites content.
+The additive metadata revision invalidates vectors on title/keywords/summary/
+abstract changes, including N-1 writes, and preserves them on unrelated updates.
 
 The `maintenance fix-annotation-offsets` and
 `maintenance reprocess-contaminated-documents` repairs are also bounded and

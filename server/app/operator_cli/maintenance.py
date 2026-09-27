@@ -10,7 +10,10 @@ import click
 from scholens_ai import EMBEDDING_MODEL_REVISION, configured_embedder
 
 from app.modules.reading_activity.application import ReadingActivityRetentionResult
-from app.modules.papers.application.maintenance import PassageEmbeddingWrite
+from app.modules.papers.application.maintenance import (
+    PassageEmbeddingWrite,
+    SearchEmbeddingWrite,
+)
 from app.operator_cli.common import (
     CliState,
     OutputGroup,
@@ -253,10 +256,18 @@ def purge_reading_session_pages(
     type=click.IntRange(1, 1000),
     default=100,
     show_default=True,
-    help="Maximum documents embedded in this invocation and transaction.",
+    help="Maximum documents scanned in this keyset page; inference runs outside transactions.",
 )
 @click.option(
-    "--apply", is_flag=True, help="Apply changes; otherwise only count candidates."
+    "--after-document-id",
+    type=click.UUID,
+    default=None,
+    help="Continue the prior page's next_cursor.",
+)
+@click.option(
+    "--apply",
+    is_flag=True,
+    help="Apply deterministic vectors; otherwise inspect this page only.",
 )
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
 @click.pass_obj
@@ -265,30 +276,62 @@ def backfill_search_embeddings(
     state: CliState,
     actor_email: str,
     batch_size: int,
+    after_document_id: UUID | None,
     apply: bool,
     yes: bool,
 ) -> None:
     actor_user = load_user(actor_email)
     if apply:
         confirm("Backfill local semantic-search embeddings?", yes=yes)
-    invoke = executor().command if apply else executor().query
-    result = invoke(
-        lambda capabilities: (
-            capabilities.search_embedding_maintenance.backfill_search_embeddings(
-                actor=current_admin(capabilities, actor_user.id),
-                operation=cli_operation("maintenance.backfill-search-embeddings"),
-                batch_size=batch_size,
-                apply=apply,
-            )
+    snapshot = executor().query(
+        lambda capabilities: capabilities.search_embedding_maintenance.candidates(
+            actor=current_admin(capabilities, actor_user.id),
+            batch_size=batch_size,
+            after_document_id=after_document_id,
         )
     )
+    indexed, stale = 0, 0
+    if apply and snapshot.items:
+        model = configured_embedder()
+        if model is None or model.revision != EMBEDDING_MODEL_REVISION:
+            raise RuntimeError(
+                "local embedding model is not configured at the current revision"
+            )
+        for offset in range(0, len(snapshot.items), 8):
+            batch = snapshot.items[offset : offset + 8]
+            vectors = model.embed_passages([item.content for item in batch])
+            records = tuple(
+                SearchEmbeddingWrite(
+                    document_id=item.document_id,
+                    source_digest=item.source_digest,
+                    embedding=tuple(vector),
+                )
+                for item, vector in zip(batch, vectors, strict=True)
+            )
+            result = executor().command(
+                lambda capabilities: (
+                    capabilities.search_embedding_maintenance.apply_embeddings(
+                        actor=current_admin(capabilities, actor_user.id),
+                        operation=cli_operation(
+                            "maintenance.backfill-search-embeddings"
+                        ),
+                        records=records,
+                        model_revision=model.revision,
+                    )
+                )
+            )
+            indexed += result.indexed_documents
+            stale += result.stale_documents
     emit(
         state,
         {
-            "status": "changed" if result.indexed_documents else "unchanged",
+            "status": "changed" if indexed else "unchanged",
             "dry_run": not apply,
-            "candidates": result.candidates,
-            "indexed_documents": result.indexed_documents,
+            "scanned": snapshot.scanned,
+            "candidates": len(snapshot.items),
+            "indexed_documents": indexed,
+            "stale_documents": stale,
+            "next_cursor": str(snapshot.next_cursor) if snapshot.next_cursor else None,
         },
     )
 

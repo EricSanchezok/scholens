@@ -497,6 +497,8 @@ class PostgresPaperSearch:
                 .where(
                     *conditions,
                     DocumentSearchEmbedding.model_revision == EMBEDDING_MODEL_REVISION,
+                    func.coalesce(DocumentSearchEmbedding.source_revision, 0)
+                    == func.coalesce(Document.search_revision, 0),
                 )
             )
             or 0
@@ -594,6 +596,8 @@ class PostgresPaperSearch:
                 semantic_conditions: list[ColumnElement[bool]] = [
                     *conditions,
                     DocumentSearchEmbedding.model_revision == EMBEDDING_MODEL_REVISION,
+                    func.coalesce(DocumentSearchEmbedding.source_revision, 0)
+                    == func.coalesce(Document.search_revision, 0),
                 ]
                 if has_exact_metadata:
                     semantic_conditions.append(

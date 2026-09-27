@@ -135,7 +135,7 @@ def test_fanout_is_idempotent_and_all_stages_have_independent_execution_fences(
                     select(JobExecution).where(JobExecution.job_id.in_(ids.values()))
                 ).all()
             )
-            == 3
+            == 4
         )
         assert (
             db.get(DurableJob, ids["document_enrich"]).payload["execution_replay"]
@@ -429,3 +429,190 @@ def test_concurrent_retry_has_one_execution(pipeline_database):
         first, second = list(workers.map(lambda _: submit(), range(2)))
     assert first[0].job_id == second[0].job_id
     assert sum([first[1], second[1]]) == 1
+
+
+def test_metadata_projection_is_durable_and_rejects_stale_metadata(pipeline_database):
+    from app.bootstrap.adapters.document_search_projection import (
+        enqueue_metadata_projection,
+        DocumentSearchIndexCallback,
+        DocumentSearchIndexCompletion,
+    )
+    from app.modules.papers.infrastructure.models import DocumentSearchEmbedding
+    from scholens_ai import EMBEDDING_MODEL_REVISION
+
+    engine, doc_id, _parent, actor, operation, _source, _ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        document = db.get(Document, doc_id)
+        pending = enqueue_metadata_projection(
+            db, document=document, actor=actor, operation=operation
+        )
+        again = enqueue_metadata_projection(
+            db, document=document, actor=actor, operation=operation
+        )
+        assert pending is not None and again is not None
+        assert pending.job.id == again.job.id
+        assert not again.created
+        assert db.get(JobExecution, pending.job.id)
+        callback = DocumentSearchIndexCallback(
+            task_id=pending.job.id,
+            source_digest=pending.job.payload["source_digest"],
+            model_revision=EMBEDDING_MODEL_REVISION,
+            embedding=[1.0] + [0.0] * 383,
+        )
+        accepted = DocumentSearchIndexCompletion(db).complete(
+            actor=actor, operation=operation, job_id=pending.job.id, callback=callback
+        )
+        assert accepted.value["accepted"]
+        db.flush()
+        stored = db.get(DocumentSearchEmbedding, (doc_id, EMBEDDING_MODEL_REVISION))
+        assert stored.source_digest == callback.source_digest
+        document.title = "changed title"
+        from datetime import datetime, timezone
+
+        document.updated_at = datetime.now(timezone.utc)
+        newer = enqueue_metadata_projection(
+            db, document=document, actor=actor, operation=operation
+        )
+        assert newer is not None
+        assert newer.job.id != pending.job.id
+        document.title = "changed again before delivery"
+        stale = DocumentSearchIndexCallback(
+            task_id=newer.job.id,
+            source_digest=newer.job.payload["source_digest"],
+            model_revision=EMBEDDING_MODEL_REVISION,
+            embedding=[0.0, 1.0] + [0.0] * 382,
+        )
+        rejected = DocumentSearchIndexCompletion(db).complete(
+            actor=actor, operation=operation, job_id=newer.job.id, callback=stale
+        )
+        assert not rejected.value["accepted"]
+        assert stored.source_digest == callback.source_digest
+
+
+def test_metadata_repair_is_keyset_bounded_and_stale_safe(pipeline_database):
+    from app.modules.papers.infrastructure.search_embedding_maintenance import (
+        SqlSearchEmbeddingBackfill,
+    )
+    from app.modules.papers.application.maintenance import SearchEmbeddingWrite
+    from scholens_ai import (
+        EMBEDDING_MODEL_REVISION,
+        semantic_document_text,
+        semantic_source_digest,
+    )
+
+    engine, doc_id, _parent, _actor, _operation, _source, _ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        gateway = SqlSearchEmbeddingBackfill(db)
+        snapshot = gateway.candidates(batch_size=1)
+        assert snapshot.scanned <= 1
+        assert len(snapshot.items) <= 1
+        if snapshot.next_cursor:
+            next_page = gateway.candidates(
+                batch_size=1, after_document_id=snapshot.next_cursor
+            )
+            assert all(
+                item.document_id > snapshot.next_cursor for item in next_page.items
+            )
+        document = db.get(Document, doc_id)
+        digest = semantic_source_digest(
+            semantic_document_text(
+                title=document.title,
+                keywords=document.keywords,
+                summary=document.summary,
+                abstract=document.abstract,
+            )
+        )
+        document.summary = "New canonical information"
+        db.flush()
+        assert gateway.apply_embeddings(
+            records=(SearchEmbeddingWrite(doc_id, digest, (1.0,) + (0.0,) * 383),),
+            model_revision=EMBEDDING_MODEL_REVISION,
+        ) == (0, 1)
+
+
+def test_n_minus_one_metadata_writers_invalidate_only_semantic_changes(
+    pipeline_database,
+):
+    engine, doc_id, _parent, _actor, _operation, _source, _ids = pipeline_database
+    with engine.begin() as db:
+        before = db.scalar(
+            text("SELECT search_revision FROM scholens.documents WHERE id=:id"),
+            {"id": doc_id},
+        )
+        db.execute(
+            text(
+                "UPDATE scholens.documents SET processing_status='completed' WHERE id=:id"
+            ),
+            {"id": doc_id},
+        )
+        assert (
+            db.scalar(
+                text("SELECT search_revision FROM scholens.documents WHERE id=:id"),
+                {"id": doc_id},
+            )
+            == before
+        )
+        # Existing applications know neither revision column.
+        db.execute(
+            text(
+                "UPDATE scholens.documents SET title='Old application new title' WHERE id=:id"
+            ),
+            {"id": doc_id},
+        )
+        assert (
+            db.scalar(
+                text("SELECT search_revision FROM scholens.documents WHERE id=:id"),
+                {"id": doc_id},
+            )
+            == before + 1
+        )
+        db.execute(
+            text(
+                "UPDATE scholens.documents SET title=title, summary=summary WHERE id=:id"
+            ),
+            {"id": doc_id},
+        )
+        assert (
+            db.scalar(
+                text("SELECT search_revision FROM scholens.documents WHERE id=:id"),
+                {"id": doc_id},
+            )
+            == before + 1
+        )
+
+
+def test_sql_metadata_prefix_matches_canonical_unicode_and_long_whitespace(
+    pipeline_database,
+):
+    from app.modules.papers.infrastructure.search_embedding_maintenance import (
+        _metadata_columns,
+    )
+    from scholens_ai import semantic_document_text
+
+    engine, doc_id, _parent, _actor, _operation, _source, _ids = pipeline_database
+    with Session(engine) as db, db.begin():
+        document = db.get(Document, doc_id)
+        for title, keywords, summary, abstract in [
+            (
+                " " * 25000 + "标题",
+                ["\u3000检索", "vector\u2000"],
+                "\n摘要\t",
+                "\u0085 abstract \u0085",
+            ),
+            (None, None, None, None),
+            ("heading", ["检索" * 13000], "later", "excluded"),
+        ]:
+            document.title, document.keywords, document.summary, document.abstract = (
+                title,
+                keywords,
+                summary,
+                abstract,
+            )
+            db.flush()
+            row = db.execute(
+                select(*_metadata_columns()).where(Document.id == doc_id)
+            ).one()
+            assert row.semantic_text == semantic_document_text(
+                title=title, keywords=keywords, summary=summary, abstract=abstract
+            )
+            assert len(row.semantic_text) <= 24000

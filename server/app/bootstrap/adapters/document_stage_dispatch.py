@@ -103,6 +103,15 @@ def enqueue_document_stages(
             db, document=document, actor=actor, operation=operation
         )
     )
+    from app.bootstrap.adapters.document_search_projection import (
+        enqueue_metadata_projection,
+    )
+
+    metadata = enqueue_metadata_projection(
+        db, document=document, actor=actor, operation=operation
+    )
+    if metadata is not None:
+        jobs.append(metadata)
     return tuple(jobs)
 
 
