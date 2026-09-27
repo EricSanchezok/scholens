@@ -47,7 +47,8 @@ result plus a recovery pointer, and submits a metadata-only receipt. Heartbeats
 stop work cooperatively after ownership loss; source-ready mutations carry the
 generation. A delivery retry reuses persisted bytes and retains its claim token.
 Takeover of `checkpoint_only` work replays a known result or reports an unknown
-provider outcome instead of calling the provider again. Legacy task envelopes
+provider outcome. PDF parsing can also resume an independently persisted MinerU
+batch, without submitting another batch. Legacy task envelopes
 continue to use their existing transport. Producer activation follows schema,
 consumer, cleanup, and staged-pipeline acceptance; this argument alone does not
 enable production dispatch. S3 readers always close their response stream, and
@@ -214,7 +215,7 @@ because the Server callback never adopts repair preview state. The general
 `repair_revision` argument so jobs accepted before the producer switches to
 the dedicated task remain executable during a rolling deployment.
 
-MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
+Legacy MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
 purpose, document content hash, and credential revision, so two jobs parsing
 the same PDF never reuse each other's provider batch or archive. Four
 consecutive network failures switch polling or downloading to a slower bounded
@@ -222,7 +223,12 @@ backoff; they do not end the task before its deadline. Redelivery and later
 retry attempts with the same job, source, and credential resume the same
 provider task instead of submitting another one. A retryable failure retains
 the checkpoint; successful and non-retryable provider outcomes clear it once
-the provider result no longer needs to be resumed.
+the provider result no longer needs to be resumed. Fenced PDF jobs instead retain
+the batch in a bounded private S3 checkpoint under the job namespace; Redis owns
+only the short submit lock. A separate upload marker cannot regress when a late
+writer arrives. Source or credential changes reject the stored scope. Successful
+parsing does not delete these checkpoints: job GC owns deletion after its grace
+period, closing the gap before the final result is durably persisted.
 
 ## AI reading reflow
 
@@ -505,9 +511,13 @@ resolution before delivery. Server rechecks source, access and citation identity
 before filling gaps. Enrichment can enqueue a fresh identity-specific bibliography
 job after improving metadata. Zotero imports skip automatic paid enrichment.
 
-Fenced PDF parsing also records external-effect intent before entering MinerU.
-If a completed result cannot be recovered after a worker loss, an earlier MinerU
-submission is treated as an unknown provider outcome rather than submitted again.
+Fenced PDF parsing records external-effect intent immediately before requesting
+a new MinerU batch. After worker loss, a valid durable batch resumes upload/poll/
+download for that same provider task; it never authorizes another submission.
+Missing or corrupt batch state cannot authorize paid recovery. A known batch with
+different source/credential scope is rejected. If submission succeeded but its
+batch response could not be persisted, the outcome remains unknown and requires
+an explicit user retry with the possible duplicate charge disclosed.
 The legacy parser checkpoint protocol remains accepted for N-1 deliveries. The
 Server bounds fenced recovery by worker generations and elapsed execution age;
 exhaustion is terminal and transactionally releases its concurrency reservation.

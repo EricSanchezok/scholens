@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import hashlib
 import json
+import re
 import threading
 import time
 from typing import Any, Protocol
@@ -62,6 +63,10 @@ def begin_scoped_external_effect() -> None:
     runtime = _execution_runtime.get()
     if runtime is not None:
         runtime.begin_external_effect()
+
+
+def current_execution() -> FencedExecution | None:
+    return _execution_runtime.get()
 
 
 class ResultStorage(Protocol):
@@ -125,6 +130,39 @@ class FencedExecution:
             return self._storage.object_exists(self.external_effect_key)
         except Exception as exc:
             raise DeliveryUnavailable("job_external_effect_state_unavailable") from exc
+
+    def _named_checkpoint_key(self, name: str) -> str:
+        if re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name) is None:
+            raise ValueError("job_checkpoint_name_invalid")
+        return f"jobs/checkpoints/{self.job_id}/{name}.json"
+
+    def load_checkpoint(self, name: str, *, max_bytes: int) -> bytes | None:
+        """Bounded opaque state; the operation owns validation and replay policy."""
+        self.check_cancelled()
+        key = self._named_checkpoint_key(name)
+        try:
+            data = (
+                self._storage.download_bounded_bytes(key, max_bytes=max_bytes)
+                if self._storage.object_exists(key)
+                else None
+            )
+            if data is not None and len(data) > max_bytes:
+                raise ValueError("job_checkpoint_oversized")
+        except Exception as exc:
+            raise DeliveryUnavailable("job_operation_checkpoint_unavailable") from exc
+        self.check_cancelled()
+        return data
+
+    def save_checkpoint(self, name: str, data: bytes, *, max_bytes: int) -> None:
+        self.check_cancelled()
+        key = self._named_checkpoint_key(name)
+        if len(data) > max_bytes:
+            raise ValueError("job_checkpoint_oversized")
+        try:
+            self._storage.upload_bytes_to_key(data, key, "application/json")
+        except Exception as exc:
+            raise DeliveryUnavailable("job_operation_checkpoint_unavailable") from exc
+        self.check_cancelled()
 
     def begin_external_effect(self) -> None:
         """Persist intent before a paid call, including same-generation retries.
@@ -351,6 +389,7 @@ def run_fenced_task(
     callback_url: str,
     storage: ResultStorage,
     work: Callable[[FencedExecution], dict[str, Any]],
+    resume_known_effect: Callable[[FencedExecution], bool] | None = None,
 ) -> dict[str, Any]:
     """One recovery policy for deterministic and paid worker operations."""
     headers = dict(task.request.headers or {})
@@ -372,8 +411,9 @@ def run_fenced_task(
             if runtime.resume_result():
                 return {"task_id": runtime.job_id, "status": "replayed"}
             if runtime.recover_only or runtime.external_effect_started():
-                runtime.fail("provider_outcome_unknown")
-                return {"task_id": runtime.job_id, "status": "failed"}
+                if resume_known_effect is None or not resume_known_effect(runtime):
+                    runtime.fail("provider_outcome_unknown")
+                    return {"task_id": runtime.job_id, "status": "failed"}
             result = work(runtime)
             return {
                 "task_id": runtime.job_id,

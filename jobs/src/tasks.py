@@ -44,6 +44,7 @@ from scholens_job_contracts import (
 )
 from botocore.exceptions import BotoCoreError, ClientError
 from src.indexing import build_checkpointed_projection
+from src.pdf.durable_state import can_resume_mineru
 from src.document_enrichment import enrich_document
 
 from src.audio import generate_audio
@@ -1161,6 +1162,7 @@ def upload_and_process_file(
             self,
             callback_url=webhook_url,
             storage=s3_service,
+            resume_known_effect=can_resume_mineru,
             work=lambda execution: _process_pdf_task(
                 self,
                 s3_object_key,
@@ -1220,6 +1222,7 @@ def ingest_source_and_process(
             self,
             callback_url=webhook_url,
             storage=s3_service,
+            resume_known_effect=can_resume_mineru,
             work=lambda execution: _ingest_source(self, **kwargs, execution=execution),
         )
     return _ingest_source(self, **kwargs)

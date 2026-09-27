@@ -218,3 +218,28 @@ def test_parser_provider_intent_follows_scope_into_async_credential_threads():
     runtime.begin_external_effect.assert_called_once()
     begin_scoped_external_effect()
     runtime.begin_external_effect.assert_called_once()
+
+
+@pytest.mark.parametrize("known", [False, True])
+def test_only_explicit_known_provider_checkpoint_can_resume_paid_work(known):
+    from src.execution_delivery import run_fenced_task
+
+    runtime = MagicMock()
+    runtime.job_id = str(uuid4())
+    runtime.claim.return_value = True
+    runtime.resume_result.return_value = False
+    runtime.recover_only = True
+    task, work = MagicMock(), MagicMock(return_value={"status": "completed"})
+    task.request.headers = {}
+    probe = MagicMock(return_value=known)
+    with patch("src.execution_delivery.FencedExecution", return_value=runtime):
+        result = run_fenced_task(
+            task,
+            callback_url="https://server/complete",
+            storage=MagicMock(),
+            work=work,
+            resume_known_effect=probe,
+        )
+    probe.assert_called_once_with(runtime)
+    assert result["status"] == ("completed" if known else "failed")
+    assert work.call_count == int(known)

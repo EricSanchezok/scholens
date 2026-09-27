@@ -19,7 +19,6 @@ from src.pdf.local import (
 )
 from src.pdf.process import analyze_in_process, extract_in_process
 from src.pdf.mineru import MinerUClient, MinerUConfig
-from src.execution_delivery import begin_scoped_external_effect
 from src.pdf.models import (
     LocalPDFAnalysis,
     MinerUCredential,
@@ -181,7 +180,6 @@ async def _parse_with_mineru(
     status_callback("Parsing scanned PDF with MinerU")
     client = MinerUClient(config)
     try:
-        await asyncio.to_thread(begin_scoped_external_effect)
         parsed = await client.parse_file(pdf_bytes, data_id=checkpoint_scope)
         if outcome_callback is not None:
             outcome_callback(credential.revision, "verified", None)
