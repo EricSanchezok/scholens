@@ -6,6 +6,7 @@ import pytest
 
 from app.modules.billing.application.contracts import UsagePeriod
 from app.modules.billing.infrastructure import quotas
+from app.modules.billing.infrastructure.usage_repository import ResourceUsageSnapshot
 from app.modules.billing.domain import resolve_entitlements
 from app.shared.application import Actor
 
@@ -52,13 +53,10 @@ def test_capacity_does_not_read_or_return_token_windows(
     )
     monkeypatch.setattr(
         quotas.resource_usage_repository,
-        "completed_reference_count",
-        lambda _db, *, user_id: 3,
-    )
-    monkeypatch.setattr(
-        quotas.resource_usage_repository,
-        "completed_storage_kb",
-        lambda _db, *, user_id: 1_024,
+        "current_usage",
+        lambda _db, *, user_id: ResourceUsageSnapshot(
+            paper_count=3, storage_kb=1_024, project_count=2
+        ),
     )
     monkeypatch.setattr(
         "app.llm.token_credits.utc_week_start",

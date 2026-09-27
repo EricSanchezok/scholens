@@ -261,6 +261,30 @@ def test_unique_usage_union_releases_only_after_the_last_owned_reference() -> No
             == 3
         )
         assert resource_usage_repository.completed_storage_kb(db, user_id=owner_id) == 6
+        statements: list[str] = []
+
+        def record_statement(_conn, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        # A single statement gives all current resource facts the same MVCC
+        # snapshot, including a paper referenced by both Library and Projects.
+        event.listen(transaction_connection, "before_cursor_execute", record_statement)
+        try:
+            usage = resource_usage_repository.current_usage(db, user_id=owner_id)
+        finally:
+            event.remove(
+                transaction_connection, "before_cursor_execute", record_statement
+            )
+        assert (usage.paper_count, usage.storage_kb, usage.project_count) == (3, 6, 2)
+        assert len(statements) == 1
+        collaborator_usage = resource_usage_repository.current_usage(
+            db, user_id=collaborator_id
+        )
+        assert (
+            collaborator_usage.paper_count,
+            collaborator_usage.storage_kb,
+            collaborator_usage.project_count,
+        ) == (2, 6, 1)
         assert (
             resource_usage_repository.completed_reference_count(
                 db, user_id=collaborator_id
@@ -329,6 +353,42 @@ def test_unique_usage_union_releases_only_after_the_last_owned_reference() -> No
         assert (
             resource_usage_repository.completed_reference_count(db, user_id=owner_id)
             == 0
+        )
+        empty = resource_usage_repository.current_usage(db, user_id=owner_id)
+        assert (empty.paper_count, empty.storage_kb, empty.project_count) == (0, 0, 2)
+        absent = resource_usage_repository.current_usage(db, user_id=-1)
+        assert (absent.paper_count, absent.storage_kb, absent.project_count) == (
+            0,
+            0,
+            0,
+        )
+
+        # Round the total bytes once, and exclude unfinished documents even
+        # when their Library association already exists.
+        for document_id in document_ids[:3]:
+            transaction_connection.execute(
+                text(
+                    "INSERT INTO scholens.library_papers (id, user_id, document_id) "
+                    "VALUES (:id, :owner, :document)"
+                ),
+                {"id": uuid4(), "owner": owner_id, "document": document_id},
+            )
+        transaction_connection.execute(
+            text("UPDATE scholens.documents SET size_bytes = 1 WHERE id = ANY(:ids)"),
+            {"ids": document_ids[:2]},
+        )
+        transaction_connection.execute(
+            text(
+                "UPDATE scholens.documents SET processing_status = 'processing' "
+                "WHERE id = :id"
+            ),
+            {"id": document_ids[2]},
+        )
+        rounded = resource_usage_repository.current_usage(db, user_id=owner_id)
+        assert (rounded.paper_count, rounded.storage_kb, rounded.project_count) == (
+            2,
+            1,
+            2,
         )
     finally:
         db.close()

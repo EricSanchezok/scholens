@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from app.database.models import (
@@ -14,6 +15,13 @@ from app.database.models import (
 from sqlalchemy import func, or_, select, union
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.selectable import Subquery
+
+
+@dataclass(frozen=True)
+class ResourceUsageSnapshot:
+    paper_count: int
+    storage_kb: int
+    project_count: int
 
 
 class ResourceUsageRepository:
@@ -74,6 +82,29 @@ class ResourceUsageRepository:
                     document_ids.c.document_id == Document.id,
                 )
             ).all()
+        )
+
+    def current_usage(self, db: Session, *, user_id: int) -> ResourceUsageSnapshot:
+        """Read all current resource totals from one statement snapshot."""
+        document_ids = self._completed_document_ids(user_id=user_id)
+        projects = (
+            select(func.count(Project.id))
+            .where(Project.owner_id == user_id)
+            .scalar_subquery()
+        )
+        paper_count, total_bytes, project_count = db.execute(
+            select(
+                func.count(Document.id),
+                func.coalesce(func.sum(Document.size_bytes), 0),
+                projects,
+            )
+            .select_from(Document)
+            .join(document_ids, document_ids.c.document_id == Document.id)
+        ).one()
+        return ResourceUsageSnapshot(
+            paper_count=int(paper_count),
+            storage_kb=(int(total_bytes) + 1023) // 1024,
+            project_count=int(project_count),
         )
 
     def completed_reference_count(self, db: Session, *, user_id: int) -> int:
