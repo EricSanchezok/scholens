@@ -53,6 +53,16 @@ soft memory and hard memory limits are explicit. Deployments stop the old task b
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
 short product outage to avoid static-port conflicts and doubled memory use.
 
+The API receives 512 CPU shares and the inference owner 16. These are relative
+weights, not hard CPU quotas: an otherwise idle host can still compute at full
+speed, while foreground requests win contention with sustained indexing. ECS
+also schedules each task through a parent cgroup; inspect that parent's actual
+`cpu.weight` when validating placement, because changing only a single container
+inside its task does not establish priority across tasks. Memory ceilings and
+admission reserves remain independent. The controller must still verify remaining
+ECS CPU and physical memory before every background launch; shares do not grant
+capacity to exceed either placement budget.
+
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
 worker now has a 1,280 MiB hard limit and a 512 MiB reservation. Its former

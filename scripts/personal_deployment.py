@@ -278,7 +278,7 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
 
 LIMITS = {
     "web": (64, 256, 512),
-    "api": (128, 768, 1536),
+    "api": (512, 768, 1536),
     "conversation-worker": (128, 512, 1536),
     "document-worker": (256, 512, 1280),
     "document-index-worker": (128, 384, 1024),
@@ -379,7 +379,7 @@ def inference_resources(resources: dict[str, Any]) -> None:
                     "Image": {"Ref": "ApiImage"},
                     "Essential": True,
                     "User": "1000:1000",
-                    "Cpu": 128,
+                    "Cpu": 16,
                     "MemoryReservation": 512,
                     "Memory": 1024,
                     "ReadonlyRootFilesystem": True,
