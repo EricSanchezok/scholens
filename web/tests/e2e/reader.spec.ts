@@ -1156,6 +1156,74 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   expect(accessibility.violations).toEqual([]);
 });
 
+test("bounds PDF bitmap residency across repeated long-document navigation", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  await waitForPdfTextLayer(page, 1);
+  const pageCount = await page.locator("[data-pdf-page-number]").count();
+  const firstHeight = await page
+    .locator('[data-pdf-page-number="1"]')
+    .evaluate((element) => element.getBoundingClientRect().height);
+  const destinations = Array.from(
+    new Set(
+      Array.from(
+        { length: 12 },
+        (_, index) => 1 + Math.floor((index * (pageCount - 1)) / 11),
+      ),
+    ),
+  );
+  destinations.push(1);
+  let peakPixels = 0;
+  let peakResidentPages = 0;
+  for (const number of destinations) {
+    await page
+      .locator(`[data-pdf-page-number="${number}"]`)
+      .scrollIntoViewIfNeeded();
+    await waitForPdfTextLayer(page, number);
+    await expect
+      .poll(async () =>
+        page
+          .locator("[data-pdf-page-number] > canvas")
+          .evaluateAll(
+            (elements) =>
+              elements.filter(
+                (element) => (element as HTMLCanvasElement).width > 0,
+              ).length,
+          ),
+      )
+      .toBeLessThanOrEqual(8);
+    const pixels = await page
+      .locator("[data-pdf-page-number] > canvas")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const canvas = element as HTMLCanvasElement;
+          return canvas.width * canvas.height;
+        }),
+      );
+    expect(Math.max(...pixels)).toBeLessThanOrEqual(4_000_000);
+    peakPixels = Math.max(
+      peakPixels,
+      pixels.reduce((sum, value) => sum + value, 0),
+    );
+    peakResidentPages = Math.max(
+      peakResidentPages,
+      pixels.filter(Boolean).length,
+    );
+    expect(peakPixels).toBeLessThanOrEqual(32_000_000);
+  }
+  expect(
+    await page
+      .locator('[data-pdf-page-number="1"]')
+      .evaluate((element) => element.getBoundingClientRect().height),
+  ).toBe(firstHeight);
+  test.info().annotations.push({
+    type: "bounded-pdf-residency",
+    description: JSON.stringify({ pageCount, peakResidentPages, peakPixels }),
+  });
+});
+
 test("keeps the PDF zoom percentage synchronized with the rendered page", async ({
   page,
 }) => {

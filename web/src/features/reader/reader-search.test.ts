@@ -69,6 +69,41 @@ describe("reader search navigation", () => {
     ).toEqual([]);
   });
 
+  it("maps case expansion back to original UTF-16 offsets", () => {
+    expect(
+      findReaderPageSearchMatches({
+        ordinalOffset: 0,
+        pageNumber: 1,
+        query: "test",
+        textItems: ["İ TEST"],
+      }),
+    ).toMatchObject([
+      { begin: { itemIndex: 0, offset: 2 }, end: { itemIndex: 0, offset: 6 } },
+    ]);
+    expect(
+      findReaderPageSearchMatches({
+        ordinalOffset: 0,
+        pageNumber: 1,
+        query: "i",
+        textItems: ["İ"],
+      }),
+    ).toMatchObject([
+      { begin: { itemIndex: 0, offset: 0 }, end: { itemIndex: 0, offset: 1 } },
+    ]);
+  });
+
+  it("stops matching at the caller's budget", () => {
+    expect(
+      findReaderPageSearchMatches({
+        ordinalOffset: 0,
+        pageNumber: 1,
+        query: "a",
+        textItems: ["a".repeat(10_000)],
+        maxMatches: 3,
+      }),
+    ).toHaveLength(3);
+  });
+
   it("wraps in either direction without inventing an empty match", () => {
     expect(moveReaderSearchCursor(2, 3, 1)).toBe(0);
     expect(moveReaderSearchCursor(0, 3, -1)).toBe(2);

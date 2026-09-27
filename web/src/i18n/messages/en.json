@@ -940,6 +940,9 @@
     "search": {
       "close": "Close PDF search",
       "empty": "No matches",
+      "pending": "Searching…",
+      "failed": "Search unavailable",
+      "limited": "Showing the first matches. Refine your search.",
       "next": "Next match",
       "previous": "Previous match"
     },

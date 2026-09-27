@@ -565,6 +565,35 @@ updates, so previewing a card or updating a comment does not clear and repaint
 the document. The feature does not imply WebSocket delivery,
 mentions, notifications, unread counts, reactions, or recursive replies.
 
+### Bounded PDF resources and search
+
+The Reader feature owns viewport resource lifetimes. Pages retain their measured
+CSS geometry after eviction; leaving the one-viewport overscan cancels rendering,
+waits for settlement, then releases the bitmap, text and PDF link layers. A newer
+render of the same canvas cannot be cleared by an older cleanup. PDF.js page
+resources have shared leases across viewport, thumbnail and search consumers.
+The last consumer requests PDF.js cleanup. Each bitmap is capped at four million
+pixels without changing CSS geometry or text-selection coordinates. The thumbnail
+rail also evicts canvases outside its overscan instead of accumulating every
+visited page. An active native cross-page selection pins already rendered pages
+until the gesture and selection commit finish; committed normalized overlays can
+be reconstructed after eviction.
+
+PDF search cancels the previous PDF worker text stream when the query changes or
+the document closes. Its text cache retains at most eight pages and 2 MiB of
+estimated string/item storage; one page above 8 MiB fails visibly. Text position
+lookup stores fragment spans instead of an object per character, including correct
+original offsets when Unicode lowercasing changes length. Matching yields between
+pages and stops after 1,000 results plus one truncation witness. The toolbar shows
+`1000+` with localized refinement guidance; pending and failed searches never
+masquerade as an empty result. Search does not send paper text to telemetry.
+
+The existing Figma Reader hierarchy and selection intent are retained. The finite
+search states are runtime additions represented by `ReaderToolbar/SearchPending`,
+`SearchFailed` and `SearchLimited`, alongside `SearchOpen`; there is no new route
+or control. Resource ownership and cancellation have direct unit coverage;
+continuous scrolling and cross-page selection are browser acceptance boundaries.
+
 ## Contextual conversations
 
 Reader in personal context lists only conversations whose scope is the current

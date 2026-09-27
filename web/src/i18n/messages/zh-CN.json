@@ -940,6 +940,9 @@
     "search": {
       "close": "关闭 PDF 搜索",
       "empty": "没有匹配结果",
+      "pending": "搜索中…",
+      "failed": "暂时无法搜索",
+      "limited": "仅显示前面的匹配结果，请缩小搜索范围。",
       "next": "下一个结果",
       "previous": "上一个结果"
     },

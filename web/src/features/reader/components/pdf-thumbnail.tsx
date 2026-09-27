@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { RenderTask } from "pdfjs-dist";
+import { retainPdfPage } from "../pdf-page-resources";
 
 import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
@@ -22,33 +23,39 @@ export function PdfThumbnail({
 }) {
   const rootRef = React.useRef<HTMLButtonElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [visible, setVisible] = React.useState(current);
+  const [nearViewport, setNearViewport] = React.useState(current);
+  const generation = React.useRef({ value: 0 });
+  const renderingRef = React.useRef<Promise<void>>(undefined);
+  const visible = nearViewport || current;
 
   React.useEffect(() => {
     const root = rootRef.current;
-    if (!root || visible) return;
+    if (!root) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
+        setNearViewport(Boolean(entry?.isIntersecting));
       },
       { rootMargin: "160px" },
     );
     observer.observe(root);
     return () => observer.disconnect();
-  }, [visible]);
+  }, []);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!visible || !canvas) return;
     let active = true;
+    const lifecycle = generation.current;
+    const currentGeneration = ++lifecycle.value;
+    const previousRendering = renderingRef.current;
+    let releasePage: (() => void) | undefined;
     let renderTask: RenderTask | undefined;
-    void adapter
+    const rendering = adapter
       .getPage(pageNumber)
       .then(async (page) => {
+        await previousRendering;
         if (!active) return;
+        releasePage = retainPdfPage(page);
         const base = page.getViewport({ scale: 1 });
         const scale = 72 / base.width;
         const viewport = page.getViewport({ scale });
@@ -63,9 +70,16 @@ export function PdfThumbnail({
       // terminal state when the rail unmounts or the active document changes;
       // a failed thumbnail must never surface as an unhandled page error.
       .catch(() => undefined);
+    renderingRef.current = rendering;
     return () => {
       active = false;
       renderTask?.cancel();
+      void rendering.finally(() => {
+        releasePage?.();
+        if (lifecycle.value !== currentGeneration) return;
+        canvas.width = 0;
+        canvas.height = 0;
+      });
     };
   }, [adapter, pageNumber, visible]);
 
@@ -83,7 +97,12 @@ export function PdfThumbnail({
       type="button"
     >
       <span className="border-line bg-surface grid min-h-24 w-[74px] place-items-center overflow-hidden rounded-[var(--radius-sm)] border">
-        <canvas className="max-h-24 max-w-full" ref={canvasRef} />
+        <canvas
+          className="max-h-24 max-w-full"
+          height={0}
+          ref={canvasRef}
+          width={0}
+        />
       </span>
       <span className="text-muted text-xs tabular-nums">{pageNumber}</span>
     </button>

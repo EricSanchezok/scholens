@@ -54,6 +54,9 @@ export type ReaderToolbarLabels = {
   search: string;
   closeSearch: string;
   noSearchResults: string;
+  searchPending: string;
+  searchFailed: string;
+  searchLimited: string;
   previousSearchResult: string;
   nextSearchResult: string;
   showOutline: string;
@@ -120,6 +123,8 @@ export function ReaderToolbar({
   search?: {
     currentIndex: number;
     matchCount: number;
+    limited?: boolean;
+    status?: "pending" | "failed" | "complete";
     onClose: () => void;
     onMove: (direction: -1 | 1) => void;
     onQueryChange: (query: string) => void;
@@ -278,18 +283,29 @@ export function ReaderToolbar({
           </div>
           <span
             aria-label={
-              search.matchCount === 0 && search.query.trim()
-                ? labels.noSearchResults
-                : undefined
+              search.limited
+                ? labels.searchLimited
+                : search.status === "pending"
+                  ? labels.searchPending
+                  : search.status === "failed"
+                    ? labels.searchFailed
+                    : search.matchCount === 0 && search.query.trim()
+                      ? labels.noSearchResults
+                      : undefined
             }
             aria-live="polite"
-            className="text-muted w-14 shrink-0 text-center text-xs tabular-nums"
+            className="text-muted max-w-40 min-w-14 shrink-0 text-center text-xs tabular-nums"
+            title={search.limited ? labels.searchLimited : undefined}
           >
-            {search.matchCount > 0
-              ? `${search.currentIndex + 1} / ${search.matchCount}`
-              : search.query.trim()
-                ? "0 / 0"
-                : "—"}
+            {search.status === "pending"
+              ? labels.searchPending
+              : search.status === "failed"
+                ? labels.searchFailed
+                : search.matchCount > 0
+                  ? `${search.currentIndex + 1} / ${search.matchCount}${search.limited ? "+" : ""}`
+                  : search.query.trim()
+                    ? "0 / 0"
+                    : "—"}
           </span>
           <IconButton
             disabled={search.matchCount === 0}

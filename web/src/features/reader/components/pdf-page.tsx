@@ -237,6 +237,7 @@ function PdfPageSurface({
   previewAnnotationId,
   activeTextSelection,
   selectionLabels,
+  keepRendered,
   onAnnotationSelect,
   onAskSelection,
   onCommentSelection,
@@ -273,6 +274,7 @@ function PdfPageSurface({
   previewAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
+  keepRendered: boolean;
   onAnnotationSelect?: (annotationId: string) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
@@ -295,8 +297,9 @@ function PdfPageSurface({
   const textLayerRef = React.useRef<HTMLDivElement>(null);
   const annotationLayerRef = React.useRef<HTMLDivElement>(null);
   const [pageState, setPageState] = React.useState<{
-    page: PDFPageProxy;
+    page?: PDFPageProxy;
     pageNumber: number;
+    failed?: boolean;
   }>();
   const [pageSize, setPageSize] = React.useState({ height: 792, width: 612 });
   const [renderEnabled, setRenderEnabled] = React.useState(
@@ -338,12 +341,19 @@ function PdfPageSurface({
 
   React.useEffect(() => {
     let active = true;
-    void adapter.getPage(pageNumber).then((nextPage) => {
-      if (!active) return;
-      const viewport = nextPage.getViewport({ scale: 1 });
-      setPageSize({ height: viewport.height, width: viewport.width });
-      setPageState({ page: nextPage, pageNumber });
-    });
+    void adapter
+      .getPage(pageNumber)
+      .then((nextPage) => {
+        if (!active) return;
+        const viewport = nextPage.getViewport({ scale: 1 });
+        setPageSize({ height: viewport.height, width: viewport.width });
+        setPageState({ page: nextPage, pageNumber });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setPageState({ pageNumber, failed: true });
+        onRenderErrorRef.current?.(pageNumber, error);
+      });
     return () => {
       active = false;
     };
@@ -351,7 +361,10 @@ function PdfPageSurface({
 
   const page =
     pageState?.pageNumber === pageNumber ? pageState.page : undefined;
-  const shouldRender = renderEnabled || pageNumber === currentPageNumber;
+  const shouldRender =
+    renderEnabled ||
+    pageNumber === currentPageNumber ||
+    (keepRendered && Boolean(renderedKey));
 
   React.useEffect(() => {
     if (searchMatches.length > 0) return;
@@ -470,7 +483,12 @@ function PdfPageSurface({
       });
     return () => {
       active = false;
-      renderTask.cancel();
+      void renderTask.cancel().then((released) => {
+        if (released) {
+          renderedKeyRef.current = "";
+          setRenderedKey("");
+        }
+      });
     };
   }, [
     annotationLinkLabel,
@@ -527,11 +545,13 @@ function PdfPageSurface({
     });
   }, [annotations, expectedRenderedKey, page, pageNumber, renderedKey]);
 
+  const loadFailed = pageState?.pageNumber === pageNumber && pageState.failed;
   const rendering =
     shouldRender &&
+    !loadFailed &&
     renderErrorKey !== expectedRenderedKey &&
     (!page || renderedKey !== expectedRenderedKey);
-  const renderError = renderErrorKey === expectedRenderedKey;
+  const renderError = loadFailed || renderErrorKey === expectedRenderedKey;
 
   React.useEffect(() => {
     const textLayer = textLayerRef.current;
@@ -565,6 +585,7 @@ function PdfPageSurface({
           readerPdfRectsForPage(activeTextSelection.anchor, pageNumber) &&
           "z-30",
       )}
+      data-pdf-page-active={shouldRender ? "true" : undefined}
       data-pdf-page-number={pageNumber}
       ref={pageSurfaceRef}
       style={{
@@ -588,7 +609,12 @@ function PdfPageSurface({
           />
         </div>
       )}
-      <canvas className="absolute inset-0" ref={canvasRef} />
+      <canvas
+        className="absolute inset-0"
+        height={0}
+        ref={canvasRef}
+        width={0}
+      />
       <div
         className="textLayer pdf-text-layer"
         data-pdf-text-ready={
@@ -1214,6 +1240,7 @@ export function PdfPage({
               selectedAnnotationId={selectedAnnotationId}
               previewAnnotationId={previewAnnotationId}
               selectionLabels={selectionLabels}
+              keepRendered={selectionAlignmentGuarded}
               translationPreview={translationPreview}
               sourceTarget={sourceTarget}
               zoom={zoom}

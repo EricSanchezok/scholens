@@ -187,7 +187,8 @@ function ReaderDocumentWorkspace({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchState, setSearchState] = React.useState<{
     query: string;
-    results: Awaited<ReturnType<PdfDocumentAdapter["search"]>>;
+    results?: Awaited<ReturnType<PdfDocumentAdapter["search"]>>;
+    failed?: boolean;
   }>();
   const [searchIndex, setSearchIndex] = React.useState(-1);
   const [activeTextSelection, setActiveTextSelection] =
@@ -678,22 +679,31 @@ function ReaderDocumentWorkspace({
 
   React.useEffect(() => {
     if (!adapter || !searchQuery.trim()) return;
-    let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void adapter.search(searchQuery).then((results) => {
-        if (!active) return;
-        setSearchState({ query: searchQuery, results });
-        setSearchIndex(results.length > 0 ? 0 : -1);
-      });
+      void adapter
+        .search(searchQuery, controller.signal)
+        .then((results) => {
+          if (controller.signal.aborted) return;
+          setSearchState({ query: searchQuery, results });
+          setSearchIndex(results.matches.length > 0 ? 0 : -1);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted)
+            setSearchState({ query: searchQuery, failed: true });
+        });
     }, 250);
     return () => {
-      active = false;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [adapter, searchQuery]);
 
   const searchResults = React.useMemo(
-    () => (searchState?.query === searchQuery ? searchState.results : []),
+    () =>
+      searchState?.query === searchQuery
+        ? (searchState.results?.matches ?? [])
+        : [],
     [searchQuery, searchState],
   );
 
@@ -814,6 +824,9 @@ function ReaderDocumentWorkspace({
       nextPage: t("toolbar.nextPage"),
       nextSearchResult: t("search.next"),
       noSearchResults: t("search.empty"),
+      searchPending: t("search.pending"),
+      searchFailed: t("search.failed"),
+      searchLimited: t("search.limited"),
       openPanel: t("toolbar.openPanel"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
@@ -1217,6 +1230,17 @@ function ReaderDocumentWorkspace({
                       ? {
                           currentIndex: searchIndex,
                           matchCount: searchResults.length,
+                          limited:
+                            searchState?.query === searchQuery &&
+                            searchState.results?.limited,
+                          status:
+                            searchQuery.trim() &&
+                            searchState?.query !== searchQuery
+                              ? "pending"
+                              : searchState?.query === searchQuery &&
+                                  searchState.failed
+                                ? "failed"
+                                : "complete",
                           onClose: closeSearch,
                           onMove: (direction) =>
                             setSearchIndex((current) =>
