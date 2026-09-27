@@ -26,6 +26,13 @@ Profile model identifiers always use `provider:model`. Server and Jobs are the
 current consumers. New providers must be added as an explicit adapter rather
 than silently treated as OpenAI-compatible.
 
+Product DeepSeek models own their HTTP transport. Callers must enter the Agent
+or Model async context for the complete operation and close streaming generators
+when abandoning a response. Context exit closes connections on their owning
+loop, including cancellation; profile endpoint, timeout, and retry settings
+still apply. Externally supplied provider clients have a different ownership
+contract and must be closed by their creator.
+
 The package also owns Scholens' provider-free semantic-search primitive. Image
 builds download the pinned multilingual E5 ONNX artifacts once; Server and Jobs
 load only a configured local artifact directory. The public document-text

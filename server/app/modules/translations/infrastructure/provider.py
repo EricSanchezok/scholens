@@ -140,7 +140,10 @@ class LLMTranslationStreamProvider:
             retries=self._profile.structured_retries,
         )
         try:
-            async with agent.run_stream(_translation_user_content(spec)) as result:
+            async with (
+                agent,
+                agent.run_stream(_translation_user_content(spec)) as result,
+            ):
                 async for chunk in result.stream_text(delta=True, debounce_by=None):
                     if chunk:
                         yield chunk

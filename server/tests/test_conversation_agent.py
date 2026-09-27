@@ -1252,6 +1252,12 @@ async def test_unauthorized_tool_is_not_exposed_or_dispatched() -> None:
 @pytest.mark.asyncio
 async def test_cancellation_propagates_without_becoming_a_product_error() -> None:
     entered = asyncio.Event()
+    closed = asyncio.Event()
+
+    class OwnedModel(FunctionModel):
+        async def __aexit__(self, *args: Any) -> None:
+            await super().__aexit__(*args)
+            closed.set()
 
     async def blocked_answer(
         _messages: list[ModelMessage], _info: AgentInfo
@@ -1263,7 +1269,7 @@ async def test_cancellation_propagates_without_becoming_a_product_error() -> Non
     dispatcher = _Dispatcher()
     task = asyncio.create_task(
         _events(
-            model=FunctionModel(stream_function=blocked_answer),
+            model=OwnedModel(stream_function=blocked_answer),
             dispatcher=dispatcher,
             query="Wait",
         )
@@ -1273,6 +1279,7 @@ async def test_cancellation_propagates_without_becoming_a_product_error() -> Non
 
     with pytest.raises(asyncio.CancelledError):
         await task
+    assert closed.is_set()
 
 
 @pytest.mark.asyncio

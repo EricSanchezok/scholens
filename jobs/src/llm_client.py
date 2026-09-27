@@ -50,7 +50,8 @@ class AIExtractionClient:
             retries=self.profile.structured_retries,
         )
         try:
-            result = await agent.run(prompt[: self.profile.max_input_chars])
+            async with agent:
+                result = await agent.run(prompt[: self.profile.max_input_chars])
         except ValidationError as exc:
             raise ValueError(
                 f"AI provider returned invalid structured output for {schema.__name__}"

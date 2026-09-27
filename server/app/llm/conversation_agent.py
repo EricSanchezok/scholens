@@ -11,6 +11,7 @@ import secrets
 import time
 import uuid
 from collections.abc import AsyncGenerator, Sequence
+from contextlib import aclosing
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo
@@ -515,18 +516,21 @@ class ScholensConversationAgent:
                 "conversation.agent.run",
                 attributes={"conversation.scope": conversation_scope.scope_type.value},
             ):
-                async for event in self._run_agent(
-                    agent=agent,
-                    request=request,
-                    deps=deps,
-                    history=history,
-                    nonce=nonce,
-                    profile=profile,
-                ):
-                    result_seen = result_seen or isinstance(
-                        event, ConversationAgentResult
+                async with aclosing(
+                    self._run_agent(
+                        agent=agent,
+                        request=request,
+                        deps=deps,
+                        history=history,
+                        nonce=nonce,
+                        profile=profile,
                     )
-                    yield event
+                ) as events:
+                    async for event in events:
+                        result_seen = result_seen or isinstance(
+                            event, ConversationAgentResult
+                        )
+                        yield event
         except BaseException as exc:
             if isinstance(
                 exc,
@@ -569,15 +573,18 @@ class ScholensConversationAgent:
         usage_settled = False
         citation_normalizer = CitationNormalizer(provider=profile.provider)
         try:
-            async with agent.iter(
-                request.user_query,
-                deps=deps,
-                message_history=_history_messages(history),
-                usage_limits=UsageLimits(
-                    request_limit=_MAX_AGENT_REQUESTS,
-                    tool_calls_limit=_MAX_AGENT_TOOL_CALLS,
-                ),
-            ) as agent_run:
+            async with (
+                agent,
+                agent.iter(
+                    request.user_query,
+                    deps=deps,
+                    message_history=_history_messages(history),
+                    usage_limits=UsageLimits(
+                        request_limit=_MAX_AGENT_REQUESTS,
+                        tool_calls_limit=_MAX_AGENT_TOOL_CALLS,
+                    ),
+                ) as agent_run,
+            ):
                 node = agent_run.next_node
                 final_candidate = _AnswerCandidate()
                 while not isinstance(node, End):

@@ -169,6 +169,12 @@ transactions. Crossref and the synchronous LLM backend run in worker threads;
 provider requests hold no SQLAlchemy session. The application lifespan closes
 its OpenAlex HTTP and Redis clients on their owning event loop.
 
+Product DeepSeek Agents instead own one operation's transport. Conversation,
+translation, and suggestion execution enter the Agent context through complete
+stream consumption; error, cancellation, or explicit closure releases the
+transport on that loop. Jobs structured extraction uses the same ownership
+contract, so per-task event loops do not leave pooled connections behind.
+
 Authenticated Job callbacks that fail the registered operation contract are
 atomically marked failed before their Redis concurrency leases are released.
 Unexpected handler or database failures keep their leases until retry or TTL,
