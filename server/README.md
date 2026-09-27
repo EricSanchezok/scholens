@@ -956,7 +956,8 @@ callbacks without segments require a unique quote across the document.
 content and anchor. Partial retries add missing evidence, retain existing
 comments and respect deletion tombstones. Access is rechecked under the document
 lock before creating personal annotations. Coverage logs report candidate,
-anchored, existing, created and skipped counts without source text.
+anchored, existing, `annotations_created` and skipped counts without source text
+or collisions with reserved Python log record fields.
 Deploy additive migration `2026_09_27_1100` before this consumer. See
 [ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md) for legacy adoption
 and the retirement condition.

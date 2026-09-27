@@ -1,6 +1,7 @@
 """Real transaction proofs for partial, personal and replay-safe AI evidence."""
 
 from concurrent.futures import ThreadPoolExecutor
+import logging
 import os
 from uuid import uuid4
 
@@ -119,7 +120,10 @@ def apply(fixture, payload, actor_index=0):
         )
 
 
-def test_partial_retry_preserves_previous_comments_and_other_users(evidence_database):
+def test_partial_retry_preserves_previous_comments_and_other_users(
+    evidence_database, caplog
+):
+    caplog.set_level(logging.INFO, logger="app.bootstrap.adapters.research_annotations")
     engine, document_id, content, actors = evidence_database
     first = apply(
         evidence_database,
@@ -132,6 +136,12 @@ def test_partial_retry_preserves_previous_comments_and_other_users(evidence_data
         ),
     )
     assert (first.total, first.anchored, first.skipped) == (2, 1, 1)
+    coverage = next(
+        record
+        for record in caplog.records
+        if record.message == "research.ai_annotations.coverage"
+    )
+    assert coverage.annotations_created == 1
     second = apply(
         evidence_database,
         metadata(

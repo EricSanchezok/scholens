@@ -169,7 +169,7 @@ def create_ai_annotations(
             "total": len(metadata.highlights),
             "anchored": anchored,
             "already_present": already_present,
-            "created": len(thread_ids),
+            "annotations_created": len(thread_ids),
         },
     )
     return CreatedAiAnnotations(
