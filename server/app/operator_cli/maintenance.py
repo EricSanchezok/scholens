@@ -7,7 +7,13 @@ from typing import cast
 from uuid import UUID
 
 import click
-from scholens_ai import EMBEDDING_MODEL_REVISION, configured_embedder
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    configured_embedder,
+    load_passage_tokenizer,
+    PassageLimitExceeded,
+)
+from app.operator_cli.token_indexes import build_repair_projection
 
 from app.modules.reading_activity.application import ReadingActivityRetentionResult
 from app.modules.papers.application.maintenance import (
@@ -34,6 +40,87 @@ MAX_READING_RETENTION_BATCHES_PER_INVOCATION = 1000
 @click.group("maintenance", cls=OutputGroup)
 def maintenance_group() -> None:
     """Run narrowly scoped maintenance through application services."""
+
+
+@maintenance_group.command("backfill-token-indexes")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option("--batch-size", type=click.IntRange(1, 25), default=5, show_default=True)
+@click.option("--after-document-id", type=click.UUID, default=None)
+@click.option(
+    "--apply",
+    is_flag=True,
+    help="Compute one document at a time outside database transactions.",
+)
+@click.option("--yes", is_flag=True)
+@click.pass_obj
+@guarded
+def backfill_token_indexes(
+    state: CliState,
+    actor_email: str,
+    batch_size: int,
+    after_document_id: UUID | None,
+    apply: bool,
+    yes: bool,
+) -> None:
+    actor_user = load_user(actor_email)
+    page = executor().query(
+        lambda c: c.token_index_maintenance.candidates(
+            actor=current_admin(c, actor_user.id),
+            batch_size=batch_size,
+            after_document_id=after_document_id,
+        )
+    )
+    indexed, stale, skipped = 0, 0, page.skipped_limits
+    if apply and page.document_ids:
+        confirm("Backfill deterministic token indexes?", yes=yes)
+        model = configured_embedder()
+        if model is None or model.revision != EMBEDDING_MODEL_REVISION:
+            raise click.ClickException(
+                "Current local embedding model is not configured."
+            )
+        tokenizer = load_passage_tokenizer()
+        for document_id in page.document_ids:
+            source = executor().query(
+                lambda c: c.token_index_maintenance.source(
+                    actor=current_admin(c, actor_user.id), document_id=document_id
+                )
+            )
+            if source is None:
+                stale += 1
+                continue
+            try:
+                projection = build_repair_projection(
+                    source.raw_content, model=model, tokenizer=tokenizer
+                )
+            except PassageLimitExceeded:
+                skipped += 1
+                del source
+                continue
+            del source
+            adopted = executor().command(
+                lambda c: c.token_index_maintenance.apply_projection(
+                    actor=current_admin(c, actor_user.id),
+                    operation=cli_operation("maintenance.backfill-token-indexes"),
+                    document_id=document_id,
+                    projection=projection,
+                )
+            )
+            indexed += int(adopted)
+            stale += int(not adopted)
+            del projection
+    emit(
+        state,
+        {
+            "status": "changed" if indexed else "unchanged",
+            "dry_run": not apply,
+            "scanned": page.scanned,
+            "candidates": len(page.document_ids),
+            "indexed_documents": indexed,
+            "stale_documents": stale,
+            "skipped_limits": skipped,
+            "next_cursor": str(page.next_cursor) if page.next_cursor else None,
+        },
+    )
 
 
 @maintenance_group.command("backfill-passages")

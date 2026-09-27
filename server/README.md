@@ -429,8 +429,10 @@ first:
 ```bash
 uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --json
 uv run scholens maintenance backfill-search-embeddings --actor-email admin@example.com --batch-size 100 --apply --yes --json
-uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --json
-uv run scholens maintenance backfill-passage-embeddings --batch-size 128 --apply --yes --json
+uv run scholens maintenance backfill-token-indexes --actor-email admin@example.com --batch-size 5 --json
+uv run scholens maintenance backfill-token-indexes --actor-email admin@example.com --batch-size 5 --apply --yes --json
+uv run scholens maintenance backfill-passage-embeddings --actor-email admin@example.com --batch-size 128 --json
+uv run scholens maintenance backfill-passage-embeddings --actor-email admin@example.com --batch-size 128 --apply --yes --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --json
 uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --apply --yes --json
 ```
@@ -444,6 +446,20 @@ Passage repair repeats until `candidates` reaches zero. Both projections are
 versioned and digest-bound; neither invokes a paid provider or rewrites content.
 The additive metadata revision invalidates vectors on title/keywords/summary/
 abstract changes, including N-1 writes, and preserves them on unrelated updates.
+
+Token repair scans at most 25 IDs per keyset page and loads only one bounded
+canonical body at a time. It does not depend on historical parser S3 objects.
+Use the same `next_cursor` convention even when a page has no candidates. Each
+document is tokenized and embedded outside SQL, in RPC batches of at most eight;
+adoption rechecks administrator access and the exact source, then atomically
+commits the complete projection. Changed/deleted bodies are counted as stale;
+40 MiB body and 10,000-passage limits are reported as skipped, never truncated.
+Rerunning a page skips current projections. Interruptions may recompute the
+unfinished document but cannot duplicate paid work or partially adopt an index.
+In production, run this operator in an isolated, low-priority 1 GiB process with
+the shared inference socket, one invocation at a time; do not start a second
+model inside the serving API container. Observe admission and API latency between
+pages before continuing. This command changes only shared search projections.
 
 The `maintenance fix-annotation-offsets` and
 `maintenance reprocess-contaminated-documents` repairs are also bounded and

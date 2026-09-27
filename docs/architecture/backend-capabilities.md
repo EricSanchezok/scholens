@@ -892,6 +892,14 @@ changes advance it; old vectors at revision zero remain compatible. Metadata
 repair uses an explicit UUID cursor and finite page, with inference outside SQL
 transactions and compare-before-write adoption in batches of eight.
 
+The private `maintenance backfill-token-indexes` command upgrades historical body
+indexes using the same token window and complete-projection format as Jobs. It
+scans at most 25 IDs per UUID page, reads one canonical body at a time, computes
+outside SQL in RPC batches of eight, then rechecks administrator rights and the
+source under the projection's atomic adoption lock. Current heads are skipped;
+changed/deleted sources and explicit size limits are reported. It never calls
+paid providers, changes paper text, or repairs personal annotations implicitly.
+
 `PAPER_SEARCH_BACKEND` is validated at startup. HTTP, Agent, and MCP consumers
 continue to depend only on the application port and public search contract.
 

@@ -27,6 +27,10 @@ from app.modules.papers.application.maintenance import (
 )
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
+from app.modules.papers.application.token_maintenance import TokenIndexMaintenance
+from app.modules.papers.infrastructure.token_index_maintenance import (
+    SqlTokenIndexRepair,
+)
 from app.modules.papers.infrastructure.search_embedding_maintenance import (
     SqlSearchEmbeddingBackfill,
 )
@@ -73,6 +77,12 @@ class OperatorCapabilities:
         return PassageMaintenance(
             SqlPassageBackfill(self._session),
             journal=self._journal,
+        )
+
+    @cached_property
+    def token_index_maintenance(self) -> TokenIndexMaintenance:
+        return TokenIndexMaintenance(
+            SqlTokenIndexRepair(self._session), journal=self._journal
         )
 
     @cached_property

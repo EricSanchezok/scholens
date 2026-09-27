@@ -1,8 +1,10 @@
 """Staged import facts and result application on real isolated PostgreSQL."""
 
 import hashlib
+import base64
 import os
 from uuid import uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import create_engine, delete, select, text
@@ -616,3 +618,51 @@ def test_sql_metadata_prefix_matches_canonical_unicode_and_long_whitespace(
                 title=title, keywords=keywords, summary=summary, abstract=abstract
             )
             assert len(row.semantic_text) <= 24000
+
+
+def test_bounded_token_repair_adopts_once_and_rejects_changed_source(pipeline_database):
+    from scholens_ai import (
+        EMBEDDING_MODEL_REVISION,
+        PassageEmbeddingRecord,
+        TokenProjection,
+        TokenSpan,
+        encode_passage_embedding_artifact,
+    )
+    from app.modules.papers.infrastructure.token_index_maintenance import (
+        SqlTokenIndexRepair,
+    )
+
+    engine, doc_id, _, _, _, source, _ = pipeline_database
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    result = TokenProjection(
+        content_digest=digest,
+        model_revision=EMBEDDING_MODEL_REVISION,
+        spans=[TokenSpan(start=0, end=len(source), tokens=10)],
+        vectors=base64.b64encode(
+            encode_passage_embedding_artifact(
+                model_revision=EMBEDDING_MODEL_REVISION,
+                records=[PassageEmbeddingRecord(digest, (1.0,) + (0.0,) * 383)],
+            )
+        ).decode(),
+    )
+    after = UUID(int=doc_id.int - 1)
+    with Session(engine) as db, db.begin():
+        repair = SqlTokenIndexRepair(db)
+        page = repair.candidates(batch_size=1, after_document_id=after)
+        assert page.scanned == 1 and page.document_ids == (doc_id,)
+        assert repair.source(document_id=doc_id).raw_content == source
+        with pytest.raises(ValueError):
+            repair.candidates(batch_size=26, after_document_id=None)
+        assert repair.apply_projection(document_id=doc_id, projection=result)
+    with Session(engine) as db, db.begin():
+        repair = SqlTokenIndexRepair(db)
+        assert (
+            repair.candidates(batch_size=1, after_document_id=after).document_ids == ()
+        )
+        db.get(Document, doc_id).raw_content = "changed canonical source"
+        db.flush()
+        assert not repair.apply_projection(document_id=doc_id, projection=result)
+        assert repair.candidates(
+            batch_size=1, after_document_id=after
+        ).document_ids == (doc_id,)
+        assert repair.source(document_id=uuid4()) is None
