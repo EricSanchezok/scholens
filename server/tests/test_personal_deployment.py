@@ -50,6 +50,19 @@ def test_personal_logs_cover_the_thirty_day_contract_observation_window():
     assert all(p["RetentionInDays"] >= 30 for p in logs)
 
 
+def test_reader_can_observe_range_support_on_authorized_cross_origin_pdfs():
+    bucket = renderer.render("foundation")["Resources"]["ContentBucket"]["Properties"]
+    rules = bucket["CorsConfiguration"]["CorsRules"]
+    assert len(rules) == 1
+    rule = rules[0]
+    # PDF.js must read these response headers to enable and validate ranges.
+    assert {"accept-ranges", "content-range", "content-encoding"} <= {
+        value.lower() for value in rule["ExposedHeaders"]
+    }
+    assert rule["AllowedOrigins"] == [{"Fn::Sub": "https://${ProductionDomain}"}]
+    assert {"GET", "HEAD"} <= set(rule["AllowedMethods"])
+
+
 def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
     import yaml
     from scholens_job_contracts import JOB_QUEUE_NAMES
