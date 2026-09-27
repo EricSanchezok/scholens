@@ -51,8 +51,15 @@ export async function POST(request: Request) {
   console.info(
     JSON.stringify({
       ...parsed.data,
-      cf_colo: ray.includes("-") ? ray.split("-").at(-1) : undefined,
-      country_group: country === "CN" ? "CN" : "non-CN",
+      cf_colo: /^[a-f0-9]+-([A-Z]{3})$/i.exec(ray)?.[1]?.toUpperCase(),
+      country_group:
+        country === "CN"
+          ? "CN"
+          : country &&
+              /^[A-Z]{2}$/.test(country) &&
+              !["XX", "ZZ"].includes(country)
+            ? "non-CN"
+            : "unknown",
       event: eventName,
       received_at: new Date().toISOString(),
     }),

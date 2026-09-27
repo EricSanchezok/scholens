@@ -49,7 +49,7 @@ use the separate `pdf_render_error` event with an allowlisted error kind,
 surface, and optional decoder (`jbig2`, `openjpeg`, `qcms`, or `unknown`). It
 never accepts a user/account/Conversation/document identifier, content, title,
 query string, raw URL, signed URL, raw error text, or IP address. The receiver
-adds only `CN`/`non-CN` and the Cloudflare colo, writes structured
+adds only `CN`/`non-CN`/`unknown` and a validated three-letter Cloudflare colo, writes structured
 `web_performance`, `conversation_performance`, `reader_annotation`, or
 `pdf_render` events, and
 returns `204` without persistence in application state.
@@ -62,6 +62,14 @@ incident. Mainland CDN
 or acceleration procurement begins only after two consecutive weeks show that
 non-China targets pass while China mobile primary-content p75 is both above
 1.5 seconds and more than twice the non-China value.
+
+Primary-content timing uses the exact observed navigation destination. Two
+Reader documents or Projects never share a clock merely because their coarse
+route group matches. The initial hard navigation can be reported once; later
+routes without an observed start are excluded rather than reporting browser
+uptime as latency. Country headers that are missing or unknown form a separate
+cohort and never count as non-China acceptance evidence. These measurement
+changes preserve the existing visual intent and require no new UI state.
 
 ## Conversation streaming
 
