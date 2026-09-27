@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 import socket
 import time
 from typing import Literal
@@ -56,17 +56,32 @@ class SocketTextEmbedder:
         texts: Sequence[str],
         timeout: float,
     ) -> list[list[float]]:
-        request = InferenceRequest(
-            model_revision=self.revision,
-            kind=kind,
-            texts=tuple(texts),
-            deadline_ms=max(1, int(timeout * 1000)),
-        )
-        data = frame(request.model_dump_json().encode())
         deadline = time.monotonic() + timeout
         try:
+            request = InferenceRequest(
+                model_revision=self.revision,
+                kind=kind,
+                texts=tuple(texts),
+                deadline_ms=max(1, int(timeout * 1000)),
+            )
+            vectors = []
+            for bounded in _bounded_requests(request):
+                vectors.extend(self._exchange(bounded, deadline))
+            return vectors
+        except ValueError:
+            # Validation/encoding errors may contain the private input text.
+            raise EmbeddingUnavailable("inference_request_invalid") from None
+
+    def _exchange(
+        self, request: InferenceRequest, deadline: float
+    ) -> list[list[float]]:
+        request = request.model_copy(
+            update={"deadline_ms": max(1, int(_remaining(deadline) * 1000))}
+        )
+        data = frame(request.model_dump_json().encode())
+        try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                connection.settimeout(timeout)
+                connection.settimeout(_remaining(deadline))
                 connection.connect(self._path)
                 connection.settimeout(_remaining(deadline))
                 connection.sendall(data)
@@ -82,11 +97,24 @@ class SocketTextEmbedder:
                 raise EmbeddingUnavailable("inference_revision")
             if response.error is not None:
                 raise EmbeddingUnavailable(f"inference_{response.error}")
-            if len(response.vectors) != len(texts):
+            if len(response.vectors) != len(request.texts):
                 raise EmbeddingUnavailable("inference_response_count")
             return response.vectors
         except (OSError, ValueError) as exc:
             raise EmbeddingUnavailable("inference_unavailable") from exc
+
+
+def _bounded_requests(request: InferenceRequest) -> Iterator[InferenceRequest]:
+    # Character limits do not bound UTF-8 bytes or JSON control-character escapes.
+    # Subrequests retain the same absolute client deadline and source order.
+    if len(request.model_dump_json().encode()) <= MAX_FRAME_BYTES:
+        yield request
+        return
+    if request.kind != "passage" or len(request.texts) < 2:
+        raise EmbeddingUnavailable("inference_request_bound")
+    middle = len(request.texts) // 2
+    for texts in (request.texts[:middle], request.texts[middle:]):
+        yield from _bounded_requests(request.model_copy(update={"texts": texts}))
 
 
 def _remaining(deadline: float) -> float:

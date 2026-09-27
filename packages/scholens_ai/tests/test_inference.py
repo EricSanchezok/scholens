@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import tempfile
 import threading
+import time
 
 import pytest
 
@@ -77,6 +78,52 @@ def test_client_uses_exact_revision_and_validates_vectors_without_loading_a_mode
         assert model.calls == [("query", ("example",))]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("character", ["界", "🙂", "\x01"])
+def test_valid_long_texts_cross_frame_bound_without_truncation_or_reordering(character):
+    async def scenario():
+        model = Model()
+        texts = [character * (24_000 - i) for i in range(8)]
+        async with running(model) as (path, _service):
+            client = SocketTextEmbedder(path, revision=model.revision)
+            vectors = await asyncio.to_thread(client.embed_passages, texts)
+        assert [vector.index(1.0) for vector in vectors] == [
+            len(text) % 384 for text in texts
+        ]
+        assert [text for _, batch in model.calls for text in batch] == texts
+
+    asyncio.run(scenario())
+
+
+def test_split_requests_share_one_deadline_and_cancel_remaining_work():
+    class SlowModel(Model):
+        def _embed(self, texts, kind):
+            result = super()._embed(texts, kind)
+            time.sleep(0.04)
+            return result
+
+    async def scenario():
+        model = SlowModel()
+        async with running(model) as (path, _service):
+            client = SocketTextEmbedder(
+                path, revision=model.revision, passage_timeout=0.13
+            )
+            with pytest.raises(EmbeddingUnavailable):
+                await asyncio.to_thread(client.embed_passages, ["界" * 24_000] * 8)
+        assert len(model.calls) < 8
+
+    asyncio.run(scenario())
+
+
+def test_invalid_request_uses_a_content_free_degradation_signal():
+    client = SocketTextEmbedder("/tmp/unused-inference-test.sock")
+    with pytest.raises(
+        EmbeddingUnavailable, match="inference_request_invalid"
+    ) as error:
+        client.embed_passages(["private fixture " * 24_000])
+    assert error.value.__cause__ is None
+    assert "private fixture" not in str(error.value)
 
 
 def test_query_overtakes_index_microbatches_and_only_one_model_call_runs():
