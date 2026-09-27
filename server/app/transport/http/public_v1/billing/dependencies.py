@@ -6,11 +6,11 @@ from app.bootstrap.workflows.billing import BillingUsageWorkflow, BillingWorkflo
 from fastapi import Request
 
 
-def get_billing_workflow(request: Request) -> BillingWorkflow:
+async def get_billing_workflow(request: Request) -> BillingWorkflow:
     return cast(BillingWorkflow, request.app.state.billing_workflow)
 
 
-def get_billing_usage_workflow(request: Request) -> BillingUsageWorkflow:
+async def get_billing_usage_workflow(request: Request) -> BillingUsageWorkflow:
     return cast(BillingUsageWorkflow, request.app.state.billing_usage_workflow)
 
 

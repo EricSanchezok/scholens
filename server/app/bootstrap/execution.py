@@ -432,7 +432,7 @@ def create_job_completion_processor(
     )
 
 
-def get_application_executor(
+async def get_application_executor(
     request: Request,
 ) -> ApplicationExecutor[ApplicationCapabilities]:
     return cast(
@@ -441,33 +441,33 @@ def get_application_executor(
     )
 
 
-def get_integration_workflow(request: Request) -> IntegrationWorkflow:
+async def get_integration_workflow(request: Request) -> IntegrationWorkflow:
     return cast(IntegrationWorkflow, request.app.state.integration_workflow)
 
 
-def get_operation_context_factory(request: Request) -> OperationContextFactory:
+async def get_operation_context_factory(request: Request) -> OperationContextFactory:
     return cast(
         OperationContextFactory,
         request.app.state.operation_context_factory,
     )
 
 
-def get_conversation_chat(request: Request) -> ConversationChat:
+async def get_conversation_chat(request: Request) -> ConversationChat:
     return cast(ConversationChat, request.app.state.conversation_chat)
 
 
-def get_citation_workflow(request: Request) -> CitationWorkflow:
+async def get_citation_workflow(request: Request) -> CitationWorkflow:
     return cast(CitationWorkflow, request.app.state.citation_workflow)
 
 
-def get_paper_discovery_workflow(request: Request) -> PaperDiscoveryWorkflow:
+async def get_paper_discovery_workflow(request: Request) -> PaperDiscoveryWorkflow:
     return cast(
         PaperDiscoveryWorkflow,
         request.app.state.paper_discovery_workflow,
     )
 
 
-def get_tool_catalog(
+async def get_tool_catalog(
     request: Request,
 ) -> ToolCatalog[ApplicationCapabilities]:
     return cast(
@@ -476,7 +476,7 @@ def get_tool_catalog(
     )
 
 
-def get_tool_dispatcher(
+async def get_tool_dispatcher(
     request: Request,
 ) -> ToolDispatcher[ApplicationCapabilities]:
     return cast(
@@ -485,19 +485,19 @@ def get_tool_dispatcher(
     )
 
 
-def get_onboarding_finisher(request: Request) -> FinishOnboarding:
+async def get_onboarding_finisher(request: Request) -> FinishOnboarding:
     return cast(FinishOnboarding, request.app.state.onboarding_finisher)
 
 
-def get_stripe_webhook_processor(request: Request) -> ProcessStripeWebhook:
+async def get_stripe_webhook_processor(request: Request) -> ProcessStripeWebhook:
     return cast(ProcessStripeWebhook, request.app.state.stripe_webhook_processor)
 
 
-def get_paper_ingestion_workflow(request: Request) -> PaperIngestionWorkflow:
+async def get_paper_ingestion_workflow(request: Request) -> PaperIngestionWorkflow:
     return cast(PaperIngestionWorkflow, request.app.state.paper_ingestion_workflow)
 
 
-def get_research_generation_workflow(
+async def get_research_generation_workflow(
     request: Request,
 ) -> ResearchGenerationWorkflow:
     return cast(
@@ -506,15 +506,15 @@ def get_research_generation_workflow(
     )
 
 
-def get_translation_workflow(request: Request) -> TranslationWorkflow:
+async def get_translation_workflow(request: Request) -> TranslationWorkflow:
     return cast(TranslationWorkflow, request.app.state.translation_workflow)
 
 
-def get_zotero_workflow(request: Request) -> ZoteroWorkflow:
+async def get_zotero_workflow(request: Request) -> ZoteroWorkflow:
     return cast(ZoteroWorkflow, request.app.state.zotero_workflow)
 
 
-def get_job_completion_processor(request: Request) -> JobCompletionProcessor:
+async def get_job_completion_processor(request: Request) -> JobCompletionProcessor:
     return cast(
         JobCompletionProcessor,
         request.app.state.job_completion_processor,

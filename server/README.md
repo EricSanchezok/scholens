@@ -56,6 +56,12 @@ current actor's encrypted key gates DOI resolution, external paper search,
 author works, and citation graphs. Crossref metadata lookup runs first and can
 degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 
+HTTP dependencies that only retrieve initialized services from application state
+run on the event loop. They must not reserve a blocking-worker slot just to return
+an object. Database-backed identity/profile resolution and synchronous application
+operations still run in bounded workers, each owning its complete transaction.
+Authentication and authorization are revalidated on every request.
+
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
