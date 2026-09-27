@@ -14,12 +14,10 @@ from typing import Awaitable, Callable, Literal
 from src.deepseek_credentials import DeepSeekCredentialRequired
 from src.llm_client import llm_client
 from src.pdf.local import (
-    analyze_pdf_path,
     build_text_last_resort,
-    extract_markdown_markitdown,
-    extract_markdown_pymupdf4llm,
     is_scanned_candidate,
 )
+from src.pdf.process import analyze_in_process, extract_in_process
 from src.pdf.mineru import MinerUClient, MinerUConfig
 from src.pdf.models import (
     LocalPDFAnalysis,
@@ -222,12 +220,10 @@ async def _parse_local_engines(
     status_callback("Parsing PDF with local pymupdf4llm")
     primary: ParsedDocument | None = None
     try:
-        primary = await asyncio.wait_for(
-            asyncio.to_thread(
-                extract_markdown_pymupdf4llm,
-                pdf_path,
-                parser_version=analysis.parser_version,
-            ),
+        primary = await extract_in_process(
+            pdf_path,
+            engine="pymupdf4llm",
+            parser_version=analysis.parser_version,
             timeout=LOCAL_ENGINE_TIMEOUT_SECONDS,
         )
     except ParserContentError:
@@ -240,13 +236,11 @@ async def _parse_local_engines(
 
     status_callback("Parsing PDF with local MarkItDown")
     try:
-        fallback = await asyncio.wait_for(
-            asyncio.to_thread(
-                extract_markdown_markitdown,
-                pdf_path,
-                parser_version=analysis.parser_version,
-                fallback_offsets=analysis.page_offset_map,
-            ),
+        fallback = await extract_in_process(
+            pdf_path,
+            engine="markitdown",
+            parser_version=analysis.parser_version,
+            fallback_offsets=analysis.page_offset_map,
             timeout=LOCAL_ENGINE_TIMEOUT_SECONDS,
         )
         return (
@@ -285,7 +279,9 @@ async def process_pdf_file(
                 temp_file.write(pdf_bytes)
                 pdf_path = temp_file.name
             owned_pdf_path = True
-        analysis = await asyncio.to_thread(analyze_pdf_path, pdf_path)
+        analysis = await analyze_in_process(
+            pdf_path, timeout=LOCAL_ENGINE_TIMEOUT_SECONDS
+        )
 
         if is_scanned_candidate(analysis):
             # A scanned PDF has no usable text layer; only MinerU OCR can help.

@@ -96,13 +96,16 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=False,
     task_annotations={
-        name: {"reject_on_worker_lost": True}
-        for name in (
-            "upload_and_process_file",
-            "ingest_source_and_process",
-            PDF_TEXT_REPAIR_TASK_NAME,
-            "postprocess_pdf",
-        )
+        "*": {"resultrepr_maxsize": 0},
+        **{
+            name: {"reject_on_worker_lost": True}
+            for name in (
+                "upload_and_process_file",
+                "ingest_source_and_process",
+                PDF_TEXT_REPAIR_TASK_NAME,
+                "postprocess_pdf",
+            )
+        },
     },
     task_acks_on_failure_or_timeout=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,

@@ -23,6 +23,9 @@ the delivery to the broker; the durable Server claim still decides whether it
 may execute. Other tasks retain failure acknowledgement so non-idempotent
 provider work is not blindly replayed. Failure signals preserve the start time
 until postrun records the terminal duration.
+Celery result representations are suppressed for every Jobs task so success logs
+cannot serialize paper bodies or embedding arrays; bounded structured task
+events remain available.
 
 Platform schedules these workers in its interactive lane independently of the
 Scholight batch lane. Each lane has at most one task. The conversation worker
@@ -159,8 +162,16 @@ The production image stores the pinned search model at
 `SCHOLENS_EMBEDDING_MODEL_PATH`. It never downloads a model at task execution
 time and never sends the semantic projection to a remote provider.
 
-Local engines (`pymupdf4llm`, `markitdown`) are CPU-only, run in-process with
-a bounded time budget per engine, and never send document content off-host.
+Local analysis and engines (`pymupdf4llm`, `markitdown`) run in supervised CPU-only
+subprocesses with a bounded time budget per engine. Timeout or cancellation
+terminates the entire process group, escalates to SIGKILL if needed, and reaps
+the parser before trying another engine or removing temporary files. Linux also
+kills the parser when its owning Celery child dies. Source and result transfer
+uses private temporary files; bounded result validation runs on both sides.
+Parser libraries load only in the subprocess that needs them. Preview allocation
+is capped before rasterization at 800 by 1,600 pixels and copied directly from
+RGB samples, without an intermediate PNG. Document content never goes off-host
+through these local engines.
 MinerU is used only for scanned PDFs and as a rescue for digital PDFs whose
 local extraction failed; its results are persisted as `full` quality. A
 `text_only` result (local fallback or rescue timeout) is persisted so the

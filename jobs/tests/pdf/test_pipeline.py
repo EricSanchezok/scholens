@@ -293,19 +293,22 @@ def test_repair_artifacts_are_versioned_without_overwriting_canonical_keys(
     assert uploaded == [f"{prefix}/canonical.md"]
 
 
+def _patch_local_engines(monkeypatch, primary, fallback) -> None:
+    async def extract(path, *, engine, **kwargs):
+        kwargs.pop("timeout", None)
+        return (primary if engine == "pymupdf4llm" else fallback)(path, **kwargs)
+
+    monkeypatch.setattr("src.pdf.pipeline.extract_in_process", extract)
+
+
 def test_pymupdf4llm_failure_falls_back_to_markitdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def failing_pymupdf4llm(_path: str, **_: object) -> ParsedDocument:
         raise ParserContentError("pymupdf4llm could not extract text")
 
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_pymupdf4llm",
-        failing_pymupdf4llm,
-    )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_markitdown",
-        lambda _path, **_: _markitdown_document(),
+    _patch_local_engines(
+        monkeypatch, failing_pymupdf4llm, lambda _path, **_: _markitdown_document()
     )
     _patch_s3(monkeypatch, [])
     _patch_metadata(monkeypatch, "Markitdown paper")
@@ -345,13 +348,8 @@ def test_unicode_replacement_triggers_clean_local_fallback(
         parser_version="fallback-test",
         warning_code="markitdown_fallback",
     )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_pymupdf4llm",
-        lambda _path, **_: contaminated,
-    )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_markitdown",
-        lambda _path, **_: clean_fallback,
+    _patch_local_engines(
+        monkeypatch, lambda _path, **_: contaminated, lambda _path, **_: clean_fallback
     )
     _patch_s3(monkeypatch, [])
     _patch_metadata(monkeypatch, "Fallback paper")
@@ -420,14 +418,7 @@ def test_local_failure_rescues_via_mineru_with_archive(
     def failing_local(_path: str, **_: object) -> ParsedDocument:
         raise ParserContentError("local extraction failed")
 
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_pymupdf4llm",
-        failing_local,
-    )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_markitdown",
-        failing_local,
-    )
+    _patch_local_engines(monkeypatch, failing_local, failing_local)
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FakeMinerUClient)
     uploaded: list[str] = []
     _patch_s3(monkeypatch, uploaded)
@@ -457,14 +448,7 @@ def test_mineru_rescue_timeout_uses_text_last_resort(
     def failing_local(_path: str, **_: object) -> ParsedDocument:
         raise ParserContentError("local extraction failed")
 
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_pymupdf4llm",
-        failing_local,
-    )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.extract_markdown_markitdown",
-        failing_local,
-    )
+    _patch_local_engines(monkeypatch, failing_local, failing_local)
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FailingMinerUClient)
     _patch_s3(monkeypatch, [])
     _patch_metadata(monkeypatch, "Last resort paper")
