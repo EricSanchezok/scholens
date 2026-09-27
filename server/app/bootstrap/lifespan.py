@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
+from app.bootstrap.adapters.exhausted_job_recovery import recover_exhausted_fenced_job
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -29,6 +31,9 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 wakeup=application.state.job_dispatcher_wakeup,
                 recover_conversation=fail_interrupted_conversation_response,
                 recover_unclaimed_pdf=recover_unclaimed_pdf_job,
+                recover_fenced=partial(
+                    recover_exhausted_fenced_job, settings=application.state.settings
+                ),
             ),
             name="jobs-outbox-dispatcher",
         )

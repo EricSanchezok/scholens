@@ -22,6 +22,8 @@ from app.modules.jobs.application.callbacks import JobPostCommitAction
 from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
 from app.shared.domain import AppError, FailureKind
 
+from app.modules.jobs.domain.execution import execution_exhausted
+
 LEASE = timedelta(seconds=EXECUTION_LEASE_SECONDS)
 TERMINAL = {"completed", "failed", "cancelled"}
 
@@ -102,6 +104,11 @@ class JobResultRepository:
                     and job.payload.get("execution_replay") == "checkpoint_only"
                 ),
             )
+        if execution_exhausted(
+            attempts=job.attempt_count, started_at=job.started_at, now=now
+        ):
+            # The recovery supervisor owns transactional domain compensation.
+            return JobExecutionClaim(claimed=False)
         execution.claim_generation += 1
         execution.claim_token = claim_token
         job.status = "running"

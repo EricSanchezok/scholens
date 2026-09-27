@@ -1008,3 +1008,13 @@ accepted jobs. Enabling the flag with an existing oversized broker backlog stops
 new publication until it drains under the bound. N-1 publishers remain executable
 with the flag disabled, but the bound requires all active publishers to adopt it.
 See [ADR 0061](../docs/decisions/0061-fair-bounded-job-publication.md).
+
+Fenced execution recovery permits at most four worker generations and two hours
+from the first start. Claim refuses exhausted takeovers; the dispatcher compensates
+expired or already requeued exhausted jobs through their operation handler in its
+transaction, journals the outcome and persists concurrency release. Unavailable
+owners are tolerated only for inbox terminal compensation, never for credential
+or source access, and a mismatched existing Actor remains forbidden. An ownerless
+PDF result cannot apply content; it marks only its unsuperseded processing document
+failed and schedules ordinary reference-aware GC. Existing shared document content
+and unrelated memberships are preserved. Legacy jobs retain their recovery policy.

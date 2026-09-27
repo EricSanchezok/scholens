@@ -223,3 +223,59 @@ def test_bibliography_result_cannot_cross_a_manual_identity_edit(pipeline_databa
     with Session(engine) as db:
         assert db.get(Document, doc_id).doi is None
         assert db.get(DurableJob, job_id).status == "failed"
+
+
+@pytest.mark.parametrize("owner_available", [False, True])
+def test_exhausted_pdf_compensation_commits_terminal_state_and_durable_release(
+    pipeline_database, owner_available
+):
+    from datetime import UTC, datetime, timedelta
+    from app.bootstrap.adapters.exhausted_job_recovery import (
+        recover_exhausted_fenced_job,
+    )
+    from app.bootstrap.settings import AppSettings
+    from app.modules.papers.infrastructure.models import UploadReservation
+    from app.modules.identity.infrastructure.models import UserProfile
+    from app.modules.jobs.infrastructure.models import JobResultEffect
+    from app.modules.jobs.infrastructure.repository import job_repository
+
+    engine, doc_id, _parent, actor, _operation, _source, ids = pipeline_database
+    job_id = ids["document_index"]
+    with Session(engine) as db, db.begin():
+        job = db.get(DurableJob, job_id)
+        job.operation = "pdf_process"
+        JobResultRepository(db).claim(job_id=job_id, claim_token=uuid4())
+        job.attempt_count = 4
+        job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        document = db.get(Document, doc_id)
+        document.processing_status, document.processing_job_id = "processing", job_id
+        db.add(
+            UploadReservation(
+                id=job_id,
+                quota_owner_id=actor.id,
+                display_name="fixture.pdf",
+                source_kind="file",
+            )
+        )
+        if not owner_available:
+            db.execute(delete(UserProfile).where(UserProfile.user_id == actor.id))
+        db.flush()
+        recovered = job_repository.recover_expired_leases(
+            db,
+            limit=10,
+            recover_fenced=lambda session, source: recover_exhausted_fenced_job(
+                session, source, settings=AppSettings(_env_file=None)
+            ),
+        )
+        assert recovered == 1
+    with Session(engine) as db:
+        assert db.get(DurableJob, job_id).status == "failed"
+        assert db.get(Document, doc_id).processing_status == "failed"
+        effects = db.scalars(
+            select(JobResultEffect).where(
+                JobResultEffect.job_id == job_id, JobResultEffect.claim_generation == 1
+            )
+        ).all()
+        assert any(
+            effect.payload["kind"] == "release_concurrency" for effect in effects
+        )

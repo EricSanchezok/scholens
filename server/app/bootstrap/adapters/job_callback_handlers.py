@@ -89,6 +89,14 @@ class PdfProcessCompletion(JobCompletionHandler):
         job_id: UUID,
         error_code: str,
     ) -> JobHandlerResult:
+        if actor is None:
+            from app.bootstrap.adapters.orphaned_document_jobs import (
+                fail_orphaned_document_job,
+            )
+
+            return fail_orphaned_document_job(
+                self._db, job_id=job_id, operation=operation, error_code=error_code
+            )
         return self.complete(
             actor=actor,
             operation=operation,

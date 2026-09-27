@@ -495,3 +495,10 @@ a 25-second deadline, then rechecks the generation. The worker persists the smal
 resolution before delivery. Server rechecks source, access and citation identity
 before filling gaps. Enrichment can enqueue a fresh identity-specific bibliography
 job after improving metadata. Zotero imports skip automatic paid enrichment.
+
+Fenced PDF parsing also records external-effect intent before entering MinerU.
+If a completed result cannot be recovered after a worker loss, an earlier MinerU
+submission is treated as an unknown provider outcome rather than submitted again.
+The legacy parser checkpoint protocol remains accepted for N-1 deliveries. The
+Server bounds fenced recovery by worker generations and elapsed execution age;
+exhaustion is terminal and transactionally releases its concurrency reservation.

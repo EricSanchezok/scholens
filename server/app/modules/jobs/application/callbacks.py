@@ -257,6 +257,18 @@ class JobCallbacks:
         before = self._lifecycle.status(job_id=job_id)
         if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return JobCompletionResult(value={"accepted": False})
+        if actor is None and job_operation in {
+            JobOperation.PDF_PROCESS,
+            JobOperation.DOCUMENT_INDEX,
+            JobOperation.DOCUMENT_ENRICH,
+            JobOperation.DOCUMENT_BIBLIOGRAPHY,
+        }:
+            return self.fail_result(
+                actor=None,
+                operation=operation,
+                job_id=job_id,
+                error_code="job_owner_unavailable",
+            )
         handler_result = registration.handler.complete(
             actor=actor,
             operation=operation,

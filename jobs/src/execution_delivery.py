@@ -44,6 +44,26 @@ def execution_scope_payload() -> dict[str, int]:
     return {} if generation is None else {"claim_generation": generation}
 
 
+_execution_runtime: ContextVar["FencedExecution | None"] = ContextVar(
+    "fenced_execution_runtime", default=None
+)
+
+
+@contextmanager
+def provider_effect_scope(execution: "FencedExecution") -> Iterator[None]:
+    token = _execution_runtime.set(execution)
+    try:
+        yield
+    finally:
+        _execution_runtime.reset(token)
+
+
+def begin_scoped_external_effect() -> None:
+    runtime = _execution_runtime.get()
+    if runtime is not None:
+        runtime.begin_external_effect()
+
+
 class ResultStorage(Protocol):
     def object_exists(self, object_key: str) -> bool: ...
     def download_bounded_bytes(self, object_key: str, *, max_bytes: int) -> bytes: ...
@@ -344,7 +364,11 @@ def run_fenced_task(
     try:
         if not runtime.claim():
             return {"task_id": runtime.job_id, "status": "duplicate"}
-        with runtime, execution_scope(runtime.generation):
+        with (
+            runtime,
+            execution_scope(runtime.generation),
+            provider_effect_scope(runtime),
+        ):
             if runtime.resume_result():
                 return {"task_id": runtime.job_id, "status": "replayed"}
             if runtime.recover_only or runtime.external_effect_started():

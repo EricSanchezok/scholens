@@ -199,3 +199,22 @@ def test_stage_read_dependency_failure_retains_transport_retry():
     with pytest.raises(DeliveryUnavailable):
         runtime.read_stage_input("/bibliography")
     runtime.check_cancelled()
+
+
+def test_parser_provider_intent_follows_scope_into_async_credential_threads():
+    import asyncio
+    from src.execution_delivery import (
+        provider_effect_scope,
+        begin_scoped_external_effect,
+    )
+
+    runtime = MagicMock()
+
+    async def work():
+        with provider_effect_scope(runtime):
+            await asyncio.to_thread(begin_scoped_external_effect)
+
+    asyncio.run(work())
+    runtime.begin_external_effect.assert_called_once()
+    begin_scoped_external_effect()
+    runtime.begin_external_effect.assert_called_once()

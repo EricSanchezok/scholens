@@ -329,3 +329,36 @@ async def test_bibliography_has_no_open_transaction_during_provider_and_rechecks
             assert result.patch.doi == "10.1000/test"
     assert fences.require_transport.call_count == 2
     fences.require_transport.assert_called_with(job_id=facts.job_id, generation=3)
+
+
+def test_unavailable_owner_is_tolerated_only_by_inbox_compensation():
+    processor, _ = _processor(
+        facts=_facts(JobOperation.PDF_PROCESS), completion_error=AssertionError()
+    )
+    # Exercise the real resume implementation, rather than the fixture override.
+    del processor._resume
+    processor._executor.query.side_effect = AppError(
+        code="identity_profile_incomplete", message="Gone", kind=FailureKind.NOT_FOUND
+    )
+    facts = _facts(JobOperation.PDF_PROCESS)
+    with pytest.raises(AppError, match="identity_profile_incomplete"):
+        processor._resume(
+            facts=facts,
+            verified=SimpleNamespace(request_id=uuid4(), delivery_ref="a" * 64),
+        )
+    assert (
+        processor._resume(
+            facts=facts,
+            verified=SimpleNamespace(request_id=uuid4(), delivery_ref="a" * 64),
+            allow_unavailable_owner=True,
+        ).actor
+        is None
+    )
+    processor._executor.query.side_effect = None
+    processor._executor.query.return_value = SimpleNamespace(id=99)
+    with pytest.raises(AppError, match="job_owner_mismatch"):
+        processor._resume(
+            facts=facts,
+            verified=SimpleNamespace(request_id=uuid4(), delivery_ref="a" * 64),
+            allow_unavailable_owner=True,
+        )

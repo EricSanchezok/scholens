@@ -433,3 +433,22 @@ def test_cleanup_waits_for_terminal_retention_and_pending_effects(database):
         cleanup = repo.reserve(now=now)
         assert isinstance(cleanup.action, DeleteJobResultArtifacts)
         repo.finish(cleanup)
+
+
+@pytest.mark.parametrize("exhaustion", ["attempts", "age"])
+def test_fenced_takeover_cannot_exceed_execution_recovery_budget(database, exhaustion):
+    engine, job_id = database
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        job = db.get(DurableJob, job_id)
+        job.status = "running"
+        job.attempt_count = 4 if exhaustion == "attempts" else 1
+        job.started_at = now - timedelta(hours=3) if exhaustion == "age" else now
+        job.lease_expires_at = now - timedelta(seconds=1)
+        before = db.get(JobExecution, job_id).claim_generation
+        assert (
+            not JobResultRepository(db)
+            .claim(job_id=job_id, claim_token=uuid4())
+            .claimed
+        )
+        assert db.get(JobExecution, job_id).claim_generation == before

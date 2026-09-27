@@ -25,6 +25,11 @@ from app.modules.jobs.domain import (
     can_fail_job,
     can_recover_job,
 )
+from app.modules.jobs.domain.execution import (
+    execution_exhausted,
+    MAX_EXECUTION_ATTEMPTS,
+    MAX_EXECUTION_RECOVERY_AGE,
+)
 from app.modules.jobs.infrastructure.models import JobExecution
 from app.modules.jobs.infrastructure.result_effects import JobEffectRepository
 from app.modules.jobs.application.callbacks import DeleteJobResultArtifacts
@@ -569,6 +574,7 @@ class JobRepository:
         *,
         limit: int,
         recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+        recover_fenced: Callable[[Session, DurableJob], None] | None = None,
     ) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)
@@ -576,9 +582,23 @@ class JobRepository:
             db.scalars(
                 select(DurableJob)
                 .where(
-                    DurableJob.status == JobStatus.RUNNING.value,
-                    DurableJob.lease_expires_at.is_not(None),
-                    DurableJob.lease_expires_at < now,
+                    or_(
+                        and_(
+                            DurableJob.status == JobStatus.RUNNING.value,
+                            DurableJob.lease_expires_at.is_not(None),
+                            DurableJob.lease_expires_at < now,
+                        ),
+                        and_(
+                            DurableJob.status == JobStatus.PENDING.value,
+                            DurableJob.payload["delivery_protocol"].as_string()
+                            == "manifest-v1",
+                            or_(
+                                DurableJob.attempt_count >= MAX_EXECUTION_ATTEMPTS,
+                                DurableJob.started_at
+                                <= now - MAX_EXECUTION_RECOVERY_AGE,
+                            ),
+                        ),
+                    ),
                 )
                 .order_by(DurableJob.lease_expires_at, DurableJob.id)
                 .limit(limit)
@@ -586,7 +606,7 @@ class JobRepository:
             ).all()
         )
         for job in expired_jobs:
-            if not can_recover_job(
+            if job.status != JobStatus.PENDING.value and not can_recover_job(
                 JobStatus(job.status),
                 lease_expires_at=job.lease_expires_at,
                 now=now,
@@ -597,6 +617,15 @@ class JobRepository:
                     raise RuntimeError("conversation_recovery_hook_missing")
                 cls._fail_interrupted_conversation_job(job=job, now=now)
                 recover_conversation(db, job)
+                continue
+            if job.payload.get(
+                "delivery_protocol"
+            ) == "manifest-v1" and execution_exhausted(
+                attempts=job.attempt_count, started_at=job.started_at, now=now
+            ):
+                if recover_fenced is None:
+                    raise RuntimeError("fenced_execution_recovery_hook_missing")
+                recover_fenced(db, job)
                 continue
             job.status = JobStatus.PENDING.value
             job.lease_expires_at = None

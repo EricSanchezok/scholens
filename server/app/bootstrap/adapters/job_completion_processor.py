@@ -114,6 +114,7 @@ class JobCompletionProcessor:
                 request_id=reservation.request_id,
                 delivery_ref=reservation.delivery_ref,
             ),
+            allow_unavailable_owner=True,
         )
         context = (
             llm_usage_context(
@@ -150,6 +151,7 @@ class JobCompletionProcessor:
             verified=VerifiedJobCallback(
                 request_id=reservation.request_id, delivery_ref=reservation.delivery_ref
             ),
+            allow_unavailable_owner=True,
         )
         return self._executor.command(
             lambda capabilities: capabilities.job_results.retry(
@@ -450,18 +452,25 @@ class JobCompletionProcessor:
         *,
         facts: JobCausalityFacts,
         verified: VerifiedJobCallback,
+        allow_unavailable_owner: bool = False,
     ) -> _ResumedJob:
         requested_by_id = facts.requested_by_id
-        actor = (
-            self._executor.query(
-                lambda capabilities: capabilities.identity.resolve_actor_by_user_id(
-                    requested_by_id
+        try:
+            actor = (
+                self._executor.query(
+                    lambda capabilities: capabilities.identity.resolve_actor_by_user_id(
+                        requested_by_id
+                    )
                 )
+                if requested_by_id is not None
+                else None
             )
-            if requested_by_id is not None
-            else None
-        )
-        require_job_causality_owner(facts=facts, actor=actor)
+        except AppError as exc:
+            if not allow_unavailable_owner or exc.code != "identity_profile_incomplete":
+                raise
+            actor = None
+        if actor is not None or not allow_unavailable_owner:
+            require_job_causality_owner(facts=facts, actor=actor)
         operation = self._operation_factory.resume(
             correlation_id=facts.correlation_id,
             causation_id=facts.origin_operation_id,

@@ -16,6 +16,9 @@ from app.modules.operation_journal.domain import (
 SAFE_PDF_FAILURE_CODES = frozenset(
     {
         "pdf_content_insufficient",
+        "job_execution_retry_exhausted",
+        "provider_outcome_unknown",
+        "job_owner_unavailable",
         "pdf_processing_timeout",
         "mineru_credential_required",
         "mineru_credential_invalid",
