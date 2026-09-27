@@ -84,6 +84,17 @@ class JobProgressRequest(BaseModel):
     ]
 
 
+class ClaimExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_token: UUID
+
+
+class ExecutionProgressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_generation: int = Field(ge=1)
+    progress: JobProgressRequest | None = None
+
+
 class JobCallbackIdentity(BaseModel):
     task_id: UUID
 

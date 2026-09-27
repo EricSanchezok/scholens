@@ -90,7 +90,8 @@ class PdfPostprocessWorkflow:
                 kind=FailureKind.UNPROCESSABLE,
             ) from exc
 
-        snapshot = self._reader.read(
+        snapshot = await asyncio.to_thread(
+            self._reader.read,
             actor=actor,
             job_id=job_id,
             callback_task_id=callback.task_id,
@@ -106,7 +107,9 @@ class PdfPostprocessWorkflow:
             )
         )
         passage_embeddings = (
-            self._load_passage_embeddings(callback) if not snapshot.terminal else ()
+            await asyncio.to_thread(self._load_passage_embeddings, callback)
+            if not snapshot.terminal
+            else ()
         )
         resolution = PdfPostprocessResolution(
             doi=metadata_resolution.doi,
@@ -129,18 +132,19 @@ class PdfPostprocessWorkflow:
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
-        result = await self._executor.command_async(
+        result: JobCompletionResult = await asyncio.to_thread(
+            self._executor.command,
             lambda capabilities: capabilities.job_callbacks.complete_pdf_postprocess(
                 actor=actor,
                 operation=finalize_operation,
                 job_id=job_id,
                 payload=payload,
                 resolution=resolution,
-            )
+            ),
         )
         if callback.passage_embedding_artifact is not None:
-            if not s3_service.delete_file(
-                callback.passage_embedding_artifact.storage_key
+            if not await asyncio.to_thread(
+                s3_service.delete_file, callback.passage_embedding_artifact.storage_key
             ):
                 logger.warning(
                     "paper.pdf_postprocess.passage_artifact_cleanup_failed",

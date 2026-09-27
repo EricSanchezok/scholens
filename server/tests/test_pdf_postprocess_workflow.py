@@ -84,7 +84,7 @@ class _Callbacks:
         self.operation: OperationContext | None = None
         self.resolution: object | None = None
 
-    async def complete_pdf_postprocess(self, **kwargs: object) -> JobCompletionResult:
+    def complete_pdf_postprocess(self, **kwargs: object) -> JobCompletionResult:
         self._events.append("finalize")
         self.operation = kwargs["operation"]  # type: ignore[assignment]
         self.resolution = kwargs["resolution"]
@@ -100,8 +100,8 @@ class _Executor:
     def __init__(self, capabilities: _Capabilities) -> None:
         self._capabilities = capabilities
 
-    async def command_async(self, operation: object) -> object:
-        return await operation(self._capabilities)  # type: ignore[operator]
+    def command(self, operation: object) -> object:
+        return operation(self._capabilities)  # type: ignore[operator]
 
 
 def _actor() -> Actor:

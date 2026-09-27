@@ -780,7 +780,7 @@ def _failed_pdf_result(
     )
 
 
-async def handle_paper_processing_webhook(
+def handle_paper_processing_webhook(
     job_id: str,
     webhook_data: PdfProcessingWebhookData,
     db: Session,
@@ -1012,20 +1012,6 @@ async def handle_paper_processing_webhook(
                     )
 
                 metadata = result.metadata
-                if metadata is None or not metadata.title:
-                    logger.error(
-                        "document.pdf_callback.metadata_missing",
-                        extra={"job_id": normalized_job_id},
-                    )
-                    return _failed_pdf_result(
-                        db=db,
-                        job_id=normalized_job_id,
-                        actor=actor,
-                        operation=operation,
-                        reason="Missing metadata",
-                        status=("webhook processed - failed due to missing metadata"),
-                        post_commit=post_commit,
-                    )
                 if not result.raw_content:
                     logger.error(
                         "document.pdf_callback.content_missing",
@@ -1074,23 +1060,28 @@ async def handle_paper_processing_webhook(
                     DocumentProcessingStatus(existing_paper.processing_status)
                 ):
                     raise RuntimeError("document_completion_transition_rejected")
-                paper = document_repository.update_canonical(
-                    db,
-                    update=_document_update_from_pdf_result(
-                        result,
-                        title=metadata.title,
-                        authors=metadata.authors,
-                        abstract=metadata.abstract,
-                        summary=metadata.summary,
-                        summary_citations=metadata.summary_citations,
-                        institutions=metadata.institutions,
-                        keywords=metadata.keywords,
-                        publish_date=(
+                # Basic readability has no AI/provider prerequisite. Omitted
+                # metadata never clears existing canonical/user-owned fields.
+                metadata_fields: dict[str, object] = {}
+                if metadata is not None:
+                    metadata_fields = {
+                        "authors": metadata.authors,
+                        "abstract": metadata.abstract,
+                        "summary": metadata.summary,
+                        "summary_citations": metadata.summary_citations,
+                        "institutions": metadata.institutions,
+                        "keywords": metadata.keywords,
+                        "publish_date": (
                             parse_publication_date(metadata.publish_date)
                             if metadata.publish_date
                             else None
                         ),
-                    ),
+                    }
+                    if metadata.title:
+                        metadata_fields["title"] = metadata.title
+                paper = document_repository.update_canonical(
+                    db,
+                    update=_document_update_from_pdf_result(result, **metadata_fields),
                     document=existing_paper,
                     user=actor,
                     refresh_result=False,
@@ -1098,7 +1089,7 @@ async def handle_paper_processing_webhook(
 
                 created_annotation_thread_ids: tuple[uuid.UUID, ...] = ()
                 created_comment_ids: tuple[uuid.UUID, ...] = ()
-                if metadata.highlights:
+                if metadata is not None and metadata.highlights:
                     with optional_savepoint(
                         db,
                         operation="create_ai_annotations",
@@ -1122,10 +1113,10 @@ async def handle_paper_processing_webhook(
                     result=result,
                 )
                 semantic_text = semantic_document_text(
-                    title=metadata.title,
-                    keywords=metadata.keywords,
-                    summary=metadata.summary,
-                    abstract=metadata.abstract,
+                    title=paper.title,
+                    keywords=metadata.keywords if metadata else None,
+                    summary=metadata.summary if metadata else None,
+                    abstract=metadata.abstract if metadata else None,
                 )
                 postprocess_job = _enqueue_pdf_postprocess(
                     db,
@@ -1187,13 +1178,13 @@ async def handle_paper_processing_webhook(
                             actor_id=actor.id,
                             event="extracted_metadata",
                             properties=(
-                                ("has_title", bool(metadata.title)),
-                                ("has_authors", bool(metadata.authors)),
-                                ("has_abstract", bool(metadata.abstract)),
-                                ("has_summary", bool(metadata.summary)),
+                                ("has_title", bool(metadata and metadata.title)),
+                                ("has_authors", bool(metadata and metadata.authors)),
+                                ("has_abstract", bool(metadata and metadata.abstract)),
+                                ("has_summary", bool(metadata and metadata.summary)),
                                 (
                                     "has_ai_highlights",
-                                    bool(metadata.highlights),
+                                    bool(metadata and metadata.highlights),
                                 ),
                             ),
                         ),
@@ -1201,7 +1192,7 @@ async def handle_paper_processing_webhook(
                             actor_id=actor.id,
                             event="paper_upload",
                             properties=(
-                                ("has_metadata", True),
+                                ("has_metadata", metadata is not None),
                                 (
                                     "duration",
                                     (end_time - upload_job.created_at).total_seconds(),

@@ -33,6 +33,12 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
             name="jobs-outbox-dispatcher",
         )
         invitation_delivery = None
+        result_delivery = None
+        consumer = getattr(application.state, "job_result_consumer", None)
+        if consumer is not None:
+            result_delivery = asyncio.create_task(
+                consumer.run(stop_dispatcher), name="job-result-consumer"
+            )
         supervisor = application.state.project_invitation_delivery_supervisor
         if supervisor is not None:
             invitation_delivery = asyncio.create_task(
@@ -44,6 +50,8 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
         finally:
             stop_dispatcher.set()
             await dispatcher
+            if result_delivery is not None:
+                await result_delivery
             if invitation_delivery is not None:
                 await invitation_delivery
             user_openalex = getattr(application.state, "user_openalex", None)

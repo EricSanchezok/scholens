@@ -124,3 +124,5 @@ How will we know the decision works, and when should it be revisited?
 
 - [ADR 0052: User-owned AI and capacity-only plans](./0052-user-owned-ai-and-capacity-plans.md)
 - [ADR 0056: Supervised local PDF parsers](./0056-supervised-local-pdf-parsers.md)
+
+- [ADR 0057: Fenced durable result inbox](./0057-fenced-durable-result-inbox.md)

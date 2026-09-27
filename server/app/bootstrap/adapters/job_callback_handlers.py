@@ -76,7 +76,7 @@ class PdfProcessCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -86,7 +86,7 @@ class PdfProcessCompletion(JobCompletionHandler):
     ) -> JobHandlerResult:
         if actor is None:
             raise RuntimeError("pdf_process_job_owner_missing")
-        return await document_job_callbacks.handle_paper_processing_webhook(
+        return document_job_callbacks.handle_paper_processing_webhook(
             str(job_id),
             cast(PdfProcessingWebhookData, callback),
             self._db,
@@ -99,7 +99,7 @@ class PdfPostprocessCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -109,7 +109,7 @@ class PdfPostprocessCompletion(JobCompletionHandler):
     ) -> JobHandlerResult:
         raise RuntimeError("pdf_postprocess_requires_external_resolution")
 
-    async def complete_resolved(
+    def complete_resolved(
         self,
         *,
         actor: Actor,
@@ -132,7 +132,7 @@ class DocumentGcCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -152,7 +152,7 @@ class StorageDeleteCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -169,7 +169,7 @@ class AudioCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -177,7 +177,7 @@ class AudioCompletion(JobCompletionHandler):
         job_id: UUID,
         callback: BaseModel,
     ) -> JobHandlerResult:
-        return await research_callbacks.complete_audio_job(
+        return research_callbacks.complete_audio_job(
             job_id, cast(AudioOverviewWebhookData, callback), self._db
         )
 
@@ -186,7 +186,7 @@ class DataTableCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -194,7 +194,7 @@ class DataTableCompletion(JobCompletionHandler):
         job_id: UUID,
         callback: BaseModel,
     ) -> JobHandlerResult:
-        return await research_callbacks.complete_data_table_job(
+        return research_callbacks.complete_data_table_job(
             job_id, cast(DataTableWebhookData, callback), self._db
         )
 
@@ -203,7 +203,7 @@ class DocumentReflowCompletion(JobCompletionHandler):
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,

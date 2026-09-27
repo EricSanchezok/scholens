@@ -274,6 +274,23 @@ class S3Service:
             logger.error("s3.object.download_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_download_failed") from exc
 
+    def download_bounded_bytes(self, object_key: str, *, max_bytes: int) -> bytes:
+        """Bound the GET stream itself, even if an object changes after HEAD."""
+        if max_bytes < 1:
+            raise ValueError("Object byte bound must be positive")
+        response = self.s3_client.get_object(
+            Bucket=self._require_bucket(),
+            Key=object_key,
+        )
+        body = response["Body"]
+        try:
+            data = body.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise ValueError("Object exceeds the accepted byte bound")
+            return data
+        finally:
+            body.close()
+
     def object_size_bytes(self, object_key: str) -> int:
         try:
             response = self.s3_client.head_object(

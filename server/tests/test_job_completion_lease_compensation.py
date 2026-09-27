@@ -35,6 +35,7 @@ def _processor(
     failure_claimed: bool = True,
 ) -> tuple[JobCompletionProcessor, MagicMock]:
     callbacks = MagicMock()
+    callbacks.complete.side_effect = completion_error
     callbacks.fail.return_value = JobClaimResponse(claimed=failure_claimed)
     executor = MagicMock()
     executor.command_async = AsyncMock(side_effect=completion_error)
@@ -54,6 +55,28 @@ def _processor(
         return_value=SimpleNamespace(actor=MagicMock(), operation=MagicMock())
     )
     return processor, callbacks
+
+
+@pytest.mark.asyncio
+async def test_completion_transaction_does_not_block_the_request_event_loop() -> None:
+    import threading
+    from app.modules.jobs.application.callbacks import JobCompletionResult
+
+    request_thread = threading.get_ident()
+    facts = _facts(JobOperation.PDF_PROCESS)
+    processor, callbacks = _processor(
+        facts=facts, completion_error=AssertionError("Must use a worker transaction")
+    )
+
+    def complete(**_kwargs):
+        assert threading.get_ident() != request_thread
+        return JobCompletionResult(value={"accepted": True})
+
+    callbacks.complete.side_effect = complete
+    result = await processor.complete(
+        job_id=facts.job_id, payload={}, verified=MagicMock()
+    )
+    assert result == {"accepted": True}
 
 
 def test_lease_categories_for_operation() -> None:

@@ -3,6 +3,8 @@
 `scholens_job_contracts` owns the narrow, service-neutral contracts that Server and
 Jobs must interpret identically:
 
+- the metadata-only execution claim, result manifest and receipt in `results`,
+  including the 180-second lease and 30-second heartbeat constants; and
 - the closed set of background queue names used by outbox dispatch, Celery routing,
   and predefined SQS queues; and
 - the Zotero completion handoff timing margins: heartbeat, Server processing bound,

@@ -56,7 +56,7 @@ class JobCredentialScope:
 
 
 class JobCompletionHandler(Protocol):
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -82,7 +82,7 @@ class PdfPostprocessResolution:
 
 @runtime_checkable
 class PdfPostprocessCompletionHandler(Protocol):
-    async def complete_resolved(
+    def complete_resolved(
         self,
         *,
         actor: Actor,
@@ -220,7 +220,7 @@ class JobCallbacks:
             )
         return scope
 
-    async def complete(
+    def complete(
         self,
         *,
         actor: Actor | None,
@@ -234,7 +234,7 @@ class JobCallbacks:
         before = self._lifecycle.status(job_id=job_id)
         if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return JobCompletionResult(value={"accepted": False})
-        handler_result = await registration.handler.complete(
+        handler_result = registration.handler.complete(
             actor=actor,
             operation=operation,
             job_id=job_id,
@@ -254,7 +254,7 @@ class JobCallbacks:
             handler_result=handler_result,
         )
 
-    async def complete_pdf_postprocess(
+    def complete_pdf_postprocess(
         self,
         *,
         actor: Actor,
@@ -278,7 +278,7 @@ class JobCallbacks:
         before = self._lifecycle.status(job_id=job_id)
         if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return JobCompletionResult(value={"accepted": False})
-        handler_result = await handler.complete_resolved(
+        handler_result = handler.complete_resolved(
             actor=actor,
             operation=operation,
             job_id=job_id,

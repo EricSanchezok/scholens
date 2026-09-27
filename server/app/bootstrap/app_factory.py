@@ -338,6 +338,16 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         operation_context_factory,
         user_openalex,
     )
+    application.state.job_result_consumer = None
+    if runtime_settings.job_result_inbox_enabled:
+        from app.bootstrap.adapters.job_result_consumer import JobResultConsumer
+        from app.helpers.s3 import s3_service
+
+        application.state.job_result_consumer = JobResultConsumer(
+            sessions=SessionLocal,
+            processor=application.state.job_completion_processor,
+            reader=s3_service,
+        )
     application.add_middleware(UnhandledErrorMiddleware)
     application.add_middleware(
         CORSMiddleware,

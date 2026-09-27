@@ -62,6 +62,7 @@ from app.modules.identity.application.identity import Identity
 from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
 from app.modules.jobs.application.callbacks import JobCallbacks
+from app.modules.jobs.application.results import JobResults
 from app.modules.jobs.application.jobs import JobCommandPort, Jobs
 from app.modules.jobs.application.contracts import (
     JobIntegrationCredentialResponse,
@@ -316,6 +317,12 @@ class ApplicationCapabilities:
             journal=self._journal,
             integrations=self.integrations,
         )
+
+    @cached_property
+    def job_results(self) -> JobResults:
+        from app.modules.jobs.infrastructure.result_inbox import JobResultRepository
+
+        return JobResults(JobResultRepository(self._session), self.job_callbacks)
 
     def job_deepseek_credential(
         self, *, job_id: UUID

@@ -176,6 +176,27 @@ parse only the bounded bytes cached by authentication after signature
 verification. A lost-control worker therefore cannot allocate or persist an
 unbounded result before the transport limit runs.
 
+The additive result-inbox protocol uses signed `/jobs/{id}/execution/claim`,
+`/execution/progress`, and `/results` internal routes. A claim token makes a lost
+claim response retryable; every takeover advances a generation. Result receipts
+contain only an immutable `jobs/results/{job}/{generation}/{sha256}.json` key,
+SHA-256 and bounded byte count. Acceptance transfers ownership to PostgreSQL
+without reading S3 or doing business work in the request. A single consumer per
+Server process downloads one bounded artifact outside a database session, then
+commits the execution fence, business effects and inbox acknowledgement together.
+A restarted consumer takes over an expired 180-second apply lease with a fresh
+nonce. Duplicated and superseded applications cannot commit effects twice.
+
+This is a consumer-first expansion: `JOB_RESULT_INBOX_ENABLED` defaults to false,
+and existing dispatch producers retain their accepted callback protocol. Enable
+only after the matching staged producers, cleanup and failure recovery are
+verified. The jobs module owns the old transport until all previously accepted
+jobs drain and the application rollback window closes. Existing jobs without an
+execution row continue through the legacy callback path. Migration
+`2026_09_27_1000` adds independent tables; it does not rewrite existing job rows.
+Synchronous callback database transactions and storage work run off the ASGI
+event loop. Callback continuation restores the job owner's AI usage context.
+
 Transactional generated-object cleanup uses a second shared Jobs contract.
 Only ASCII-safe keys under `documents/` or `research/audio/` are eligible, each
 key is at most 1,024 UTF-8 bytes, and a durable deletion batch is capped at both
@@ -722,8 +743,10 @@ starve later papers. Failures update attempt time but never successful-sync
 time; confirmed missing remote items or attachments disable future automatic
 annotation polling for that link while retaining the local paper.
 
-The PDF completion callback persists extracted metadata, generated summary,
-and summary citations on the canonical `Document`. Ingestion never creates a
+The PDF completion callback persists parsed content and any supplied metadata,
+generated summary, and summary citations on the canonical `Document`. A valid
+parsed result with no AI metadata completes basic readability and preserves
+existing metadata; missing provider credentials do not invalidate usable text. Ingestion never creates a
 Conversation, Turn, or Response. A paper-scoped conversation begins only from
 an explicit user action and reads the existing Document-owned context.
 

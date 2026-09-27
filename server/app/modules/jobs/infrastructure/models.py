@@ -194,6 +194,63 @@ class JobDispatch(Base):
     )
 
 
+class JobExecution(Base):
+    """Execution fence for staged jobs; absent for accepted legacy deliveries."""
+
+    __tablename__ = "job_executions"
+    __table_args__ = (
+        CheckConstraint("claim_generation >= 0", name="ck_job_execution_generation"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+
+
+class JobResultInbox(Base):
+    """Durable acceptance, separate from the bounded application lease."""
+
+    __tablename__ = "job_result_inbox"
+    __table_args__ = (
+        CheckConstraint("claim_generation > 0", name="ck_job_result_generation"),
+        CheckConstraint(
+            "status IN ('pending', 'applying', 'applied', 'rejected')",
+            name="ck_job_result_status",
+        ),
+        CheckConstraint(
+            "(apply_claim_id IS NULL) = (apply_lease_expires_at IS NULL)",
+            name="ck_job_result_lease_pair",
+        ),
+        Index("ix_job_result_pending", "status", "available_at"),
+    )
+
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True
+    )
+    claim_generation: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    manifest: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    delivery_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    apply_claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    apply_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
 class JobsWebhookNonce(Base):
     """Consumed Jobs request nonce; the primary key prevents replay."""
 

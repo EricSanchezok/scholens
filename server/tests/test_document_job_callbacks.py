@@ -865,10 +865,12 @@ def test_unicode_repair_invalidates_completed_or_inflight_reflow(
 
 
 @pytest.mark.parametrize("include_page_count", [False, True])
+@pytest.mark.parametrize("include_metadata", [False, True])
 @pytest.mark.asyncio
 async def test_pdf_completion_persists_summary_without_creating_conversation(
     monkeypatch: pytest.MonkeyPatch,
     include_page_count: bool,
+    include_metadata: bool,
 ) -> None:
     job_id = uuid4()
     document_id = uuid4()
@@ -945,7 +947,9 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
             title="Canonical paper title",
             summary="The paper's canonical summary.[^1]",
             summary_citations=[citation],
-        ),
+        )
+        if include_metadata
+        else None,
         parser_backend="pymupdf4llm",
         parser_quality="full",
         parser_version="test-parser",
@@ -962,7 +966,7 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
     )
     db = MagicMock()
 
-    handled = await document_job_callbacks.handle_paper_processing_webhook(
+    handled = document_job_callbacks.handle_paper_processing_webhook(
         str(job_id),
         callback,
         db,
@@ -971,8 +975,14 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
     )
 
     update = update_canonical.call_args.kwargs["update"]
-    assert update.summary == result.metadata.summary
-    assert update.summary_citations == [citation]
+    if include_metadata:
+        assert update.summary == result.metadata.summary
+        assert update.summary_citations == [citation]
+    else:
+        assert "title" not in update.model_fields_set
+        assert "authors" not in update.model_fields_set
+        assert "summary" not in update.model_fields_set
+        assert update.raw_content == result.raw_content
     if include_page_count:
         assert update.page_count == 3
         assert "page_count" in update.model_fields_set
@@ -1080,7 +1090,7 @@ async def test_terminal_pdf_callback_does_not_rewrite_document(
     )
     db = MagicMock()
 
-    handled = await document_job_callbacks.handle_paper_processing_webhook(
+    handled = document_job_callbacks.handle_paper_processing_webhook(
         str(job_id),
         PdfProcessingWebhookData(
             task_id=str(job_id),
@@ -1152,7 +1162,7 @@ async def test_terminal_repair_callback_cleans_late_worker_artifacts(
     )
     db = MagicMock()
 
-    handled = await document_job_callbacks.handle_paper_processing_webhook(
+    handled = document_job_callbacks.handle_paper_processing_webhook(
         str(job_id),
         PdfProcessingWebhookData(
             task_id=str(job_id),
@@ -1250,7 +1260,7 @@ async def test_pdf_completion_rejects_mismatched_object_key(
         credential=None,
     )
 
-    handled = await document_job_callbacks.handle_paper_processing_webhook(
+    handled = document_job_callbacks.handle_paper_processing_webhook(
         str(job_id),
         PdfProcessingWebhookData(
             task_id=str(job_id),

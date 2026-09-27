@@ -123,7 +123,7 @@ async def test_audio_callback_invalid_payload_fails_job_and_releases_both_leases
             fail_job,
         ),
     ):
-        result = await complete_audio_job(job_id, webhook, MagicMock())
+        result = complete_audio_job(job_id, webhook, MagicMock())
 
     assert result.value.claimed is True
     assert fail_job.call_args.kwargs["error_code"] == "audio_callback_payload_invalid"
@@ -155,7 +155,7 @@ async def test_audio_callback_missing_result_fails_job_and_releases_both_leases(
             fail_job,
         ),
     ):
-        result = await complete_audio_job(job_id, webhook, MagicMock())
+        result = complete_audio_job(job_id, webhook, MagicMock())
 
     assert result.value.claimed is True
     assert fail_job.call_args.kwargs["error_code"] == "audio_callback_result_missing"
@@ -187,7 +187,7 @@ async def test_data_table_callback_invalid_payload_fails_job_and_releases_lease(
             fail_job,
         ),
     ):
-        result = await complete_data_table_job(job_id, webhook, MagicMock())
+        result = complete_data_table_job(job_id, webhook, MagicMock())
 
     assert result.value.claimed is True
     assert (
@@ -221,7 +221,7 @@ async def test_data_table_callback_missing_result_fails_job_and_releases_lease()
             fail_job,
         ),
     ):
-        result = await complete_data_table_job(job_id, webhook, MagicMock())
+        result = complete_data_table_job(job_id, webhook, MagicMock())
 
     assert result.value.claimed is True
     assert (

@@ -1002,8 +1002,9 @@ membership is an independent idempotent association. `add_to_library=false`
 compensation removes only the membership(s) the job actually created, and a
 retry inherits the original job's `add_to_library` intent.
 
-PDF completion persists extracted metadata, generated summary, and summary
-citations on the canonical `Document`. It rejects a successful worker result
+PDF completion persists parsed content and optional extracted metadata, generated
+summary, and summary citations on the canonical `Document`. Missing AI metadata
+does not reject usable parsed content or clear existing metadata. It rejects a successful worker result
 whose `s3_object_key` does not match the Document's canonical source key,
 failing the job with `job_result_key_mismatch` instead of persisting content.
 Jobs parser fallback and Server repair adoption share one service-neutral PDF
