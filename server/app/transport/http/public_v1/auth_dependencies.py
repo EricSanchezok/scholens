@@ -21,6 +21,7 @@ from app.shared.application import (
 )
 from sanchezcloud_identity.models.user import UserRecord
 from fastapi import Depends, HTTPException, Request, status
+from starlette.concurrency import run_in_threadpool
 from app.transport.http.observability import (
     attach_operation_context,
     ensure_request_id,
@@ -42,7 +43,7 @@ async def get_current_user(
     if identity_user is None:
         return None
 
-    return resolve_actor_from_identity_user(
+    return await resolve_actor_from_identity_user(
         request=request,
         identity_user=identity_user,
         executor=executor,
@@ -50,7 +51,7 @@ async def get_current_user(
     )
 
 
-def resolve_actor_from_identity_user(
+async def resolve_actor_from_identity_user(
     *,
     request: Request,
     identity_user: UserRecord,
@@ -73,12 +74,18 @@ def resolve_actor_from_identity_user(
         ),
         credential=CredentialRef(CredentialKind.CLOUD_SESSION),
     )
-    actor = executor.command(
-        lambda capabilities: capabilities.identity.resolve_actor(
-            identity,
-            operation=operation,
+
+    def resolve_actor() -> Actor:
+        return executor.command(
+            lambda capabilities: capabilities.identity.resolve_actor(
+                identity,
+                operation=operation,
+            )
         )
-    )
+
+    # The synchronous executor owns the complete Session/transaction in one
+    # bounded worker. Bind request diagnostics below on the calling event loop.
+    actor = await run_in_threadpool(resolve_actor)
     request.state.authenticated = True
     if is_reading_activity_request(request.scope):
         # Mutation routes still need the canonical operation for the journal,

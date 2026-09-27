@@ -1,3 +1,5 @@
+import asyncio
+from threading import Event, get_ident
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,10 +13,11 @@ from app.modules.identity.infrastructure import sanchezcloud_identity as runtime
 from app.modules.identity.infrastructure import application_gateway
 from app.modules.identity.infrastructure import session_gateway
 from app.transport.http.public_v1 import auth_dependencies as dependencies
-from app.shared.application import OperationContextFactory
+from app.shared.application import Actor, OperationContextFactory
 from app.shared.domain import AppError, FailureKind
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor
 from sanchezcloud_identity.models.user import UserRecord
+from scholens_observability import bind_context, current_context
 from fastapi import HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import configure_mappers
@@ -61,6 +64,73 @@ def _bootstrap_request(*, cookie: str | None = "previous-refresh") -> Request:
             "headers": headers,
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_slow_product_profile_transaction_does_not_block_request_loop() -> None:
+    started, release = Event(), Event()
+    loop_thread = get_ident()
+    execution_threads: list[int] = []
+    actor = Actor(
+        id=42,
+        email="reader@example.com",
+        status="active",
+        email_verified=True,
+    )
+
+    def slow_transaction(_operation: object) -> Actor:
+        execution_threads.append(get_ident())
+        started.set()
+        release.wait(timeout=2)
+        return actor
+
+    executor = MagicMock()
+    executor.command.side_effect = slow_transaction
+    request = _request()
+    task = asyncio.create_task(
+        dependencies.get_current_user(
+            request, _identity_user(), executor, OperationContextFactory()
+        )
+    )
+    try:
+        assert await asyncio.to_thread(started.wait, 1)
+        # Other requests can progress while the product transaction is waiting.
+        assert not task.done()
+        assert len(execution_threads) == 1
+        assert execution_threads[0] != loop_thread
+    finally:
+        release.set()
+        resolved = await task
+    assert resolved == actor
+    assert request.state.authenticated is True
+    assert request.state.actor_id == "42"
+
+
+@pytest.mark.asyncio
+async def test_actor_resolution_retains_request_context_across_worker_boundary() -> (
+    None
+):
+    executor = MagicMock()
+    seen_request_ids: list[str | None] = []
+
+    def transaction(_operation: object) -> Actor:
+        seen_request_ids.append(current_context().request_id)
+        return Actor(
+            id=42,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        )
+
+    executor.command.side_effect = transaction
+    request = _request()
+    with bind_context(request_id="auth-boundary", actor_id=None, operation_id=None):
+        await dependencies.get_current_user(
+            request, _identity_user(), executor, OperationContextFactory()
+        )
+        assert seen_request_ids == ["auth-boundary"]
+        assert current_context().actor_id == "42"
+        assert current_context().operation_id == request.state.operation_id
 
 
 def test_every_orm_table_has_an_explicit_owner_schema() -> None:

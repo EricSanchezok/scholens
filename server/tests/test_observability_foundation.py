@@ -427,7 +427,8 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
-def test_reading_activity_auth_does_not_attach_actor_diagnostic_context() -> None:
+@pytest.mark.asyncio
+async def test_reading_activity_auth_does_not_attach_actor_diagnostic_context() -> None:
     actor = Actor(
         id=41,
         email="reader@example.com",
@@ -447,7 +448,7 @@ def test_reading_activity_auth_does_not_attach_actor_diagnostic_context() -> Non
     }
     request = Request(scope)
 
-    resolved = resolve_actor_from_identity_user(
+    resolved = await resolve_actor_from_identity_user(
         request=request,
         identity_user=SimpleNamespace(
             id=41,

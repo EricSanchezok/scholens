@@ -365,6 +365,14 @@ Changing an Operation origin or credential must never change a Domain
 authorization result. Raw credential, signature, OAuth callback, and webhook
 verification complete before an `OperationContext` is constructed.
 
+Browser identity verification remains asynchronous. Product Actor resolution
+runs its complete synchronous SQLAlchemy transaction in Starlette's bounded
+worker pool, so a delayed profile read cannot block the HTTP event loop. The
+Session never crosses the thread boundary; only the resolved Actor returns.
+Request diagnostics are then bound on the calling event loop, retaining the
+reading-activity privacy exclusion. Every request rechecks the current product
+profile; this boundary does not cache authorization or identity state.
+
 Every product-changing Application command receives an explicit
 `operation: OperationContext`. Its private, session-bound `OperationJournal`
 appends stable business actions in the same UnitOfWork as the business write.
