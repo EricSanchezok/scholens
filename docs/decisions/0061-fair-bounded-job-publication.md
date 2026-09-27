@@ -41,6 +41,13 @@ users' published work. A slow or unavailable worker stops further publication to
 its queue while independent queues continue. The persisted cursor is expendable
 ordering metadata; job completion and execution fencing remain authoritative.
 
+The dispatcher emits a bounded, per-queue durable-backlog snapshot once per
+minute. It includes every pending job independently of broker publication,
+omits running/terminal work, and emits explicit empty-queue values only after a
+successful database read. A separate success heartbeat makes database or
+dispatcher silence observable. This closes the monitoring gap created by moving
+queue ownership into PostgreSQL without adding another polling service.
+
 ## Validation
 
 Real PostgreSQL tests cover a 40-job burst followed by a new requester, concurrent

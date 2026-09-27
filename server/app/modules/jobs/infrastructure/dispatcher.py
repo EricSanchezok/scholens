@@ -17,6 +17,7 @@ from app.modules.jobs.infrastructure.repository import (
 )
 from app.modules.jobs.infrastructure.models import DurableJob
 from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
+from app.modules.jobs.infrastructure.backlog_observation import observe_pending_backlog
 from sqlalchemy.orm import Session
 from scholens_observability import add_counter, instrumented_span, record_histogram
 
@@ -217,6 +218,7 @@ async def run_job_dispatcher(
 ) -> None:
     """Continuously drain the outbox without blocking the ASGI event loop."""
     idle_wakeup = wakeup or JobDispatcherWakeup()
+    next_observation = 0.0
     while not stop.is_set():
         try:
             published = await asyncio.to_thread(
@@ -228,6 +230,10 @@ async def run_job_dispatcher(
         except Exception:
             logger.exception("jobs.outbox.dispatch_failed")
             published = 0
+        observed_at = monotonic()
+        if observed_at >= next_observation:
+            next_observation = observed_at + 60
+            await asyncio.to_thread(observe_pending_backlog)
         if published:
             continue
         await idle_wakeup.wait(stop, timeout=DISPATCH_IDLE_SECONDS)

@@ -12,10 +12,13 @@ evidence, not zero failures.
 Application stdout reaches CloudWatch through ECS `awslogs`. Runtime log groups
 retain 30 days for incident review and the contract retirement observation
 window. The separately reviewed `application-monitoring.yml` stack derives
-12 fixed metrics in `Scholens/Personal` from these existing logs, without an
+16 fixed metric names in `Scholens/Personal` from these existing logs, without an
 exporter process or additional application permissions. Metric dimensions never
 contain users, jobs, documents, model revisions, or request references. These
-custom metrics and six alarms have CloudWatch charges; they add no host tier.
+custom metrics and fourteen alarms have CloudWatch charges; they add no host tier.
+Only the two durable-backlog metrics have a dimension: `Queue`, restricted by
+the filter to the six registered queue names. This bounds the total to 26 metric
+series. All other metrics remain dimensionless.
 
 HTTP completion logs, metrics and matched-route spans use the complete registered
 route template, including every router prefix and named parameter. FastAPI 0.138's
@@ -36,14 +39,25 @@ framework, since losing a prefix can silently stop receipt-latency samples.
 | `ResultConsumerFailures` | Result application, durable effect or consumer failures. Three failures within five minutes alert; the count is attempts, not unique failed jobs. |
 | `JobExecutions`, `JobFailures` | Exactly one `job.task.completed` record per execution in the five admitted worker groups. Retries/redeliveries are executions, not unique document imports. Three failures within five minutes alert. |
 | `InferenceQueryDuration`, `InferenceFailedResponses` | Completed socket responses. Health probes are excluded; disconnected clients produce no completion, so these metrics cannot measure all client-side fallbacks. |
+| `DurablePendingJobs`, `DurableOldestPendingSeconds` | One scalar PostgreSQL aggregation per minute, with explicit zeroes for empty queues. Counts every accepted pending job, including unpublished, retrying and broker-published work; running and terminal jobs are excluded. Six fixed queue series alert after three consecutive minutes above 60 seconds for conversation, 120 for document, and 1,800 for the remaining queues. |
+| `DurableQueueObservations`, `DurableQueueObservationFailures` | A success heartbeat follows all six snapshot records. Database failure emits only a redacted failure event, never a healthy zero. Five missing minutes or three failures within five minutes alert. |
 
 HTTP server errors and internal/unavailable MCP errors each alert on one event
 within five minutes. All error alarms treat idle missing data as non-breaching.
-Only the health-log silence alarm treats missing data as a failure. Counter
+The health-log and durable-snapshot silence alarms treat missing data as a failure. Counter
 filters publish zero when other logs arrive without a matching event; duration
 filters never insert synthetic zeros or negative samples. Metric filters process
 new log ingestion only, not retained history. See
 [AWS metric-filter semantics](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/MonitoringLogData.html).
+
+Fair publication deliberately retains backlog in PostgreSQL. An empty SQS queue
+therefore cannot establish that every user's accepted work has started. The
+existing outbox dispatcher observes durable waiting work off the ASGI event loop,
+at most once per minute even while continuously publishing. It reads only queue,
+count and oldest acceptance time, with five-second statement and one-second lock
+timeouts, and releases the transaction before logging. Observation failure does
+not prevent publishing or disclose SQL, job payloads or identities. No additional
+process, scheduler, exporter or database migration is required.
 
 After deployment, verify every filter with `aws logs test-metric-filter` using
 synthetic positive and negative events; this tests patterns without publishing
