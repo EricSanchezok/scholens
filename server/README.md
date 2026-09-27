@@ -59,7 +59,7 @@ degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
-fully authorized catalog exposes 63 stored-knowledge and management tools:
+fully authorized catalog exposes 64 stored-knowledge and management tools:
 paper retrieval, Project and collaborator management, personal Library and
 tags, known-source ingestion and jobs, annotation discussions, and existing
 research outputs. Narrower Access Keys see only their permitted subset.
@@ -82,6 +82,14 @@ coarse capability filter and every concrete resource is re-authorized against
 the current Actor. MCP resources expose bounded manifests at
 `scholens://library`, `scholens://projects`, and typed Project, paper,
 annotation-thread, and research-output URIs.
+
+The transport compiles its actor-independent tool schemas at construction time.
+Each tools/list request filters the current access-key permissions and returns
+an isolated copy of those schemas; no schema generation runs on the request
+event loop. Tool failures record their bounded tool name and, for output-budget
+failures, the actual and maximum serialized UTF-8 byte counts. Diagnostics never
+include the tool arguments or returned paper text. HTTP transport success is
+separate from the `scholens.mcp.errors` business-failure signal.
 
 Paper-bearing MCP results also expose an optional `reader_url`, built from the
 configured Scholens client origin as `/reader/{document_id}`. When a tool call

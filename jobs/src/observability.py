@@ -241,7 +241,6 @@ def _task_failure(
         error_code="job_execution_failed",
         diagnostic_id=str(snapshot_id),
     )
-    _TASK_STARTS.pop(identifier, None)
 
 
 def _task_retry(

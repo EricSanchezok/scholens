@@ -94,7 +94,16 @@ celery_app.conf.update(
     broker_transport_options=_transport_options(BROKER_URL),
     worker_prefetch_multiplier=1,
     task_acks_late=True,
-    reject_on_worker_lost=True,
+    task_reject_on_worker_lost=False,
+    task_annotations={
+        name: {"reject_on_worker_lost": True}
+        for name in (
+            "upload_and_process_file",
+            "ingest_source_and_process",
+            PDF_TEXT_REPAIR_TASK_NAME,
+            "postprocess_pdf",
+        )
+    },
     task_acks_on_failure_or_timeout=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
     worker_soft_shutdown_timeout=120.0,

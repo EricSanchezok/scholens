@@ -17,6 +17,13 @@ A reconnect closes consumption rather than taking another delivery against an
 unresolved lease. Child `task_postrun` is not proof of broker settlement. Existing
 child-memory recycling, durable callbacks and retries remain authoritative.
 
+PDF ingestion, text repair and post-processing use Celery's task-level
+`reject_on_worker_lost` policy with late acknowledgement. A killed child returns
+the delivery to the broker; the durable Server claim still decides whether it
+may execute. Other tasks retain failure acknowledgement so non-idempotent
+provider work is not blindly replayed. Failure signals preserve the start time
+until postrun records the terminal duration.
+
 Platform schedules these workers in its interactive lane independently of the
 Scholight batch lane. Each lane has at most one task. The conversation worker
 remains a separate resident service. Task placement uses container reservations;

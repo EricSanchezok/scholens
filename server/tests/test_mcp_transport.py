@@ -210,6 +210,47 @@ def _transport() -> tuple[Starlette, RecordingDispatcher]:
     return _application(catalog, recording), recording
 
 
+@pytest.mark.asyncio
+async def test_tool_catalog_compiles_before_requests_and_rechecks_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    permissions = frozenset(WorkspacePermission)
+    catalog = build_workspace_tool_catalog(
+        ingestion=cast(PaperIngestionWorkflow, object()),
+        citations=cast(CitationWorkflow, object()),
+    )
+    application = _application(
+        catalog, RecordingDispatcher(), permissions=lambda: permissions
+    )
+
+    def unexpected_schema(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("Schema generation must not run on the request loop")
+
+    monkeypatch.setattr(BaseModel, "model_json_schema", unexpected_schema)
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://testserver"
+        ) as client:
+            headers = await _initialize(client)
+            for permissions in (
+                frozenset(WorkspacePermission),
+                frozenset({WorkspacePermission.READ}),
+                frozenset(WorkspacePermission),
+            ):
+                response = await client.post(
+                    "/mcp",
+                    headers=headers,
+                    json={"jsonrpc": "2.0", "id": "list", "method": "tools/list"},
+                )
+                names = {
+                    tool["name"] for tool in _mcp_json(response)["result"]["tools"]
+                }
+                assert "list_projects" in names
+                assert ("create_project" in names) == (
+                    WorkspacePermission.WRITE in permissions
+                )
+
+
 async def _initialize(client: AsyncClient) -> dict[str, str]:
     headers = {
         "authorization": f"Bearer {ACCESS_KEY_SECRET}",
@@ -975,7 +1016,17 @@ async def test_prepare_upload_size_error_explains_how_to_recover() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_budget_matches_the_complete_unicode_call_tool_result() -> None:
+async def test_mcp_budget_matches_the_complete_unicode_call_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.transport.mcp import server as mcp_server
+
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        mcp_server,
+        "log_event",
+        lambda _logger, _level, event, **fields: events.append((event, fields)),
+    )
     outcome = ToolOutcome(
         payload={"summary": "中文 café 🔬"},
         resource_links=(
@@ -1065,6 +1116,11 @@ async def test_mcp_budget_matches_the_complete_unicode_call_tool_result() -> Non
     assert over_error["code"] == "tool_result_budget_exceeded"
     assert over_error["details"]["actual_output_bytes"] == exact_bytes
     assert over_error["details"]["replacement_tool"] == "exact_budget"
+    failure = next(fields for event, fields in events if event == "mcp.request.error")
+    assert failure["tool_name"] == "over_budget"
+    assert failure["actual_output_bytes"] == exact_bytes
+    assert failure["max_output_bytes"] == exact_bytes - 1
+    assert "summary" not in repr(failure)
     assert "Use exact_budget" in over_error["remediation"]
 
 

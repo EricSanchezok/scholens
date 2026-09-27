@@ -156,6 +156,15 @@ class ToolCatalog(Generic[CapabilitiesT]):
         """Names reserved by a profile, independent of current authorization."""
         return self._profile(profile_name).tool_names
 
+    def profile_definitions(
+        self, profile_name: str
+    ) -> tuple[ToolDefinition[CapabilitiesT], ...]:
+        """Static metadata for transport compilation, never execution authority."""
+        return tuple(
+            self._definitions[name]
+            for name in sorted(self._profile(profile_name).tool_names)
+        )
+
     def provider_declarations(self, access: ToolAccess) -> list[dict[str, object]]:
         return [
             {

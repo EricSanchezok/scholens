@@ -11,6 +11,16 @@ from src.cache_config import CacheConfigurationError, cache_url
 from src.task_protection import register_task_protection_signals, set_task_protection
 
 
+def test_document_worker_loss_redelivers_late_acknowledged_work() -> None:
+    from src.celery_app import celery_app
+    from src.tasks import construct_data_table_task, upload_and_process_file
+
+    celery_app.finalize()
+    assert upload_and_process_file.acks_late is True
+    assert upload_and_process_file.reject_on_worker_lost is True
+    assert construct_data_table_task.reject_on_worker_lost is False
+
+
 def test_managed_cache_url_escapes_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

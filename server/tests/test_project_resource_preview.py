@@ -10,6 +10,41 @@ from app.modules.projects.application.contracts import ProjectPaperSort, Project
 from app.modules.projects.application.projects import ProjectPageDirection
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
+import pytest
+
+
+@pytest.mark.parametrize("direction", list(ProjectPageDirection))
+def test_title_row_cursor_has_an_explicit_pivot_from_clause(direction) -> None:
+    from app.bootstrap.adapters.project_gateway import (
+        _project_paper_list_plan,
+        _row_pivot_cursor_key,
+    )
+    from app.modules.projects.application.projects import ProjectPagePosition
+    from app.modules.projects.infrastructure.models import ProjectPaper
+    from app.modules.papers.infrastructure.models import Document
+    from sqlalchemy import select
+
+    pivot_id, project_id = uuid4(), uuid4()
+    plan = _project_paper_list_plan(
+        actor_id=7,
+        project_id=project_id,
+        query=None,
+        personal_statuses=(),
+        personal_tag_ids=(),
+        sort=ProjectPaperSort.TITLE_ASC,
+        direction=direction,
+        position=ProjectPagePosition(id=pivot_id, key=_row_pivot_cursor_key(pivot_id)),
+    )
+    statement = (
+        select(ProjectPaper.id)
+        .join(Document, Document.id == ProjectPaper.document_id)
+        .where(*plan.page_filters)
+        .order_by(plan.order, plan.id_order)
+    )
+    compiled = statement.compile(dialect=postgresql.dialect())
+    assert "FROM scholens.project_papers AS project_papers_1 JOIN" in str(compiled)
+    assert project_id in compiled.params.values()
+    assert pivot_id in compiled.params.values()
 
 
 def _gateway(db: Session) -> SqlAlchemyProjectGateway:
