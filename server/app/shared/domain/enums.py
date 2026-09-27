@@ -60,6 +60,7 @@ class JobOperation(str, Enum):
     CONVERSATION_GENERATE = "conversation_generate"
     PDF_PROCESS = "pdf_process"
     PDF_POSTPROCESS = "pdf_postprocess"
+    DOCUMENT_INDEX = "document_index"
     DOCUMENT_REFLOW = "document_reflow"
     AUDIO_GENERATE = "audio_generate"
     DATA_TABLE_GENERATE = "data_table_generate"

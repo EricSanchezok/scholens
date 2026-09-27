@@ -81,6 +81,7 @@ celery_app.conf.update(
         "ingest_source_and_process": {"queue": JobQueue.DOCUMENT},
         PDF_TEXT_REPAIR_TASK_NAME: {"queue": JobQueue.DOCUMENT},
         "postprocess_pdf": {"queue": JobQueue.DOCUMENT},
+        "index_document": {"queue": JobQueue.DOCUMENT},
         "generate_document_reflow": {"queue": JobQueue.DOCUMENT},
         "generate_audio_overview": {"queue": JobQueue.RESEARCH},
         "process_data_table": {"queue": JobQueue.RESEARCH},
@@ -104,6 +105,7 @@ celery_app.conf.update(
                 "ingest_source_and_process",
                 PDF_TEXT_REPAIR_TASK_NAME,
                 "postprocess_pdf",
+                "index_document",
             )
         },
     },

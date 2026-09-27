@@ -8,6 +8,11 @@ from dataclasses import dataclass
 import hashlib
 import re
 from typing import Protocol
+import os
+from pathlib import Path
+
+from tokenizers import Tokenizer
+from scholens_ai.model_artifacts import TOKENIZER_SHA256, file_sha256
 
 TOKEN_PASSAGE_REVISION = "tokens256-overlap32-paragraphs-v1"
 TOKEN_WINDOW = 256
@@ -28,6 +33,20 @@ class OffsetTokenizer(Protocol):
 
 class PassageLimitExceeded(ValueError):
     """Keep the previous projection; never label a truncated index complete."""
+
+
+def load_passage_tokenizer(model_dir: str | Path | None = None) -> Tokenizer:
+    """Load only the pinned tokenizer; index clients never need private weights."""
+    configured = model_dir or os.getenv("SCHOLENS_EMBEDDING_MODEL_PATH")
+    if not configured:
+        raise RuntimeError("SCHOLENS_EMBEDDING_MODEL_PATH is not configured")
+    path = Path(configured) / "tokenizer.json"
+    if file_sha256(path) != TOKENIZER_SHA256:
+        raise ValueError("Token passage tokenizer digest mismatch")
+    tokenizer = Tokenizer.from_file(str(path))
+    tokenizer.no_padding()
+    tokenizer.no_truncation()
+    return tokenizer
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,6 +44,7 @@ from scholens_ai.token_passages import (
     TokenPassage,
     PassageLimitExceeded,
     iter_token_passages,
+    load_passage_tokenizer,
 )
 from scholens_ai.token_projection import (
     TokenProjection,
@@ -74,6 +75,7 @@ __all__ = [
     "TokenPassage",
     "PassageLimitExceeded",
     "iter_token_passages",
+    "load_passage_tokenizer",
     "EMBEDDING_DIMENSION",
     "EMBEDDING_MODEL_ID",
     "EMBEDDING_MODEL_REVISION",

@@ -153,3 +153,7 @@ most 10,000 passages with a 16 MiB binary vector bound. Canonical-source SHA-256
 model revision, finite normalized vectors, advancing spans, complete text
 coverage, and the exact set of vector digests are validated before adoption.
 Repeated source text can reuse a vector without collapsing distinct coordinates.
+
+`load_passage_tokenizer` verifies the pinned tokenizer SHA before loading and
+explicitly disables padding/truncation. It requires no ONNX weights or session;
+tokenizer-only Jobs images can use the shared inference owner.

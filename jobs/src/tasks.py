@@ -31,13 +31,19 @@ from scholens_ai import (
     embed_text,
     encode_passage_embedding_artifact,
     configured_embedder,
+    load_passage_tokenizer,
 )
+from scholens_ai.inference_client import EmbeddingUnavailable
+from scholens_ai.token_passages import PassageLimitExceeded
 from scholens_job_contracts import (
     PDF_TEXT_REPAIR_TASK_NAME,
     ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS,
     PDFTextRepairTaskRequest,
     require_storage_delete_batch,
+    MAX_PDF_CALLBACK_RAW_CONTENT_BYTES,
 )
+from botocore.exceptions import BotoCoreError, ClientError
+from src.indexing import build_checkpointed_projection
 
 from src.audio import generate_audio
 from src.celery_app import celery_app
@@ -1657,6 +1663,72 @@ def generate_document_reflow_task(
         }
         _deliver_webhook(webhook_url, payload, task_id=task_id)
         raise
+
+
+@celery_app.task(bind=True, name="index_document", soft_time_limit=900, time_limit=960)
+def index_document_task(
+    self,
+    callback_url: str,
+    parser_markdown_s3_key: str,
+    content_digest: str,
+    model_revision: str,
+    delivery_protocol: Literal["manifest-v1"] = "manifest-v1",
+) -> dict[str, Any]:
+    """Build a complete independent index without delaying basic readability."""
+    if delivery_protocol != "manifest-v1":
+        raise ValueError("document_index_delivery_protocol_invalid")
+
+    def work(execution: FencedExecution) -> dict[str, Any]:
+        try:
+            execution.report("indexing")
+            embedder = configured_embedder()
+            if embedder is None:
+                raise DeliveryUnavailable("document_index_inference_unavailable")
+            if embedder.revision != model_revision:
+                raise ValueError("document_index_model_revision_mismatch")
+            raw_content = s3_service.download_bounded_bytes(
+                parser_markdown_s3_key, max_bytes=MAX_PDF_CALLBACK_RAW_CONTENT_BYTES
+            ).decode("utf-8")
+            projection = build_checkpointed_projection(
+                raw_content=raw_content,
+                content_digest=content_digest,
+                job_id=execution.job_id,
+                storage=s3_service,
+                embedder=embedder,
+                tokenizer=load_passage_tokenizer(),
+                check_cancelled=execution.check_cancelled,
+            )
+            execution.complete(
+                {
+                    "task_id": execution.job_id,
+                    "projection": projection.model_dump(mode="json"),
+                }
+            )
+            return {"status": "completed"}
+        except (EmbeddingUnavailable, BotoCoreError, ClientError) as exc:
+            raise DeliveryUnavailable("document_index_dependency_unavailable") from exc
+        except (DeliveryUnavailable, ExecutionLost):
+            raise
+        except Exception as exc:
+            error_code = (
+                "document_index_limit_exceeded"
+                if isinstance(exc, PassageLimitExceeded)
+                else "document_index_failed"
+            )
+            logger.warning(
+                "job.document_index.failed",
+                extra={
+                    "job_id": execution.job_id,
+                    "error_code": error_code,
+                    "error_class": type(exc).__name__,
+                },
+            )
+            execution.fail(error_code)
+            return {"status": "failed"}
+
+    return run_fenced_task(
+        self, callback_url=callback_url, storage=s3_service, work=work
+    )
 
 
 @celery_app.task(bind=True, name="postprocess_pdf")

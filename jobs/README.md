@@ -442,3 +442,18 @@ existing result contracts. Server verifies source identity, quote uniqueness and
 canonical offsets before materializing highlights; it reports partial coverage
 without failing basic readability. See
 [ADR 0060](../docs/decisions/0060-personal-verbatim-evidence.md).
+
+## Independent document indexing
+
+`index_document` consumes a canonical Markdown key, exact content SHA-256 and
+model revision through `manifest-v1`. It has no AI/provider credential scope.
+The client loads only the pinned tokenizer and delegates inference through the
+configured embedding boundary. Distinct text vectors are reused within a job;
+64-passage checkpoints under `jobs/checkpoints/<job>/index/` survive owner loss,
+with at most eight texts per inference RPC. Every checkpoint verifies ordered
+text digests and model revision. Corruption fails explicitly; an unavailable
+owner/storage retries with the existing claim token. The complete result carries
+bounded binary vectors and exact spans, and Server rechecks access and canonical
+source before atomic adoption. Basic readability is independent of index success.
+The new task remains unproduced until the staged pipeline rollout; its consumer
+must deploy before any producer or dedicated index queue is enabled.

@@ -31806,6 +31806,7 @@
               "conversation_generate",
               "pdf_process",
               "pdf_postprocess",
+              "document_index",
               "document_reflow",
               "audio_generate",
               "data_table_generate",

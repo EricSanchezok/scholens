@@ -616,6 +616,11 @@ def build_job_callbacks(
     )
     from app.shared.domain.enums import JobOperation
 
+    from app.bootstrap.adapters.document_stage_callbacks import (
+        DocumentIndexCallback,
+        DocumentIndexCompletion,
+    )
+
     return JobCallbacks(
         lifecycle=SqlAlchemyJobLifecycle(db),
         handlers={
@@ -624,6 +629,9 @@ def build_job_callbacks(
             ),
             JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
                 PdfPostprocessCallback, PdfPostprocessCompletion(db)
+            ),
+            JobOperation.DOCUMENT_INDEX: RegisteredJobCallback(
+                DocumentIndexCallback, DocumentIndexCompletion(db)
             ),
             JobOperation.DOCUMENT_GC: RegisteredJobCallback(
                 JobCallbackIdentity, DocumentGcCompletion(db)

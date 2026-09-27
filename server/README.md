@@ -958,3 +958,9 @@ thresholds. The synthetic bilingual fixture measured Recall@10 0.703125 to
 0.71875 and NDCG@10 0.718233 to 0.715284; this supports the precision change,
 not a production relevance guarantee. Producers remain on the legacy protocol
 until the separate staged processing rollout is enabled.
+
+The `document_index` callback accepts only the job's content/model snapshot.
+It rechecks current document access and source before adoption, stores only
+counts/revisions in the durable job result, and leaves document processing status
+unchanged on index failure. Full result artifacts follow the fenced inbox and
+terminal artifact-retention policy.
