@@ -10,15 +10,16 @@ from typing import TYPE_CHECKING, Literal, Protocol, Sequence
 
 import numpy as np
 from tokenizers import Tokenizer
+from scholens_ai.embedding_contract import (
+    EMBEDDING_DIMENSION as EMBEDDING_DIMENSION,
+    EMBEDDING_MODEL_ID as EMBEDDING_MODEL_ID,
+    EMBEDDING_MODEL_REVISION as EMBEDDING_MODEL_REVISION,
+    EMBEDDING_MAX_TOKENS as EMBEDDING_MAX_TOKENS,
+)
 from scholens_ai.model_artifacts import model_artifact, verify_artifacts
 
 if TYPE_CHECKING:
     import onnxruntime as ort  # type: ignore[import-untyped]
-
-EMBEDDING_DIMENSION = 384
-EMBEDDING_MODEL_ID = "intfloat/multilingual-e5-small"
-EMBEDDING_MODEL_REVISION = model_artifact().revision
-EMBEDDING_MAX_TOKENS = 512
 
 
 class TextEmbedder(Protocol):

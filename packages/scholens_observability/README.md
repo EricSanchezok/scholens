@@ -38,3 +38,6 @@ Server and Jobs wire their Celery ready/heartbeat signals to `heartbeat`; withou
 `SCHOLENS_WORKER_HEARTBEAT_FILE` it performs no writes. Configured workers are
 unhealthy when the file is absent, unreadable, future-dated, or older than 90
 seconds. This checks worker event-loop liveness without SQS remote-control probes.
+Package exports load on first use, preserving their public names and static types.
+The heartbeat command imports only the standard library, so periodic health
+checks do not initialize logging, diagnostic storage, or OpenTelemetry SDKs.

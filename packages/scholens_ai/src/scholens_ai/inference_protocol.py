@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import math
-import struct
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from scholens_ai.embeddings import EMBEDDING_DIMENSION
+from scholens_ai.embedding_contract import EMBEDDING_DIMENSION
 
-FRAME_HEADER = struct.Struct("!I")
-MAX_FRAME_BYTES = 256 * 1024
+from scholens_ai.inference_transport import (
+    FRAME_HEADER as FRAME_HEADER,
+    MAX_FRAME_BYTES as MAX_FRAME_BYTES,
+    frame as frame,
+)
+
 MAX_REQUEST_TEXTS = 8
 MAX_TEXT_CHARACTERS = 24_000
 
@@ -60,9 +63,3 @@ class InferenceResponse(BaseModel):
             if not 0.9 <= math.sqrt(sum(x * x for x in vector)) <= 1.1:
                 raise ValueError("Inference vector must be normalized")
         return self
-
-
-def frame(data: bytes) -> bytes:
-    if not 0 < len(data) <= MAX_FRAME_BYTES:
-        raise ValueError("Inference frame exceeds its byte bound")
-    return FRAME_HEADER.pack(len(data)) + data

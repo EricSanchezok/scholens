@@ -104,8 +104,14 @@ ONNX Runtime is pinned by this package. The Server Dockerfile's separate Debian
 build stage performs conversion and verifies the exact output digest before
 copying only model files into the Alpine runtime. Runtime startup never
 downloads or quantizes. `--tokenizer-only` supports index producers without
-private model weights. Provider SDK exports are lazy, so the inference owner
-does not import provider clients or an Agent graph.
+private model weights. Package exports are loaded on first use, preserving the
+public import surface and static types. Embedding identity and dimensions live
+in a lightweight contract module. The inference owner's health command uses the
+same bounded socket transport and exact revision check using only the standard
+library; it requires an empty, error-free health response. It does not import
+NumPy, tokenizers, ONNX Runtime, validation libraries, provider clients, or an
+Agent graph. Only owner startup imports model execution libraries, after
+acquiring its exclusive process lock.
 
 `SCHOLENS_EMBEDDING_SOCKET` selects a private Unix socket client for both Server
 and Jobs. Failure, overload or deadline expiry never falls back to loading a
