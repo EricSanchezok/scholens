@@ -82,6 +82,24 @@ Jobs owns prompt construction. See [ADR 0060](../../docs/decisions/0060-personal
 
 ## Shared host inference
 
+`SCHOLENS_EMBEDDING_VARIANT` selects a registered, immutable artifact identity:
+`o4` (the compatible default), `arm64-int8`, or `fp32` for evaluation. Each has
+its own persisted model revision. The owner verifies both the model and
+tokenizer SHA-256 before creating an ONNX session; a manifest cannot override
+the registered revision. An O4 deployment without a manifest remains compatible
+when its pinned file digests match. Changing variants requires matching owner
+artifacts and a versioned reindex; dimensions alone do not establish compatibility.
+
+`download_embeddings --variant arm64-int8` builds the registered dynamic
+per-channel INT8 artifact from the pinned FP32 source, using MatMul and Gather
+quantization. The shared workspace `model-build` group locks ONNX and NumPy;
+ONNX Runtime is pinned by this package. The Server Dockerfile's separate Debian
+build stage performs conversion and verifies the exact output digest before
+copying only model files into the Alpine runtime. Runtime startup never
+downloads or quantizes. `--tokenizer-only` supports index producers without
+private model weights. Provider SDK exports are lazy, so the inference owner
+does not import provider clients or an Agent graph.
+
 `SCHOLENS_EMBEDDING_SOCKET` selects a private Unix socket client for both Server
 and Jobs. Failure, overload or deadline expiry never falls back to loading a
 second model. Without this setting, explicitly provisioned local environments

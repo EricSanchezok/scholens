@@ -14,6 +14,15 @@ waiting for CPU and can extend unrelated API latency.
 
 ## Decision
 
+The model artifact registry gives O4, FP32 evaluation and ARM64 INT8 distinct
+persistence revisions and pinned model/tokenizer digests. Runtime selection is
+explicit and artifact validation fails before inference on a mismatch. The
+INT8 artifact is reproducibly converted in the locked Debian model build stage;
+only files reach the Alpine application image. Provider imports are lazy at the
+package boundary so the inference process owns no provider SDK graph. The O4
+default preserves the existing deployment until the measured, versioned
+projection rollout selects INT8.
+
 Use one private Unix-socket inference process per host, with an exclusive owner
 lock, bounded wire data, a single model thread, query priority, and bounded index
 microbatches. A client deadline yields lexical search; it must never create a

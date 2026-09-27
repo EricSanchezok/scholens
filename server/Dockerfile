@@ -1,13 +1,31 @@
 ARG PYTHON_IMAGE=python:3.12.14-alpine3.23@sha256:aa81c9c4cc2f42592a6c8a9fba3a13838d9372e81e86030bf73132d5b8c5e4e8
+ARG EMBEDDING_BUILD_IMAGE=python:3.12.14-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134
+ARG SCHOLENS_EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
+ARG SCHOLENS_EMBEDDING_VARIANT=o4
 ARG RDS_GLOBAL_BUNDLE_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ARG RDS_GLOBAL_BUNDLE_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+
+FROM ${EMBEDDING_BUILD_IMAGE} AS embedding-builder
+ARG SCHOLENS_EMBEDDING_MODEL_REVISION
+ARG SCHOLENS_EMBEDDING_VARIANT
+RUN python -m pip install --no-cache-dir uv==0.9.2
+COPY packages/scholens_ai/ /packages/scholens_ai/
+COPY packages/scholens_job_contracts/ /packages/scholens_job_contracts/
+COPY packages/scholens_observability/ /packages/scholens_observability/
+COPY packages/scholens_runtime_contracts/ /packages/scholens_runtime_contracts/
+COPY packages/pyproject.toml packages/uv.lock packages/README.md /packages/
+WORKDIR /packages
+RUN uv sync --frozen --no-dev --group model-build
+RUN .venv/bin/python -m scholens_ai.download_embeddings /models/search \
+    --revision "${SCHOLENS_EMBEDDING_MODEL_REVISION}" \
+    --variant "${SCHOLENS_EMBEDDING_VARIANT}"
+
 FROM ${PYTHON_IMAGE} AS builder
 
 ARG RDS_GLOBAL_BUNDLE_URL
 ARG RDS_GLOBAL_BUNDLE_SHA256
 ARG SANCHEZCLOUD_IDENTITY_REVISION
 ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/sanchezcloud-identity/tarball
-ARG SCHOLENS_EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
 
 RUN apk add --no-cache build-base ca-certificates curl curl-dev \
         "libuuid>=2.41.6-r1" \
@@ -39,8 +57,6 @@ RUN uv sync --frozen --no-dev --no-install-project \
         --no-install-package sanchezcloud-identity \
         --no-install-package onnxruntime \
     && uv pip install --no-deps /app/sanchezcloud-identity/
-RUN .venv/bin/python -m scholens_ai.download_embeddings /app/models/search \
-        --revision "${SCHOLENS_EMBEDDING_MODEL_REVISION}"
 
 COPY server/app/ /app/app/
 COPY server/migrations/ /app/migrations/
@@ -48,6 +64,7 @@ COPY server/alembic.ini server/gunicorn.config.py /app/
 RUN uv pip install --no-deps /app
 
 FROM ${PYTHON_IMAGE} AS runtime
+ARG SCHOLENS_EMBEDDING_VARIANT
 
 RUN apk add --no-cache ca-certificates libcurl py3-onnxruntime \
         "libuuid>=2.41.6-r1" \
@@ -59,13 +76,14 @@ WORKDIR /app
 COPY --from=builder /app/.venv/ /app/.venv/
 COPY --from=builder /app/app/ /app/app/
 COPY --from=builder /app/migrations/ /app/migrations/
-COPY --from=builder /app/models/ /app/models/
+COPY --from=embedding-builder /models/ /app/models/
 COPY --from=builder /app/alembic.ini /app/gunicorn.config.py /app/
 COPY --from=builder /tmp/global-bundle.pem /etc/ssl/certs/global-bundle.pem
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONPATH=/usr/lib/python3.12/site-packages \
     SCHOLENS_EMBEDDING_MODEL_PATH=/app/models/search \
+    SCHOLENS_EMBEDDING_VARIANT=${SCHOLENS_EMBEDDING_VARIANT} \
     SCHOLENS_SERVER_ROOT=/app \
     ENVIRONMENT=production \
     PORT=8000

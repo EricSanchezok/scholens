@@ -29,6 +29,7 @@ members = [
 ]
 
 [dependency-groups]
+model-build = ["onnx==1.19.1", "numpy==2.3.3"]
 dev = [
     "mypy>=1.14",
     "pytest>=8",

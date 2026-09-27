@@ -1,15 +1,19 @@
 """Provider-neutral AI profile and model construction primitives."""
 
-from scholens_ai.profiles import (
-    AIProfile,
-    AIProfileName,
-    AIThinkingEffort,
-    AIThinkingMode,
-    ProviderConfigurationError,
-    build_model,
-    profile_model_settings,
-    resolve_profile,
-)
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from scholens_ai.profiles import (
+        AIProfile as AIProfile,
+        AIProfileName as AIProfileName,
+        AIThinkingEffort as AIThinkingEffort,
+        AIThinkingMode as AIThinkingMode,
+        ProviderConfigurationError as ProviderConfigurationError,
+        build_model as build_model,
+        profile_model_settings as profile_model_settings,
+        resolve_profile as resolve_profile,
+    )
+
 from scholens_ai.embeddings import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL_ID,
@@ -90,3 +94,29 @@ __all__ = [
     "decode_passage_embedding_artifact",
     "encode_passage_embedding_artifact",
 ]
+
+
+_PROFILE_EXPORTS = frozenset(
+    {
+        "AIProfile",
+        "AIProfileName",
+        "AIThinkingEffort",
+        "AIThinkingMode",
+        "ProviderConfigurationError",
+        "build_model",
+        "profile_model_settings",
+        "resolve_profile",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    # The inference owner needs no provider SDKs, credentials or Agent graph.
+    # Keep the public import API while loading model providers only on use.
+    if name not in _PROFILE_EXPORTS:
+        raise AttributeError(name)
+    from scholens_ai import profiles
+
+    value = getattr(profiles, name)
+    globals()[name] = value
+    return value

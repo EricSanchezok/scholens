@@ -47,6 +47,7 @@ def test_worker_embedding_threads_are_explicit_without_changing_model(
     for name in ("model.onnx", "tokenizer.json"):
         (tmp_path / name).write_text("")
     monkeypatch.setenv("SCHOLENS_EMBEDDING_THREADS", "1")
+    monkeypatch.setattr("scholens_ai.embeddings.verify_artifacts", lambda *_: None)
     calls = []
     fake = SimpleNamespace(
         SessionOptions=SimpleNamespace,

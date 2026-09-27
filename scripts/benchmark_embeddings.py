@@ -7,6 +7,7 @@ production configuration changes are deliberately separate operations.
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import math
 from pathlib import Path
@@ -25,7 +26,9 @@ from scholens_ai.token_passages import iter_token_passages
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-dir", type=Path, required=True)
-    parser.add_argument("--variant", required=True)
+    parser.add_argument(
+        "--variant", required=True, choices=("o4", "fp32", "arm64-int8")
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--corpus",
@@ -44,7 +47,7 @@ def main() -> None:
         parser.error("--repeats must be between 1 and 10")
     corpus = json.loads(args.corpus.read_text())
     started = time.perf_counter()
-    model = LocalOnnxTextEmbedder(args.model_dir)
+    model = LocalOnnxTextEmbedder(args.model_dir, variant=args.variant)
     model.embed_query("inference warmup")
     cold_seconds = time.perf_counter() - started
     documents = [model.embed_passages([doc["text"]])[0] for doc in corpus["documents"]]
@@ -101,6 +104,11 @@ def main() -> None:
         "fixture_description": corpus["description"],
         "corpus_sha256": hashlib.sha256(args.corpus.read_bytes()).hexdigest(),
         "variant": args.variant,
+        "model_revision": model.revision,
+        "runtime_versions": {
+            name: importlib.metadata.version(name)
+            for name in ("onnxruntime", "tokenizers", "numpy")
+        },
         "platform": platform.platform(),
         "machine": platform.machine(),
         "model_sha256": hashlib.sha256(
