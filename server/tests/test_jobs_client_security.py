@@ -51,6 +51,12 @@ def test_jobs_client_uses_predefined_iam_sqs_queues(
     monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
     monkeypatch.setenv("SQS_CONVERSATION_QUEUE_URL", "https://sqs.example/conversation")
     monkeypatch.setenv("SQS_DOCUMENT_QUEUE_URL", "https://sqs.example/document")
+    monkeypatch.setenv(
+        "SQS_DOCUMENT_INDEX_QUEUE_URL", "https://sqs.example/document-index"
+    )
+    monkeypatch.setenv(
+        "SQS_DOCUMENT_ENRICHMENT_QUEUE_URL", "https://sqs.example/document-enrichment"
+    )
     monkeypatch.setenv("SQS_RESEARCH_QUEUE_URL", "https://sqs.example/research")
     monkeypatch.setenv("SQS_MAINTENANCE_QUEUE_URL", "https://sqs.example/maintenance")
     celery_app = MagicMock()
@@ -64,6 +70,8 @@ def test_jobs_client_uses_predefined_iam_sqs_queues(
     assert options["predefined_queues"] == {
         "conversation": {"url": "https://sqs.example/conversation"},
         "document": {"url": "https://sqs.example/document"},
+        "document-index": {"url": "https://sqs.example/document-index"},
+        "document-enrichment": {"url": "https://sqs.example/document-enrichment"},
         "research": {"url": "https://sqs.example/research"},
         "maintenance": {"url": "https://sqs.example/maintenance"},
     }

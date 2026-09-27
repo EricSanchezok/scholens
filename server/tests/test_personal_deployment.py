@@ -75,7 +75,7 @@ def test_runtime_has_one_ec2_task_per_service_and_stop_before_replace() -> None:
     services = [
         r["Properties"] for r in resources.values() if r["Type"] == "AWS::ECS::Service"
     ]
-    assert len(services) == 6
+    assert len(services) == 8
     for service in services:
         assert service["LaunchType"] == "EC2"
         assert service["DesiredCount"] in (
@@ -92,7 +92,13 @@ def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat()
 ):
     template = renderer.render("runtime")
     assert template["Parameters"]["BackgroundMode"]["Default"] == "resident"
-    for name in ("Document", "Research", "Maintenance"):
+    for name in (
+        "Document",
+        "DocumentIndex",
+        "DocumentEnrichment",
+        "Research",
+        "Maintenance",
+    ):
         task = template["Resources"][name + "WorkerTaskDefinition"]["Properties"]
         assert "Cpu" not in task
         assert "Memory" not in task
@@ -106,6 +112,63 @@ def test_admitted_workers_use_container_bounds_and_do_not_change_resident_chat()
     chat = template["Resources"]["ConversationWorkerTaskDefinition"]["Properties"]
     assert "Cpu" not in chat
     assert "SCHOLENS_WORKER_ONE_SHOT" not in json.dumps(chat)
+
+
+def test_document_stages_have_independent_consumers_queues_and_task_roles() -> None:
+    resources = renderer.render("runtime")["Resources"]
+    foundation = renderer.render("foundation")["Resources"]
+    for prefix, queue in (
+        ("DocumentIndex", "document-index"),
+        ("DocumentEnrichment", "document-enrichment"),
+    ):
+        assert (
+            foundation[prefix + "Queue"]["Properties"]["QueueName"]
+            == "scholens-preview-" + queue
+        )
+        task = resources[prefix + "WorkerTaskDefinition"]["Properties"]
+        worker = task["ContainerDefinitions"][0]
+        assert "--queues=" + queue in worker["Command"]
+        assert worker["Name"] == queue + "-worker"
+        assert task["TaskRoleArn"] == {"Fn::GetAtt": [prefix + "WorkerTaskRole", "Arn"]}
+        role = resources[prefix + "WorkerTaskRole"]["Properties"]
+        statements = role["Policies"][0]["PolicyDocument"]["Statement"]
+        receives = [
+            s for s in statements if "sqs:ReceiveMessage" in s.get("Action", [])
+        ]
+        assert [s["Resource"] for s in receives] == [
+            {"Fn::ImportValue": "sanchezcloud-scholens-" + queue + "-queue-arn"}
+        ]
+        assert resources[prefix + "WorkerService"]["Properties"]["DesiredCount"] == {
+            "Fn::If": ["RunResidentBackground", 1, 0]
+        }
+
+
+def test_admission_grant_covers_all_five_exact_workers_and_queue_metrics():
+    import yaml
+
+    template = yaml.load(
+        (ROOT / "deploy/personal/background.yml").read_text(),
+        Loader=renderer.CloudFormationLoader,
+    )
+    statements = template["Resources"]["AdmissionGrant"]["Properties"][
+        "PolicyDocument"
+    ]["Statement"]
+    actions = {s["Action"]: s["Resource"] for s in statements}
+    names = {
+        "Document",
+        "DocumentIndex",
+        "DocumentEnrichment",
+        "Research",
+        "Maintenance",
+    }
+    for action, suffixes in (
+        ("ecs:RunTask", ("TaskArn",)),
+        ("iam:PassRole", ("TaskRoleArn", "ExecutionRoleArn")),
+        ("sqs:GetQueueAttributes", ("QueueArn",)),
+    ):
+        assert {r["Ref"] for r in actions[action]} == {
+            n + suffix for n in names for suffix in suffixes
+        }
 
 
 def test_personal_email_requires_explicit_cutover_opt_in() -> None:

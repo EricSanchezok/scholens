@@ -976,6 +976,9 @@ valid only for legacy jobs. The signature alone is not an execution lease.
 `DOCUMENT_PIPELINE_ENABLED` selects fenced deterministic PDF extraction for new
 imports. Canonical content becomes readable before independent `document_index`,
 `document_enrich` and `document_bibliography` jobs are transactionally dispatched.
+Indexing uses `document-index`; enrichment and bibliography use
+`document-enrichment`. The `document` consumer remains available for readable
+extraction and accepted legacy envelopes. Each queue has its own outbox budget.
 Repeated application uses durable idempotency keys. Optional stages cannot change
 the completed basic processing state. The parent result references stage job IDs
 and retains bounded audit fields, excluding duplicate body/page-map/AI payloads.

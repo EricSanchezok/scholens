@@ -337,8 +337,9 @@ that file.
 
 Production requires:
 
-- SQS through `CELERY_BROKER_URL=sqs://` and the three predefined
-  `SQS_DOCUMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
+- SQS through `CELERY_BROKER_URL=sqs://` and the five predefined
+  `SQS_DOCUMENT_QUEUE_URL`, `SQS_DOCUMENT_INDEX_QUEUE_URL`,
+  `SQS_DOCUMENT_ENRICHMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
   `SQS_MAINTENANCE_QUEUE_URL` values. The shared contract also defines
   `conversation`, but that queue is owned and consumed only by the Server-image
   Conversation worker; Jobs must never subscribe to it.

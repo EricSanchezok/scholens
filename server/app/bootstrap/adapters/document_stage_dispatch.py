@@ -42,7 +42,7 @@ def enqueue_document_bibliography(
             idempotency_key=f"document-bibliography:{actor.id}:{document.id}:{identity}:{digest[:16]}",
             payload={"content_digest": digest, "identity_digest": identity},
             task_name="hydrate_document_bibliography",
-            queue=JobQueue.DOCUMENT,
+            queue=JobQueue.DOCUMENT_ENRICHMENT,
             task_kwargs={
                 "callback_url": f"{get_webhook_base_url().rstrip('/')}/internal/v1/jobs/{job_id}/complete"
             },
@@ -100,7 +100,9 @@ def enqueue_document_stages(
                     idempotency_key=f"{kind.value}:{ingestion_job_id}",
                     payload=payload,
                     task_name=task_name,
-                    queue=JobQueue.DOCUMENT,
+                    queue=JobQueue.DOCUMENT_INDEX
+                    if kind is JobOperation.DOCUMENT_INDEX
+                    else JobQueue.DOCUMENT_ENRICHMENT,
                     task_kwargs=kwargs,
                     execution_replay="checkpoint_only"
                     if replay == "checkpoint_only"

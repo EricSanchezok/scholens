@@ -83,6 +83,117 @@ def test_registration_change_cannot_replace_or_delete_unrelated_resources():
             )
 
 
+def test_registration_expansion_only_adds_the_two_document_stage_registrations():
+    for name in ("DocumentIndexRegistration", "DocumentEnrichmentRegistration"):
+        change = {
+            "Changes": [
+                {
+                    "ResourceChange": {
+                        "Action": "Add",
+                        "LogicalResourceId": name,
+                        "Replacement": "False",
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValueError):
+            module.guard_registration_change(change)
+        module.guard_registration_change(change, expanding=True)
+    for name in ("AdmissionGrant", "ForeignRegistration"):
+        with pytest.raises(ValueError):
+            module.guard_registration_change(
+                {
+                    "Changes": [
+                        {
+                            "ResourceChange": {
+                                "Action": "Add",
+                                "LogicalResourceId": name,
+                            }
+                        }
+                    ]
+                },
+                expanding=True,
+            )
+
+
+def test_acknowledgement_accepts_the_existing_topology_before_expansion():
+    old = {name + "TaskArn": "task" for name in ("Document", "Research", "Maintenance")}
+    assert module.registration_names(old) == {
+        "scholens-document",
+        "scholens-research",
+        "scholens-maintenance",
+    }
+    new = old | {"DocumentIndexTaskArn": "index", "DocumentEnrichmentTaskArn": "enrich"}
+    assert module.registration_names(new) == module.NAMES
+    with pytest.raises(ValueError):
+        module.registration_names(old | {"DocumentIndexTaskArn": "index"})
+
+
+def test_first_stage_expansion_submits_new_template_only_while_paused():
+    from unittest.mock import MagicMock
+    from botocore.exceptions import ClientError
+
+    release = object.__new__(module.AdmissionRelease)
+    release.operation = "expand"
+    actual = {"Enabled": "false", "DocumentTaskArn": "old"}
+    overrides = {"Enabled": "false"}
+    for name in module.WORKERS:
+        overrides[name + "MemoryMiB"] = "1088"
+    for name in ("DocumentIndex", "DocumentEnrichment"):
+        for suffix in (
+            "TaskArn",
+            "TaskRoleArn",
+            "ExecutionRoleArn",
+            "QueueUrl",
+            "QueueArn",
+        ):
+            overrides[name + suffix] = name + suffix
+    planned = actual | overrides
+    release.stack = lambda _: {
+        "StackStatus": "UPDATE_COMPLETE",
+        "Parameters": [
+            {"ParameterKey": k, "ParameterValue": v} for k, v in actual.items()
+        ],
+    }
+    release.wait_stack = lambda _: None
+    release.cf = MagicMock()
+    release.cf.create_change_set.return_value = {"Id": "change"}
+    ready = {
+        "Status": "CREATE_COMPLETE",
+        "ExecutionStatus": "AVAILABLE",
+        "ChangeSetId": "change",
+        "Parameters": [
+            {"ParameterKey": k, "ParameterValue": v} for k, v in planned.items()
+        ],
+        "Changes": [
+            {
+                "ResourceChange": {
+                    "Action": "Add",
+                    "LogicalResourceId": "DocumentIndexRegistration",
+                }
+            }
+        ],
+    }
+    release.cf.describe_change_set.side_effect = [
+        ClientError(
+            {"Error": {"Code": "ValidationError", "Message": "does not exist"}},
+            "DescribeChangeSet",
+        ),
+        ready,
+    ]
+    release.change_background("revisions", overrides)
+    request = release.cf.create_change_set.call_args.kwargs
+    assert "DocumentEnrichmentRegistration:" in request["TemplateBody"]
+    assert "UsePreviousTemplate" not in request
+    assert {
+        p["ParameterKey"]: p["ParameterValue"] for p in request["Parameters"]
+    } == planned
+    release.cf.execute_change_set.assert_called_once_with(ChangeSetName="change")
+    actual["Enabled"] = "true"
+    with pytest.raises(ValueError, match="paused"):
+        release.change_background("revisions", overrides)
+
+
 def test_resume_after_ack_failure_does_not_repeat_runtime_or_pause_again():
     release = object.__new__(module.AdmissionRelease)
     release.arn = "change"

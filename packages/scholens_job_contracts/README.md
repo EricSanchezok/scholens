@@ -36,3 +36,9 @@ lives in `pdf_quality`, generated-object deletion payload rules live in
 `storage_cleanup`, and `queues` remains limited to queue identity. The package
 owns no parser model, broker, persistence, HTTP implementation, or product
 workflow code.
+
+`document`, `document-index`, and `document-enrichment` separate readable extraction,
+deterministic indexing, and optional metadata work. Jobs also consumes `research`
+and `maintenance`; only Server consumes `conversation`. Deploy all predefined SQS
+URLs and the matching consumers before enabling new stage producers. Existing
+accepted queue envelopes retain their original queue and task name.

@@ -9,12 +9,16 @@ def test_queue_contract_is_closed_and_string_compatible() -> None:
     assert JOB_QUEUE_NAMES == {
         JobQueue.CONVERSATION,
         JobQueue.DOCUMENT,
+        JobQueue.DOCUMENT_INDEX,
+        JobQueue.DOCUMENT_ENRICHMENT,
         JobQueue.RESEARCH,
         JobQueue.MAINTENANCE,
     }
     assert {str(queue) for queue in JOB_QUEUE_NAMES} == {
         "conversation",
         "document",
+        "document-index",
+        "document-enrichment",
         "research",
         "maintenance",
     }
@@ -23,6 +27,8 @@ def test_queue_contract_is_closed_and_string_compatible() -> None:
 def test_jobs_workers_do_not_consume_server_owned_conversations() -> None:
     assert JOBS_WORKER_QUEUE_NAMES == {
         JobQueue.DOCUMENT,
+        JobQueue.DOCUMENT_INDEX,
+        JobQueue.DOCUMENT_ENRICHMENT,
         JobQueue.RESEARCH,
         JobQueue.MAINTENANCE,
     }

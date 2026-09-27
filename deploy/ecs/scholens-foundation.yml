@@ -245,6 +245,26 @@ Resources:
     DeletionPolicy: RetainExceptOnCreate
     UpdateReplacePolicy: Retain
     Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt DocumentDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
+  DocumentIndexDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document-index-dlq, SqsManagedSseEnabled: true}
+  DocumentIndexQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document-index, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt DocumentIndexDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
+  DocumentEnrichmentDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document-enrichment-dlq, SqsManagedSseEnabled: true}
+  DocumentEnrichmentQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document-enrichment, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt DocumentEnrichmentDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
   ResearchDeadLetterQueue:
     Type: AWS::SQS::Queue
     DeletionPolicy: RetainExceptOnCreate
@@ -415,6 +435,10 @@ Outputs:
   ConversationQueueArn: {Value: !GetAtt ConversationQueue.Arn, Export: {Name: sanchezcloud-scholens-conversation-queue-arn}}
   DocumentQueueUrl: {Value: !Ref DocumentQueue, Export: {Name: sanchezcloud-scholens-document-queue-url}}
   DocumentQueueArn: {Value: !GetAtt DocumentQueue.Arn, Export: {Name: sanchezcloud-scholens-document-queue-arn}}
+  DocumentIndexQueueUrl: {Value: !Ref DocumentIndexQueue, Export: {Name: sanchezcloud-scholens-document-index-queue-url}}
+  DocumentIndexQueueArn: {Value: !GetAtt DocumentIndexQueue.Arn, Export: {Name: sanchezcloud-scholens-document-index-queue-arn}}
+  DocumentEnrichmentQueueUrl: {Value: !Ref DocumentEnrichmentQueue, Export: {Name: sanchezcloud-scholens-document-enrichment-queue-url}}
+  DocumentEnrichmentQueueArn: {Value: !GetAtt DocumentEnrichmentQueue.Arn, Export: {Name: sanchezcloud-scholens-document-enrichment-queue-arn}}
   ResearchQueueUrl: {Value: !Ref ResearchQueue, Export: {Name: sanchezcloud-scholens-research-queue-url}}
   ResearchQueueArn: {Value: !GetAtt ResearchQueue.Arn, Export: {Name: sanchezcloud-scholens-research-queue-arn}}
   MaintenanceQueueUrl: {Value: !Ref MaintenanceQueue, Export: {Name: sanchezcloud-scholens-maintenance-queue-url}}

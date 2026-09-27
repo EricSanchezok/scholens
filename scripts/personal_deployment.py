@@ -146,7 +146,13 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
             "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sanchezcloud/personal/background/scholens-"
             + name
         }
-        for name in ("document", "research", "maintenance")
+        for name in (
+            "document",
+            "document-index",
+            "document-enrichment",
+            "research",
+            "maintenance",
+        )
     ]
     region = {"StringEquals": {"aws:RequestedRegion": {"Ref": "AWS::Region"}}}
     template["Resources"]["ProductionDeployRole"]["Properties"]["Policies"].append(
@@ -236,8 +242,8 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
         }
     ]
 
-    # The conversation process has its own role, with the same API capability boundary.
-    def add_conversation_role(value: Any) -> None:
+    # Each derived process has an independent, explicitly allowlisted task role.
+    def add_process_roles(value: Any) -> None:
         if isinstance(value, dict):
             resources = value.get("Resource")
             if isinstance(resources, list):
@@ -253,13 +259,20 @@ def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
                                 )
                             }
                         )
+                    if isinstance(arn, str) and arn.endswith(
+                        ":role/SanchezCloudScholensDocumentWorkerTaskRole"
+                    ):
+                        resources.extend(
+                            {"Fn::Sub": arn.replace("DocumentWorker", stage + "Worker")}
+                            for stage in ("DocumentIndex", "DocumentEnrichment")
+                        )
             for child in value.values():
-                add_conversation_role(child)
+                add_process_roles(child)
         elif isinstance(value, list):
             for child in value:
-                add_conversation_role(child)
+                add_process_roles(child)
 
-    add_conversation_role(template)
+    add_process_roles(template)
     return template
 
 
@@ -268,11 +281,61 @@ LIMITS = {
     "api": (128, 768, 1536),
     "conversation-worker": (128, 512, 1536),
     "document-worker": (256, 768, 2560),
+    "document-index-worker": (128, 384, 1024),
+    "document-enrichment-worker": (128, 384, 1024),
     "research-worker": (128, 384, 768),
     "maintenance-worker": (64, 256, 512),
     "migration": (128, 256, 512),
     "scheduler": (64, 128, 256),
 }
+
+
+def document_stage_resources(resources: dict[str, Any]) -> None:
+    """Reuse the canonical worker capabilities with a single-queue IAM boundary."""
+    for prefix, queue in (
+        ("DocumentIndex", "document-index"),
+        ("DocumentEnrichment", "document-enrichment"),
+    ):
+        role = copy.deepcopy(resources["DocumentWorkerTaskRole"])
+        role["Properties"]["RoleName"] = (
+            "SanchezCloudScholens" + prefix + "WorkerTaskRole"
+        )
+        policy = role["Properties"]["Policies"][0]
+        policy["PolicyName"] = prefix + "WorkerDataPlane"
+        for statement in policy["PolicyDocument"]["Statement"]:
+            if "sqs:ReceiveMessage" in statement.get("Action", []):
+                statement["Resource"] = {
+                    "Fn::ImportValue": "sanchezcloud-scholens-" + queue + "-queue-arn"
+                }
+        resources[prefix + "WorkerTaskRole"] = role
+        log = copy.deepcopy(resources["DocumentLogGroup"])
+        log["Properties"]["LogGroupName"] = (
+            "/sanchezcloud/scholens/" + queue + "-worker"
+        )
+        resources[prefix + "LogGroup"] = log
+        task = copy.deepcopy(resources["DocumentWorkerTaskDefinition"])
+        props = task["Properties"]
+        props["Family"] = "sanchezcloud-scholens-" + queue + "-worker"
+        props["TaskRoleArn"] = {"Fn::GetAtt": [prefix + "WorkerTaskRole", "Arn"]}
+        worker = props["ContainerDefinitions"][0]
+        worker["Name"] = queue + "-worker"
+        worker["Command"] = [
+            "--queues=" + queue if item == "--queues=document" else item
+            for item in worker["Command"]
+        ]
+        worker["LogConfiguration"]["Options"].update(
+            {
+                "awslogs-group": {"Ref": prefix + "LogGroup"},
+                "awslogs-stream-prefix": queue,
+            }
+        )
+        resources[prefix + "WorkerTaskDefinition"] = task
+        service = copy.deepcopy(resources["DocumentWorkerService"])
+        service["Properties"]["ServiceName"] = "scholens-" + queue + "-worker"
+        service["Properties"]["TaskDefinition"] = {
+            "Ref": prefix + "WorkerTaskDefinition"
+        }
+        resources[prefix + "WorkerService"] = service
 
 
 def runtime(template: dict[str, Any]) -> dict[str, Any]:
@@ -288,6 +351,7 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
         if v["Type"] in kept_types
         and k not in {"SchedulerInvocationRole", "MetricsLogGroup", "WafLogGroup"}
     }
+    document_stage_resources(resources)
     resources["ConversationWorkerTaskRole"] = copy.deepcopy(resources["ApiTaskRole"])
     resources["ConversationWorkerTaskRole"]["Properties"]["RoleName"] = (
         "SanchezCloudScholensConversationWorkerTaskRole"
@@ -318,7 +382,13 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             {"Fn::Not": [{"Condition": "AdmittedBackground"}]},
         ]
     }
-    background = {"document-worker", "research-worker", "maintenance-worker"}
+    background = {
+        "document-worker",
+        "document-index-worker",
+        "document-enrichment-worker",
+        "research-worker",
+        "maintenance-worker",
+    }
     template["Parameters"]["EmailDeliveryEnabled"] = {
         "Type": "String",
         "Default": "false",
@@ -351,6 +421,8 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
             props["DesiredCount"] = {"Fn::If": ["RunApplication", 1, 0]}
             if name in {
                 "DocumentWorkerService",
+                "DocumentIndexWorkerService",
+                "DocumentEnrichmentWorkerService",
                 "ResearchWorkerService",
                 "MaintenanceWorkerService",
             }:
@@ -435,7 +507,11 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     env["SCHOLENS_WORKER_ONE_SHOT"] = {
                         "Fn::If": ["AdmittedBackground", "1", "0"]
                     }
-                if container["Name"] == "document-worker":
+                if container["Name"] in {
+                    "document-worker",
+                    "document-index-worker",
+                    "document-enrichment-worker",
+                }:
                     env["SCHOLENS_WORKER_MAX_TASKS"] = "5"
                     env["SCHOLENS_WORKER_MAX_SECONDS"] = "300"
                     env["SCHOLENS_EMBEDDING_THREADS"] = "1"

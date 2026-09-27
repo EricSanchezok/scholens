@@ -160,7 +160,8 @@ credentials and database passwords never appear in workflow inputs or artifacts.
 
 ### Queue alerts
 
-Deploy `queue-monitoring.yml` once for each conversation, document, research, and
+Deploy `queue-monitoring.yml` once for each conversation, document, document-index,
+document-enrichment, research, and
 maintenance queue, supplying its queue/DLQ names from the destination foundation and
 the confirmed shared alert topic from Platform. Each pair adds two standard alarms:
 a visible message older than the configured waiting budget for three minutes, and any
@@ -172,7 +173,7 @@ These alerts report delay/failure and never scale instances or replay failed wor
 
 [ADR 0054](../../docs/decisions/0054-admitted-background-workers.md) owns the worker
 lifecycle. `BackgroundMode=resident` preserves the previous deployment. The reviewed
-`admitted` mode scales only document/research/maintenance services to zero and enables
+`admitted` mode scales document/document-index/document-enrichment/research/maintenance services to zero and enables
 one-shot task definitions with explicit container hard memory bounds and soft placement reservations.
 Background CPU shares may use idle host CPU; the document embedder uses one thread. Deploy
 `background.yml` with task revisions, role ARNs and queue outputs from this product;
@@ -194,13 +195,30 @@ The historical `personal-preview` name remains for its configured OIDC identity.
 Application apply automatically disables only this product's background registrations,
 requires the live controller to acknowledge their exact SSM versions, and waits up to
 20 minutes for actual task termination, including STOPPING tasks. It then applies the
-runtime change, refreshes the three task revisions and RunTask/PassRole grant together,
+runtime change, refreshes the five task revisions and RunTask/PassRole grant together,
 restores the preceding enabled flag, and waits for acknowledgement again. Other
 products and their schedules stay enabled. Durable checkpoints under the release
 bucket's `cloudformation/personal/releases/` prefix allow the same operation to resume
 without repeating completed runtime or registration updates. A timeout leaves admission
 paused; it never kills a user's task. Failed CloudFormation updates require investigation
 or a newly reviewed compatible rollback before restoring the recorded enabled flag.
+
+The first independent-stage rollout expands the retained foundation with two queues
+and DLQs, then the bootstrap role allowlists with the two exact worker roles and SSM
+parameter ARNs. Do this before deploying the application. The renderer derives stage
+task definitions from the canonical document worker, but gives each a separate role,
+log group, single-queue command and bounded lifecycle. Index and enrichment each have
+a 1,024 MiB container ceiling (1,088 MiB including initialization), subject to measured
+mixed-load acceptance before producer activation. No instance or managed compute is added.
+
+Release coordination acknowledges the existing three registrations before the first
+drain. After the runtime converges, it expands `background.yml` while disabled, adding
+only the two owned registrations. Subsequent releases update all five. Each registration's
+memory parameter must equal the actual sum of its task's container hard limits;
+RunTask/PassRole permissions and revisions change in the same CloudFormation update.
+Activate the staged producer only after five-registration acknowledgement and queue
+monitoring are verified. Rollback must first stop new-stage production and finish all
+accepted stage work; do not pair pending new tasks with an image that cannot execute them.
 
 Plans bind the exact manifest bytes and control SHA, expire after 24 hours before
 execution, and reject intervening runtime changes. Rollback validates manifests against

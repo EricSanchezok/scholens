@@ -1982,6 +1982,8 @@ def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
     assert queues["Resource"] == [
         {"Fn::ImportValue": "sanchezcloud-scholens-conversation-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-document-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-document-index-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-document-enrichment-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-research-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-maintenance-queue-arn"},
     ]
