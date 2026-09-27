@@ -141,3 +141,46 @@ def test_queue_budgets_are_independent_and_rollback_keeps_pending_jobs(
             )
             == 8
         )
+
+
+def test_backlog_snapshot_counts_unpublished_and_broker_pending_jobs(dispatch_database):
+    from app.modules.jobs.infrastructure.backlog_observation import pending_backlog
+
+    engine, users = dispatch_database
+    ids = enqueue(engine, users[:1], count=5)
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        for index, job_id in enumerate(ids):
+            job = db.get(DurableJob, job_id)
+            job.created_at = now - timedelta(seconds=(index + 1) * 30)
+        # Running and terminal work are not waiting; SQS status is not the
+        # authority for the three remaining accepted jobs.
+        db.get(DurableJob, ids[3]).status = "running"
+        db.get(DurableJob, ids[4]).status = "cancelled"
+        db.scalar(
+            select(JobDispatch).where(JobDispatch.job_id == ids[1])
+        ).status = "published"
+        db.scalar(
+            select(JobDispatch).where(JobDispatch.job_id == ids[2])
+        ).status = "publishing"
+    with Session(engine) as db:
+        snapshot = {row.queue: row for row in pending_backlog(db, now=now)}
+    assert len(snapshot) == 6
+    assert snapshot["document"].pending_jobs == 3
+    assert snapshot["document"].oldest_pending_seconds == 90
+    assert snapshot["document-index"].pending_jobs == 0
+    assert snapshot["document-index"].oldest_pending_seconds == 0
+
+
+def test_backlog_age_does_not_become_negative(dispatch_database):
+    from app.modules.jobs.infrastructure.backlog_observation import pending_backlog
+
+    engine, users = dispatch_database
+    ids = enqueue(engine, users[:1], count=1)
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        db.get(DurableJob, ids[0]).created_at = now + timedelta(seconds=10)
+    with Session(engine) as db:
+        snapshot = {row.queue: row for row in pending_backlog(db, now=now)}
+    assert snapshot["document"].pending_jobs == 1
+    assert snapshot["document"].oldest_pending_seconds == 0

@@ -344,3 +344,201 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions:
       - Ref: AlertTopicArn
+  DurablePendingJobsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "jobs.outbox.backlog" && ( $.queue = "conversation" || $.queue
+        = "document" || $.queue = "document-index" || $.queue = "document-enrichment" || $.queue
+        = "research" || $.queue = "maintenance" ) && $.pending_jobs >= 0 }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: DurablePendingJobs
+        MetricValue: $.pending_jobs
+        Unit: Count
+        Dimensions:
+        - Key: Queue
+          Value: $.queue
+  DurableOldestPendingSecondsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "jobs.outbox.backlog" && ( $.queue = "conversation" || $.queue
+        = "document" || $.queue = "document-index" || $.queue = "document-enrichment" || $.queue
+        = "research" || $.queue = "maintenance" ) && $.oldest_pending_seconds >= 0 }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: DurableOldestPendingSeconds
+        MetricValue: $.oldest_pending_seconds
+        Unit: Seconds
+        Dimensions:
+        - Key: Queue
+          Value: $.queue
+  DurableQueueObservationsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "jobs.outbox.backlog_observed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: DurableQueueObservations
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  DurableQueueObservationFailuresFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      FilterPattern: '{ $.event = "jobs.outbox.backlog_observation_failed" }'
+      MetricTransformations:
+      - MetricNamespace: Scholens/Personal
+        MetricName: DurableQueueObservationFailures
+        MetricValue: '1'
+        Unit: Count
+        DefaultValue: 0
+  ConversationDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted conversation work is waiting, including unpublished database
+        backlog. Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: conversation
+      Threshold: 60
+  DocumentDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted document work is waiting, including unpublished database backlog.
+        Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: document
+      Threshold: 120
+  DocumentIndexDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted document-index work is waiting, including unpublished database
+        backlog. Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: document-index
+      Threshold: 1800
+  DocumentEnrichmentDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted document-enrichment work is waiting, including unpublished database
+        backlog. Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: document-enrichment
+      Threshold: 1800
+  ResearchDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted research work is waiting, including unpublished database backlog.
+        Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: research
+      Threshold: 1800
+  MaintenanceDurableWaitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Accepted maintenance work is waiting, including unpublished database backlog.
+        Inspect durable job state and admission; SQS emptiness is not proof of recovery.
+      Namespace: Scholens/Personal
+      MetricName: DurableOldestPendingSeconds
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Dimensions:
+      - Name: Queue
+        Value: maintenance
+      Threshold: 1800
+  DurableQueueObservationMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: No successful durable backlog snapshot for five consecutive minutes. Check
+        the outbox dispatcher, database and log delivery.
+      Namespace: Scholens/Personal
+      MetricName: DurableQueueObservations
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Threshold: 1
+  DurableQueueObservationFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Repeated durable backlog observation failures; no synthetic empty-queue
+        observation is emitted on failure.
+      Namespace: Scholens/Personal
+      MetricName: DurableQueueObservationFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Ref: AlertTopicArn
+      Threshold: 3

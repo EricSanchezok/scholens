@@ -52,6 +52,7 @@ def test_personal_logs_cover_the_thirty_day_contract_observation_window():
 
 def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
     import yaml
+    from scholens_job_contracts import JOB_QUEUE_NAMES
 
     template = yaml.load(
         (ROOT / "deploy/personal/application-monitoring.yml").read_text(),
@@ -75,23 +76,60 @@ def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
             assert "$.event" in props["FilterPattern"]
             for metric in props["MetricTransformations"]:
                 assert metric["MetricNamespace"] == "Scholens/Personal"
-                assert "Dimensions" not in metric
                 metrics.add(metric["MetricName"])
-                if metric["Unit"] == "Milliseconds":
+                if metric["MetricName"] in {
+                    "DurablePendingJobs",
+                    "DurableOldestPendingSeconds",
+                }:
+                    assert metric["Dimensions"] == [
+                        {"Key": "Queue", "Value": "$.queue"}
+                    ]
+                    assert "DefaultValue" not in metric
+                    for queue in JOB_QUEUE_NAMES:
+                        assert f'$.queue = "{queue}"' in props["FilterPattern"]
+                    assert metric["MetricValue"] in {
+                        "$.pending_jobs",
+                        "$.oldest_pending_seconds",
+                    }
+                elif metric["Unit"] == "Milliseconds":
+                    assert "Dimensions" not in metric
                     assert metric["MetricValue"] == "$.duration_ms"
                     assert "$.duration_ms >= 0" in props["FilterPattern"]
                     assert "DefaultValue" not in metric
                 else:
+                    assert "Dimensions" not in metric
                     assert metric["MetricValue"] == "1"
                     assert metric["DefaultValue"] == 0
         else:
             assert props["AlarmActions"] == [{"Ref": "AlertTopicArn"}]
-            if resource is resources["HttpHealthMissingAlarm"]:
+            if resource in (
+                resources["HttpHealthMissingAlarm"],
+                resources.get("DurableQueueObservationMissingAlarm"),
+            ):
                 assert props["TreatMissingData"] == "breaching"
                 assert props["EvaluationPeriods"] * props["Period"] >= 300
             else:
                 assert props["TreatMissingData"] == "notBreaching"
-    assert len(metrics) <= 12
+    assert len(metrics) <= 16
+    assert {
+        "DurablePendingJobs",
+        "DurableOldestPendingSeconds",
+        "DurableQueueObservations",
+        "DurableQueueObservationFailures",
+    } <= metrics
+    waiting_alarms = [
+        r["Properties"]
+        for r in resources.values()
+        if r["Type"] == "AWS::CloudWatch::Alarm"
+        and r["Properties"].get("MetricName") == "DurableOldestPendingSeconds"
+    ]
+    assert {a["Dimensions"][0]["Value"] for a in waiting_alarms} == set(JOB_QUEUE_NAMES)
+    for alarm in waiting_alarms:
+        queue = alarm["Dimensions"][0]["Value"]
+        assert alarm["Threshold"] == {"document": 120, "conversation": 60}.get(
+            queue, 1800
+        )
+    assert "DurableQueueObservationMissingAlarm" in resources
     assert (
         resources["ResultReceiptLatencyAlarm"]["Properties"][
             "EvaluateLowSampleCountPercentile"
