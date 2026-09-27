@@ -1043,6 +1043,10 @@ PostgreSQL advisory lock serializes reservations across API processes; broker I/
 runs after commit. Terminal or cancelled jobs release their slots, and expired
 publisher claims reuse the original job without spending another slot. The cursor
 stores only ordering state and never owns completion or broker acknowledgement.
+An uncached scalar probe identifies queues with due pending work before building
+requester plans. An empty outbox needs only the reservation lock and this probe;
+it does not read or create six idle cursors. Newly accepted work remains visible
+to the next dispatcher wakeup or normal poll, with unchanged lease recovery.
 
 Migration `2026_09_27_1400` adds cursors and dispatch indexes without rewriting
 accepted jobs. Enabling the flag with an existing oversized broker backlog stops

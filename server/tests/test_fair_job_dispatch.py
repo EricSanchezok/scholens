@@ -6,7 +6,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import create_engine, delete, event, select, text
 from sqlalchemy.orm import Session
 
 from app.database import models as _models  # noqa: F401
@@ -72,6 +72,42 @@ def reserve(engine):
         return job_repository.reserve_dispatches(
             db, limit=20, lease=timedelta(seconds=30), fair=True
         )
+
+
+def test_empty_outbox_avoids_per_queue_planning_and_sees_new_work(dispatch_database):
+    engine, users = dispatch_database
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        assert reserve(engine) == ()
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    # One reservation lock and one bounded queue probe. No empty-queue cursor
+    # hydration or repeated candidate plan; neither the result nor time is cached.
+    assert len(statements) <= 2
+    enqueue(engine, users[:1], count=1)
+    assert len(reserve(engine)) == 1
+
+
+def test_queue_probe_preserves_delayed_and_expired_publisher_semantics(
+    dispatch_database,
+):
+    engine, users = dispatch_database
+    ids = enqueue(engine, users[:1], count=1)
+    now = datetime.now(UTC)
+    with Session(engine) as db, db.begin():
+        dispatch = db.scalar(select(JobDispatch).where(JobDispatch.job_id == ids[0]))
+        dispatch.status = "publishing"
+        dispatch.available_at = now + timedelta(seconds=60)
+    assert reserve(engine) == ()
+    with Session(engine) as db, db.begin():
+        dispatch = db.scalar(select(JobDispatch).where(JobDispatch.job_id == ids[0]))
+        dispatch.available_at = now - timedelta(seconds=1)
+    assert [row.job_id for row in reserve(engine)] == ids
 
 
 def test_burst_is_bounded_and_new_requester_gets_the_next_turn(dispatch_database):
