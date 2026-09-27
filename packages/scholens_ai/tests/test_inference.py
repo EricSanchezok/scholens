@@ -97,7 +97,7 @@ def test_query_overtakes_index_microbatches_and_only_one_model_call_runs():
         assert model.peak == 1
         assert model.calls[0][0] == "passage"
         assert model.calls[1] == ("query", ("urgent",))
-        assert all(len(texts) <= 2 for _kind, texts in model.calls)
+        assert all(len(texts) == 1 for _kind, texts in model.calls)
 
     asyncio.run(scenario())
 
@@ -118,6 +118,34 @@ def test_timed_out_client_drops_queued_work_and_never_starts_local_fallback():
             model.release.set()
             await passages
         assert all(kind != "query" for kind, _texts in model.calls)
+
+    asyncio.run(scenario())
+
+
+def test_query_burst_gives_waiting_index_work_a_bounded_turn():
+    async def scenario():
+        model = Model(blocking=True)
+        async with running(model) as (path, service):
+            client = SocketTextEmbedder(path, revision=model.revision, query_timeout=2)
+            first = asyncio.create_task(asyncio.to_thread(client.embed_query, "first"))
+            assert await asyncio.to_thread(model.started.wait, 1)
+            queries = [
+                asyncio.create_task(asyncio.to_thread(client.embed_query, f"query-{i}"))
+                for i in range(12)
+            ]
+            index = asyncio.create_task(
+                asyncio.to_thread(client.embed_passages, ["index"])
+            )
+            async with asyncio.timeout(1):
+                while len(service._queries) != 12 or not service._passages:
+                    await asyncio.sleep(0.001)
+            model.release.set()
+            await asyncio.gather(first, index, *queries)
+        index_position = next(
+            i for i, (kind, _) in enumerate(model.calls) if kind == "passage"
+        )
+        assert index_position <= 8
+        assert model.peak == 1
 
     asyncio.run(scenario())
 

@@ -26,7 +26,7 @@ from scholens_ai.inference_protocol import (
 )
 
 MAX_CONNECTIONS = 64
-INDEX_MICROBATCH = 2
+INDEX_MICROBATCH = 1
 QUERY_BURST = 8
 logger = logging.getLogger(__name__)
 

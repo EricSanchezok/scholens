@@ -25,7 +25,11 @@ projection rollout selects INT8.
 
 Use one private Unix-socket inference process per host, with an exclusive owner
 lock, bounded wire data, a single model thread, query priority, and bounded index
-microbatches. A client deadline yields lexical search; it must never create a
+microbatches of one text. On the existing ARM host with a 0.75-CPU cap, concurrent
+long-input indexing and 120 queries produced 64 query deadline fallbacks with
+two-text batches, versus four with single-text batches. All index requests
+completed in both runs. This bounds the non-preemptible work instead of extending
+the interactive deadline. A client deadline yields lexical search; it must never create a
 fallback model in the API process. Prepare query vectors before database work,
 and require query digest/model revision agreement before semantic SQL ranking.
 

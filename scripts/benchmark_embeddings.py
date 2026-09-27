@@ -42,6 +42,7 @@ def main() -> None:
         "--strategy", choices=("legacy", "tokens", "both"), default="both"
     )
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--token-batch-size", type=int, choices=(1, 2), default=1)
     args = parser.parse_args()
     if not 1 <= args.repeats <= 10:
         parser.error("--repeats must be between 1 and 10")
@@ -75,7 +76,10 @@ def main() -> None:
     raw_content = "\n".join(doc["text"] for doc in corpus["documents"]) * 8
     strategies = {
         "legacy": (build_document_passages(raw_content), 8),
-        "tokens": (tuple(iter_token_passages(raw_content, tokenizer)), 2),
+        "tokens": (
+            tuple(iter_token_passages(raw_content, tokenizer)),
+            args.token_batch_size,
+        ),
     }
     benchmarks = {}
     for name, (chunks, batch_size) in strategies.items():
@@ -100,6 +104,12 @@ def main() -> None:
         }
     peak_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     peak_mib = peak_rss / (1024 * 1024 if sys.platform == "darwin" else 1024)
+    cgroup_peak_path = Path("/sys/fs/cgroup/memory.peak")
+    cgroup_peak_mib = (
+        int(cgroup_peak_path.read_text()) / (1024 * 1024)
+        if cgroup_peak_path.exists()
+        else None
+    )
     result = {
         "fixture_description": corpus["description"],
         "corpus_sha256": hashlib.sha256(args.corpus.read_bytes()).hexdigest(),
@@ -120,6 +130,7 @@ def main() -> None:
         "recall10": float(np.mean(recall)),
         "ndcg10": float(np.mean(ndcg)),
         "peak_rss_mib": peak_mib,
+        "cgroup_peak_mib": cgroup_peak_mib,
         "index": benchmarks,
         "document_vectors": documents,
         "query_vectors": queries,
