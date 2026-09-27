@@ -53,8 +53,7 @@ async def _httpx_async_request_hook(span: Any, request: Any) -> None:
 
 
 def _fastapi_request_hook(span: Any, scope: dict[str, Any]) -> None:
-    route = getattr(scope.get("route"), "path", None)
-    sanitized_path = str(route or safe_http_route_template(scope))
+    sanitized_path = safe_http_route_template(scope)
     scheme = str(scope.get("scheme", "http"))
     server = scope.get("server")
     authority = ""

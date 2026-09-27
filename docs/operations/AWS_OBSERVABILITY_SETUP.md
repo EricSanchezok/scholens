@@ -17,6 +17,16 @@ exporter process or additional application permissions. Metric dimensions never
 contain users, jobs, documents, model revisions, or request references. These
 custom metrics and six alarms have CloudWatch charges; they add no host tier.
 
+HTTP completion logs, metrics and matched-route spans use the complete registered
+route template, including every router prefix and named parameter. FastAPI 0.138's
+public route-context iterator supplies those templates; the leaf route's `path`
+alone can omit `/api/v1` or `/internal/v1`. The HTTP adapter compiles a per-application
+catalog once after route composition, disambiguates repeated router inclusions by
+the matched path, and removes an ASGI deployment root before matching. The catalog
+stores no request paths or identities. Reading-activity suppression remains in
+force. Verify nested success, error and method-rejected routes when upgrading the
+framework, since losing a prefix can silently stop receipt-latency samples.
+
 | Signal | Source and interpretation |
 |---|---|
 | `HttpRequests`, `HttpServerErrors`, `HttpStreamFailures` | Logged HTTP completions; privacy-suppressed reading endpoints are not included. Counts are not a universal request denominator. |
