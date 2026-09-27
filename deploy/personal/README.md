@@ -61,7 +61,7 @@ soft memory and hard memory limits are explicit. Deployments stop the old task b
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
 short product outage to avoid static-port conflicts and doubled memory use.
 
-The API receives 512 CPU shares and the inference owner 16. These are relative
+The API receives 384 CPU shares and the inference owner 16. These are relative
 weights, not hard CPU quotas: an otherwise idle host can still compute at full
 speed, while foreground requests win contention with sustained indexing. ECS
 also schedules each task through a parent cgroup; inspect that parent's actual
@@ -70,6 +70,19 @@ inside its task does not establish priority across tasks. Memory ceilings and
 admission reserves remain independent. The controller must still verify remaining
 ECS CPU and physical memory before every background launch; shares do not grant
 capacity to exceed either placement budget.
+
+With admission enabled and shared inference running, Scholens reserves 592 CPU
+units across its four resident services. Deployment tests cap this total at 640
+of the shared host's 2,048 units, retain 896 units for other resident services,
+and preserve one 512-unit background slot. Count every container, including
+initializers, and use task-level reservations when present. The background slot
+must fit another product's registered workers as well as Scholens workers; a
+service's temporary deployment gap must never be counted as extra capacity.
+Before applying a resource change, inventory the live desired services and all
+enabled registrations against the actual host capacity. Increasing either
+resident budgets or background concurrency requires a new shared capacity
+review and foreground latency acceptance. Platform blocks admission while online
+services are deploying; that guard complements this steady-state budget.
 
 The API and conversation worker have 1,536 MiB hard limits so local semantic
 embedding initialization fits alongside application imports. The document
