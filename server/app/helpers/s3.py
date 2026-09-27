@@ -6,6 +6,7 @@ ephemeral and are never persisted in PostgreSQL.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import Iterable
@@ -19,6 +20,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from scholens_observability import add_counter
+from scholens_storage import AsyncS3Storage
 
 if TYPE_CHECKING:
     from types_boto3_s3 import S3Client
@@ -117,6 +119,9 @@ class S3Service:
             region_name=AWS_REGION,
             config=Config(
                 signature_version="s3v4",
+                connect_timeout=5,
+                read_timeout=10,
+                retries={"mode": "standard", "total_max_attempts": 2},
                 s3={"addressing_style": AWS_S3_ADDRESSING_STYLE},
             ),
         )
@@ -259,64 +264,27 @@ class S3Service:
         return failed
 
     def download_bytes(self, object_key: str) -> bytes:
-        try:
-            response = self.s3_client.get_object(
-                Bucket=self._require_bucket(),
-                Key=object_key,
-            )
-            body = response.get("Body")
-            if body is None:
-                raise RuntimeError("s3_object_body_missing")
-            try:
-                data = body.read()
-                if not isinstance(data, bytes):
-                    raise TypeError("s3_object_body_invalid")
-                return data
-            finally:
-                body.close()
-        except ClientError as exc:
-            logger.error("s3.object.download_failed", extra=_client_error_fields(exc))
-            raise RuntimeError("s3_download_failed") from exc
+        return self.download_bounded_bytes(object_key, max_bytes=64 * 1024 * 1024)
+
+    def _transfers(self) -> AsyncS3Storage:
+        return AsyncS3Storage(
+            bucket=self._require_bucket(),
+            region=AWS_REGION,
+            addressing_style=AWS_S3_ADDRESSING_STYLE,
+        )
 
     def download_bounded_bytes(self, object_key: str, *, max_bytes: int) -> bytes:
-        """Bound the GET stream itself, even if an object changes after HEAD."""
-        if max_bytes < 1:
-            raise ValueError("Object byte bound must be positive")
-        response = self.s3_client.get_object(
-            Bucket=self._require_bucket(),
-            Key=object_key,
-        )
-        body = response["Body"]
-        try:
-            data = body.read(max_bytes + 1)
-            if len(data) > max_bytes:
-                raise ValueError("Object exceeds the accepted byte bound")
-            return data
-        finally:
-            body.close()
+        """Synchronous worker-thread adapter over cancellable finite network I/O."""
+        return asyncio.run(self._transfers().read(object_key, max_bytes=max_bytes))
 
-    def delete_job_result_artifacts(self, job_id: UUID) -> bool:
-        """One bounded page per owned namespace; never accept caller-supplied keys."""
-        remaining = False
-        for namespace in ("results", "checkpoints"):
-            prefix = f"jobs/{namespace}/{UUID(str(job_id))}/"
-            page = self.s3_client.list_objects_v2(
-                Bucket=self._require_bucket(), Prefix=prefix, MaxKeys=100
+    async def delete_job_result_artifacts(self, job_id: UUID) -> bool:
+        """One finite page per owned namespace; never accept caller-supplied keys."""
+        return await self._transfers().delete_prefix_pages(
+            tuple(
+                f"jobs/{namespace}/{UUID(str(job_id))}/"
+                for namespace in ("results", "checkpoints")
             )
-            keys = [
-                entry["Key"] for entry in page.get("Contents", []) if "Key" in entry
-            ]
-            if any(not key.startswith(prefix) for key in keys):
-                raise ValueError("job_artifact_namespace_mismatch")
-            if keys:
-                response = self.s3_client.delete_objects(
-                    Bucket=self._require_bucket(),
-                    Delete={"Objects": [{"Key": key} for key in keys], "Quiet": True},
-                )
-                if response.get("Errors"):
-                    raise RuntimeError("job_artifact_deletion_failed")
-            remaining = remaining or bool(page.get("IsTruncated"))
-        return not remaining
+        )
 
     def object_size_bytes(self, object_key: str) -> int:
         try:
@@ -373,28 +341,14 @@ class S3Service:
     ) -> bytes:
         """Read the exact HEAD-validated object version through a hard byte limit."""
         try:
-            if metadata.version_id is not None:
-                response = self.s3_client.get_object(
-                    Bucket=self._require_bucket(),
-                    Key=object_key,
-                    IfMatch=metadata.etag,
-                    VersionId=metadata.version_id,
+            return asyncio.run(
+                self._transfers().read(
+                    object_key,
+                    max_bytes=max_bytes,
+                    etag=metadata.etag,
+                    version_id=metadata.version_id,
                 )
-            else:
-                response = self.s3_client.get_object(
-                    Bucket=self._require_bucket(),
-                    Key=object_key,
-                    IfMatch=metadata.etag,
-                )
-            body = response.get("Body")
-            if body is None:
-                raise RuntimeError("s3_object_body_missing")
-            data = body.read(max_bytes + 1)
-            if not isinstance(data, bytes):
-                raise TypeError("s3_object_body_invalid")
-            if len(data) > max_bytes:
-                raise RuntimeError("s3_staging_object_too_large")
-            return data
+            )
         except ClientError as exc:
             logger.error(
                 "s3.staging_object.download_failed",

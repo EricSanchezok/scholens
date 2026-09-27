@@ -33,6 +33,7 @@ class PackageSpec:
 
 
 PACKAGE_SPECS = (
+    PackageSpec("scholens_storage", "scholens-storage", "scholens_storage"),
     PackageSpec("scholens_ai", "scholens-ai", "scholens_ai"),
     PackageSpec(
         "scholens_job_contracts",

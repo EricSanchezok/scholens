@@ -51,7 +51,10 @@ provider outcome instead of calling the provider again. Legacy task envelopes
 continue to use their existing transport. Producer activation follows schema,
 consumer, cleanup, and staged-pipeline acceptance; this argument alone does not
 enable production dispatch. S3 readers always close their response stream, and
-result/checkpoint reads have explicit byte ceilings.
+result/checkpoint reads have explicit byte ceilings and a 45-second total
+network deadline through `scholens_storage`. Source downloads stream to disk
+with a 180-second total deadline and remove partial files on failure. Cancellation
+closes the async S3 connection before returning to the synchronous worker.
 
 Before doing provider or storage work, every task claims its durable Server
 job. Transient claim transport failures use bounded exponential Celery retry

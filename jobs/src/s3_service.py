@@ -4,6 +4,7 @@ S3 service for file uploads and management.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import base64
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
+from scholens_storage import AsyncS3Storage
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -51,80 +53,36 @@ class S3Service:
             config=Config(
                 signature_version="s3v4",
                 s3={"addressing_style": AWS_S3_ADDRESSING_STYLE},
-                connect_timeout=10,
-                read_timeout=60,
-                retries={"mode": "standard", "total_max_attempts": 3},
+                connect_timeout=5,
+                read_timeout=10,
+                retries={"mode": "standard", "total_max_attempts": 2},
             ),
         )
 
+    def _transfers(self) -> AsyncS3Storage:
+        return AsyncS3Storage(
+            bucket=self.bucket_name,
+            region=AWS_REGION,
+            addressing_style=AWS_S3_ADDRESSING_STYLE,
+        )
+
     def download_file_to_bytes(self, object_key: str) -> bytes:
-        """Download a file from S3 and return its content as bytes
-
-        Args:
-            object_key (str): The S3 object key to download
-
-        Returns:
-            bytes: The file content as bytes
-
-        Raises:
-            ClientError: If the file cannot be downloaded from S3
-        """
-        try:
-            logger.info("s3.object.download_started")
-            response = self.s3_client.get_object(
-                Bucket=self.bucket_name, Key=object_key
-            )
-            try:
-                return response["Body"].read()
-            finally:
-                response["Body"].close()
-        except (BotoCoreError, ClientError):
-            logger.exception("s3.object.download_failed")
-            raise
+        """Legacy generated content retains the explicit result artifact ceiling."""
+        return self.download_bounded_bytes(object_key, max_bytes=64 * 1024 * 1024)
 
     def download_bounded_bytes(self, object_key: str, *, max_bytes: int) -> bytes:
-        """Read at most the declared bound plus one byte and always release HTTP."""
-        if max_bytes < 1:
-            raise ValueError("s3_object_bound_invalid")
-        response = self.s3_client.get_object(Bucket=self.bucket_name, Key=object_key)
-        try:
-            data = response["Body"].read(max_bytes + 1)
-            if len(data) > max_bytes:
-                raise ValueError("s3_object_too_large")
-            return data
-        finally:
-            response["Body"].close()
+        return asyncio.run(self._transfers().read(object_key, max_bytes=max_bytes))
 
     def download_file_to_path(
-        self,
-        object_key: str,
-        file_path: str,
-        max_bytes: int | None = None,
+        self, object_key: str, file_path: str, max_bytes: int | None = None
     ) -> int:
-        """Stream an object into a local file and return its byte count."""
-        written = 0
-        try:
-            logger.info("s3.object.download_started", extra={"object_key": object_key})
-            response = self.s3_client.get_object(
-                Bucket=self.bucket_name, Key=object_key
+        return asyncio.run(
+            self._transfers().download(
+                object_key,
+                Path(file_path),
+                max_bytes=max_bytes if max_bytes is not None else 64 * 1024 * 1024,
             )
-            body = response["Body"]
-            try:
-                with Path(file_path).open("wb") as destination:
-                    while True:
-                        chunk = body.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        written += len(chunk)
-                        if max_bytes is not None and written > max_bytes:
-                            raise ValueError("s3_object_too_large")
-                        destination.write(chunk)
-            finally:
-                body.close()
-            return written
-        except (BotoCoreError, ClientError, OSError):
-            logger.exception("s3.object.download_failed")
-            raise
+        )
 
     def object_exists(self, object_key: str) -> bool:
         try:

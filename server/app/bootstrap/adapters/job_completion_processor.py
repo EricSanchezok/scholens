@@ -500,9 +500,7 @@ async def _execute_post_commit(
         if isinstance(action, DeleteJobResultArtifacts):
             from app.helpers.s3 import s3_service
 
-            if not await asyncio.to_thread(
-                s3_service.delete_job_result_artifacts, action.job_id
-            ):
+            if not await s3_service.delete_job_result_artifacts(action.job_id):
                 raise RuntimeError("job_artifact_cleanup_incomplete")
             return
         if isinstance(action, ReleaseJobConcurrency):

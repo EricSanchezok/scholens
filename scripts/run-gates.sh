@@ -116,15 +116,17 @@ run_shared_packages() {
       scholens_ai/src scholens_ai/tests \
       scholens_job_contracts/src scholens_job_contracts/tests \
       scholens_observability/src scholens_observability/tests \
-      scholens_runtime_contracts/src scholens_runtime_contracts/tests
+      scholens_runtime_contracts/src scholens_runtime_contracts/tests \
+      scholens_storage/src scholens_storage/tests
     "$environment/ruff" check \
       scholens_ai/src scholens_ai/tests \
       scholens_job_contracts/src scholens_job_contracts/tests \
       scholens_observability/src scholens_observability/tests \
-      scholens_runtime_contracts/src scholens_runtime_contracts/tests
+      scholens_runtime_contracts/src scholens_runtime_contracts/tests \
+      scholens_storage/src scholens_storage/tests
     "$environment/mypy" \
       scholens_ai/src scholens_job_contracts/src \
-      scholens_observability/src scholens_runtime_contracts/src
+      scholens_observability/src scholens_runtime_contracts/src scholens_storage/src
     "$environment/pytest" -q
   )
 }

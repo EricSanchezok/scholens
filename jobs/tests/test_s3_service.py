@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -7,23 +7,21 @@ from src.s3_service import S3Service
 
 
 @pytest.mark.parametrize("failure", ["overflow", "read_error", "success"])
-def test_bounded_download_always_closes_stream(failure: str) -> None:
+def test_bounded_download_uses_owned_async_transfer(failure: str) -> None:
     service = MagicMock(spec=S3Service)
-    service.bucket_name = "test"
-    service.s3_client = MagicMock()
-    body = service.s3_client.get_object.return_value["Body"]
-    body.read.return_value = b"abcde" if failure == "overflow" else b"abc"
-    if failure == "read_error":
-        body.read.side_effect = OSError("stream interrupted")
-    if failure == "success":
+    transfer = service._transfers.return_value
+    transfer.read = AsyncMock(return_value=b"abc")
+    if failure != "success":
+        transfer.read.side_effect = (
+            ValueError("byte_bound") if failure == "overflow" else TimeoutError()
+        )
+        with pytest.raises((ValueError, TimeoutError)):
+            S3Service.download_bounded_bytes(service, "result", max_bytes=4)
+    else:
         assert (
             S3Service.download_bounded_bytes(service, "result", max_bytes=4) == b"abc"
         )
-    else:
-        with pytest.raises((ValueError, OSError)):
-            S3Service.download_bounded_bytes(service, "result", max_bytes=4)
-    body.read.assert_called_once_with(5)
-    body.close.assert_called_once()
+    transfer.read.assert_awaited_once_with("result", max_bytes=4)
 
 
 def test_s3_service_requires_bucket_configuration(

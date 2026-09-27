@@ -13,6 +13,7 @@ COPY packages/scholens_ai/ /packages/scholens_ai/
 COPY packages/scholens_job_contracts/ /packages/scholens_job_contracts/
 COPY packages/scholens_observability/ /packages/scholens_observability/
 COPY packages/scholens_runtime_contracts/ /packages/scholens_runtime_contracts/
+COPY packages/scholens_storage/ /packages/scholens_storage/
 COPY packages/pyproject.toml packages/uv.lock packages/README.md /packages/
 WORKDIR /packages
 RUN uv sync --frozen --no-dev --group model-build
@@ -52,6 +53,7 @@ COPY packages/scholens_observability/ /packages/scholens_observability/
 COPY packages/scholens_ai/ /packages/scholens_ai/
 COPY packages/scholens_job_contracts/ /packages/scholens_job_contracts/
 COPY packages/scholens_runtime_contracts/ /packages/scholens_runtime_contracts/
+COPY packages/scholens_storage/ /packages/scholens_storage/
 COPY server/pyproject.toml server/uv.lock server/README.md /app/
 RUN uv sync --frozen --no-dev --no-install-project \
         --no-install-package sanchezcloud-identity \

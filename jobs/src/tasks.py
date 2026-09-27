@@ -963,8 +963,10 @@ def _process_pdf_task(
 
                 async def download_with_timer():
                     async with time_it("Downloading PDF from S3", job_id=task_id):
-                        return s3_service.download_file_to_path(
-                            s3_object_key, pdf_temp.name
+                        return await asyncio.to_thread(
+                            s3_service.download_file_to_path,
+                            s3_object_key,
+                            pdf_temp.name,
                         )
 
                 downloaded_size = asyncio.run(download_with_timer())

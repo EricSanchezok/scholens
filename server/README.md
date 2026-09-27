@@ -1030,3 +1030,14 @@ or source access, and a mismatched existing Actor remains forbidden. An ownerles
 PDF result cannot apply content; it marks only its unsuperseded processing document
 failed and schedules ordinary reference-aware GC. Existing shared document content
 and unrelated memberships are preserved. Legacy jobs retain their recovery policy.
+
+### Finite result storage I/O
+
+The result consumer reads artifacts through `scholens_storage` with an explicit
+byte ceiling and a 45-second total transfer deadline. That deadline includes SDK
+retries and slow response bodies; it closes the connection rather than abandoning
+a blocking thread. Durable cleanup effects await the same owned async transport
+directly, process one 100-key page per job-owned prefix and complete or cancel
+before another effect is attempted. Other synchronous S3 calls have explicit
+5-second connect / 10-second inactivity timeouts and two total attempts; those
+SDK limits alone are not described as absolute wall-clock deadlines.

@@ -30,12 +30,12 @@ def test_result_loading_checks_exact_bytes_and_digest_before_application():
             load_result(reader, manifest)
 
 
-def test_result_download_closes_the_stream_on_overflow():
+def test_result_download_uses_cancellable_bounded_transfer():
+    from unittest.mock import AsyncMock
+
     service = MagicMock(spec=S3Service)
-    service.s3_client = MagicMock()
-    body = service.s3_client.get_object.return_value = {"Body": MagicMock()}
-    body["Body"].read.return_value = b"abcde"
+    transfer = service._transfers.return_value
+    transfer.read = AsyncMock(side_effect=ValueError("s3_object_byte_bound_exceeded"))
     with pytest.raises(ValueError, match="bound"):
         S3Service.download_bounded_bytes(service, "jobs/results/object", max_bytes=4)
-    body["Body"].read.assert_called_once_with(5)
-    body["Body"].close.assert_called_once()
+    transfer.read.assert_awaited_once_with("jobs/results/object", max_bytes=4)
