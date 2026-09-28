@@ -193,6 +193,12 @@ expired existing material. Install `start.sh` and `valkey.conf` in
 `/srv/sanchezcloud/valkey-config`, then inspect the cache change set before enabling it.
 The TLS/NOAUTH health check confirms that the private listener requires authentication;
 acceptance must additionally verify both role credentials and their cross-prefix denial.
+API cache access includes the exact `scholens:openalex:doi:*` namespace used by
+the bibliography adapter. Jobs retains only `scholens:pdf-parse:*`; do not grant
+either identity a product-wide wildcard. Bootstrap script updates require an
+atomic installation of the reviewed file and a controlled cache service
+redeployment, followed by authenticated read/write and cross-prefix-denial
+checks. An application image rollout alone does not update the mounted script.
 
 ## Manual personal control plane
 

@@ -81,6 +81,18 @@ def _actor() -> Actor:
         ),
         ("pdf_content_insufficient", "parsing", "pdf_content_insufficient"),
         ("mineru_response_unsafe", "parsing", "mineru_response_unsafe"),
+        ("invalid_pdf", "finalizing", "invalid_pdf"),
+        ("upload_too_large", "finalizing", "upload_too_large"),
+        ("paper_source_http_error", "finalizing", "paper_source_pdf_unavailable"),
+        ("paper_source_unsafe_address", "downloading", "paper_source_unsafe_address"),
+        ("paper_source_timeout", "finalizing", "paper_ingestion_downloading_failed"),
+        ("paper_source_dns_failed", "finalizing", "paper_ingestion_downloading_failed"),
+        (
+            "paper_source_network_error",
+            "finalizing",
+            "paper_ingestion_downloading_failed",
+        ),
+        ("paper_source_retryable", "finalizing", "paper_ingestion_downloading_failed"),
         (
             "provider leaked a private diagnostic",
             "indexing",

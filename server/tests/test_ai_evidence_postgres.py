@@ -236,3 +236,66 @@ def test_stale_source_and_revoked_access_create_no_annotations(evidence_database
             metadata(content + " Updated.", ["efficient method improved results"]),
             1,
         )
+
+
+@pytest.mark.parametrize("origin", ["ai", "zotero"])
+@pytest.mark.parametrize("mapped", [True, False])
+def test_json_page_map_preserves_late_page_and_unmapped_text(
+    evidence_database, origin, mapped
+):
+    from app.bootstrap.adapters.zotero_annotations import apply_annotation_snapshot
+
+    engine, document_id, _, actors = evidence_database
+    pages = [f"Page {number} has unique evidence.\n" for number in range(1, 13)]
+    content = "".join(pages)
+    offsets = {}
+    start = 0
+    for page, body in enumerate(pages, 1):
+        offsets[page] = [start, start + len(body)]
+        start += len(body)
+    if not mapped:
+        del offsets[12]
+    with Session(engine) as db, db.begin():
+        document = db.get(Document, document_id)
+        document.raw_content = content
+        document.page_offset_map = offsets
+    with Session(engine) as db, db.begin():
+        # JSONB necessarily returns string keys, including data written by N-1.
+        assert all(
+            isinstance(key, str)
+            for key in db.get(Document, document_id).page_offset_map
+        )
+        if origin == "ai":
+            result = create_ai_annotations(
+                db,
+                document_id=document_id,
+                user=actors[0],
+                metadata=metadata(content, [pages[-1].strip()]),
+            )
+            assert len(result.thread_ids) == 1
+        else:
+            assert (
+                apply_annotation_snapshot(
+                    db,
+                    document_id=document_id,
+                    user=actors[0],
+                    page_dimensions=(),
+                    annotations_payload=[
+                        {
+                            "key": "LASTPAGE",
+                            "data": {
+                                "annotationType": "highlight",
+                                "annotationText": pages[-1].strip(),
+                            },
+                        }
+                    ],
+                )
+                == 1
+            )
+    with Session(engine) as db:
+        item = db.scalar(
+            select(ResearchItem).where(ResearchItem.target_document_id == document_id)
+        )
+        position = item.annotation_thread.position
+        assert position["start_offset"] == content.index(pages[-1].strip())
+        assert position["page_number"] == (12 if mapped else None)

@@ -51,6 +51,19 @@ def _manifest(job_id, generation=1, digest="a" * 64):
     )
 
 
+def test_failure_receipt_retains_original_processing_stage(database):
+    engine, job_id = database
+    with Session(engine) as db, db.begin():
+        repo = JobResultRepository(db)
+        repo.claim(job_id=job_id, claim_token=uuid4())
+        repo.heartbeat(job_id=job_id, generation=1, progress_code="downloading")
+        manifest = _manifest(job_id).model_copy(update={"failure_code": "invalid_pdf"})
+        assert repo.accept(
+            job_id=job_id, manifest=manifest, request_id=uuid4(), delivery_ref="b" * 64
+        ).accepted
+        assert db.get(DurableJob, job_id).progress_code == "downloading"
+
+
 def test_concurrent_claim_has_one_owner_and_lost_response_is_recoverable(database):
     engine, job_id = database
     tokens = [uuid4(), uuid4()]

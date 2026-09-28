@@ -42,6 +42,78 @@ def maintenance_group() -> None:
     """Run narrowly scoped maintenance through application services."""
 
 
+@maintenance_group.command("recover-document-result")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option("--job-id", required=True, type=click.UUID)
+@click.option(
+    "--reason",
+    required=True,
+    help="Bounded incident/fix identifier; no private content.",
+)
+@click.option(
+    "--apply", is_flag=True, help="Commit a validated recovery; default rolls back."
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation when applying.")
+@click.pass_obj
+@guarded
+def recover_document_result(
+    state: CliState, actor_email: str, job_id: UUID, reason: str, apply: bool, yes: bool
+) -> None:
+    """Reapply one rejected enrichment artifact without calling a paid provider."""
+    from app.bootstrap.adapters.job_result_consumer import load_result
+    from app.helpers.s3 import s3_service
+
+    operator = load_user(actor_email)
+    runner = executor()
+    manifest = runner.query(
+        lambda c: c.document_result_recovery.manifest(
+            actor=current_admin(c, operator.id), job_id=job_id
+        )
+    )
+    # Verify the original immutable bytes outside any database transaction.
+    payload = load_result(s3_service, manifest)
+    if apply:
+        confirm(f"Recover accepted enrichment result for {job_id}?", yes=yes)
+    execute = runner.command if apply else runner.query
+    result = execute(
+        lambda c: c.document_result_recovery.apply(
+            actor=current_admin(c, operator.id),
+            operation=cli_operation("maintenance.recover-document-result"),
+            job_id=job_id,
+            manifest=manifest,
+            payload=payload,
+            reason=reason,
+        )
+    )
+    emit(state, {"dry_run": not apply, **result})
+
+
+@maintenance_group.command("reconcile-pdf-failure")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option("--job-id", required=True, type=click.UUID)
+@click.option("--apply", is_flag=True)
+@click.option("--yes", is_flag=True)
+@click.pass_obj
+@guarded
+def reconcile_pdf_failure(
+    state: CliState, actor_email: str, job_id: UUID, apply: bool, yes: bool
+) -> None:
+    """Correct one proven source failure from its accepted manifest; no execution."""
+    operator = load_user(actor_email)
+    if apply:
+        confirm(f"Reclassify PDF source failure for {job_id}?", yes=yes)
+    runner = executor()
+    execute = runner.command if apply else runner.query
+    result = execute(
+        lambda c: c.document_result_recovery.reconcile_pdf_failure(
+            actor=current_admin(c, operator.id),
+            operation=cli_operation("maintenance.reconcile-pdf-failure"),
+            job_id=job_id,
+        )
+    )
+    emit(state, {"dry_run": not apply, **result})
+
+
 @maintenance_group.command("backfill-token-indexes")
 @click.option("--actor-email", required=True, callback=email_callback)
 @click.option("--batch-size", type=click.IntRange(1, 25), default=5, show_default=True)

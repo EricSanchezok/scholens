@@ -184,7 +184,8 @@ class JobResultRepository:
             # Ownership transfers to the inbox atomically. Broker recovery must
             # not reset the job while the accepted result is being applied.
             job.lease_expires_at = None
-            job.progress_code = "finalizing"
+            if manifest.failure_code is None:
+                job.progress_code = "finalizing"
             accepted = True
         self.db.flush()
         return JobResultReceipt(

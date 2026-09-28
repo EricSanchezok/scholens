@@ -63,7 +63,9 @@ def require_parsed_content(
         raise ValueError("document_content_unavailable")
     offsets = (
         {
-            page: (bounds[0], bounds[1])
+            # JSON object keys are strings after a database round trip. This
+            # shared boundary also supplies Zotero's parsed-text fallback.
+            int(page): (bounds[0], bounds[1])
             for page, bounds in document.page_offset_map.items()
             if len(bounds) >= 2
         }

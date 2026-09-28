@@ -216,6 +216,21 @@ compensation and the rejection commit together, including journal changes and
 the normal post-commit concurrency release. Apply lock/statement deadlines are
 five/thirty seconds. Consumer diagnostics contain error classes, not artifacts.
 
+`maintenance recover-document-result --actor-email <admin> --job-id <uuid>
+--reason <incident-id>` validates one rejected `document_enrich` artifact and
+previews its complete application in a rolled-back transaction. Add `--apply
+--yes` after fixing the application defect to commit the recovery. The command
+verifies the original bounded S3 object's length and SHA-256 outside the
+transaction, then rechecks the current administrator, original owner, source,
+access, execution generation and manifest. A newer enrichment, cancellation,
+unexpected generation effects, or any unsuccessful application rejects the
+recovery and preserves the original failure. No enrichment worker is redispatched
+and no paid model is called. Canonical completion may enqueue deterministic
+metadata indexing and bibliography follow-ups. The successful transaction reuses the canonical enrichment consumer,
+commits its outbox effects, preserves the inbox's original error and accumulated
+attempt count, and appends `job.result_recovered` with the operator, reason,
+artifact digest and generation. Ordinary retry budgets remain unchanged.
+
 Post-commit actions for fenced results are persisted in `job_result_effects` in
 the result transaction. The consumer delivers up to four effects between result
 applications and retries dependency failures with backoff capped at five minutes.
@@ -296,6 +311,16 @@ When a known-source job fails with `upload_too_large`, its wait guidance directs
 the Agent to choose a smaller accessible source or upload a compressed local
 copy with `Scholens:upload_local_paper`; it never recommends retrying the
 unchanged source.
+Failure receipts retain the worker's original processing stage. The PDF adapter
+maps its bounded source-error vocabulary to existing public failure categories:
+invalid/oversized/unsafe sources and unavailable HTTP sources are non-retryable;
+DNS, timeout, network and retryable upstream failures remain download failures.
+Accepting a failure artifact must never reclassify it as a finalization failure.
+For historical rows, `maintenance reconcile-pdf-failure --actor-email <admin>
+--job-id <uuid>` previews a correction only when the applied current-generation
+manifest proves a known source error and the stored code is the old generic
+finalization code. `--apply --yes` commits only the corrected job error and an
+append-only audit entry; it never reruns the worker or failure compensation.
 
 Project collection tools preserve their established inputs and item fields but
 return MCP-specific bounded summaries. `list_projects` and
