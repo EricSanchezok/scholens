@@ -144,6 +144,7 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
         "~scholens:concurrency:*",
         "~scholens:translation:*",
         "~scholens:conversation-events:*",
+        "~scholens:openalex:doi:*",
         "+@all",
         "-@dangerous",
     }

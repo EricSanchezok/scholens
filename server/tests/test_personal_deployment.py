@@ -39,6 +39,17 @@ def test_foundation_excludes_managed_compute_and_preserves_durable_storage() -> 
     )
 
 
+def test_private_cache_grants_openalex_only_to_api_identity():
+    script = (ROOT / "deploy/personal/valkey/start.sh").read_text()
+    api_rules = script.split("user scholens-api on", 1)[1].split(
+        "user scholens-jobs on", 1
+    )[0]
+    jobs_rules = script.split("user scholens-jobs on", 1)[1].split("\\n", 1)[0]
+    assert "~scholens:openalex:doi:*" in api_rules
+    assert "openalex" not in jobs_rules
+    assert "~scholens:*" not in script and " ~* " not in script
+
+
 def test_personal_logs_cover_the_thirty_day_contract_observation_window():
     resources = renderer.render("runtime")["Resources"]
     logs = [

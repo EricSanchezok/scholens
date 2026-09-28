@@ -115,8 +115,9 @@ images and inject only the reviewed secrets. API and Conversation diagnostic sna
 are written under `api/`, while Jobs snapshots use `workers/`; those prefixes are part of
 the workload IAM contract rather than a shared unrestricted diagnostics namespace.
 The shared API cache identity is limited to rate, concurrency, translation, and bounded
-`scholens:conversation-events:*` replay keys. The Jobs cache identity cannot access that
-Conversation namespace.
+`scholens:conversation-events:*` replay keys, plus the bounded
+`scholens:openalex:doi:*` bibliography cache. The Jobs cache identity cannot access
+either namespace.
 
 API, Conversation worker, Jobs workers, and the scheduler receive the same
 private Cloud Map `WEBHOOK_BASE_URL`. Server-image job producers validate it at
