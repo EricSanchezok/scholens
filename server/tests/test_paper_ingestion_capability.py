@@ -485,6 +485,59 @@ async def test_openalex_work_without_open_pdf_is_unavailable() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "oa_url",
+    ["https://doi.org/10.1000/example", "https://publisher.example/articles/example"],
+)
+async def test_openalex_landing_page_is_not_a_pdf_download_candidate(oa_url) -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock(
+        return_value=SimpleNamespace(
+            best_oa_location=None,
+            primary_location=None,
+            open_access=SimpleNamespace(oa_url=oa_url),
+        )
+    )
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+    with pytest.raises(AppError) as raised:
+        await resolver.resolve(
+            actor=_actor(), operation=_operation(), kind="doi", value="10.1000/example"
+        )
+    assert raised.value.code == "paper_source_pdf_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_openalex_direct_pdf_fallback_and_extensionless_pdf_metadata_survive() -> (
+    None
+):
+    openalex = MagicMock()
+    work = SimpleNamespace(
+        best_oa_location=None,
+        primary_location=None,
+        open_access=SimpleNamespace(
+            oa_url="https://publisher.example/article.pdf?download=1"
+        ),
+    )
+    openalex.find_by_doi = AsyncMock(return_value=work)
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+    assert (
+        await resolver.resolve(
+            actor=_actor(), operation=_operation(), kind="doi", value="10.1000/example"
+        )
+        == work.open_access.oa_url
+    )
+    work.primary_location = SimpleNamespace(
+        pdf_url="https://repository.example/download/1234"
+    )
+    assert (
+        await resolver.resolve(
+            actor=_actor(), operation=_operation(), kind="doi", value="10.1000/example"
+        )
+        == work.primary_location.pdf_url
+    )
+
+
+@pytest.mark.asyncio
 async def test_direct_pdf_url_bypasses_openalex() -> None:
     openalex = MagicMock()
     resolver = DefaultPaperSourceResolver(openalex=openalex)
