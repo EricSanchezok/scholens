@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from functools import cached_property
-from app.bootstrap.adapters.document_result_recovery import DocumentResultRecovery
+from app.bootstrap.adapters.document_result_recovery import SqlDocumentResultRecovery
+from app.modules.jobs.application.result_recovery import DocumentResultRecovery
 
 from app.modules.billing.application.entitlement_admin import EntitlementAdmin
 from app.modules.billing.infrastructure.entitlement_admin_gateway import (
@@ -57,7 +58,8 @@ class OperatorCapabilities:
     @cached_property
     def document_result_recovery(self) -> DocumentResultRecovery:
         return DocumentResultRecovery(
-            self._session, identity=self.identity, journal=self._journal
+            SqlDocumentResultRecovery(self._session, identity=self.identity),
+            journal=self._journal,
         )
 
     @cached_property

@@ -256,3 +256,39 @@ def test_concurrent_recovery_commits_only_once(rejected_enrichment):
     with ThreadPoolExecutor(max_workers=2) as pool:
         outcomes = list(pool.map(lambda _: attempt(), range(2)))
     assert sorted(outcomes) == ["completed", "document_result_not_recoverable"]
+
+
+def test_source_failure_reclassification_is_bounded_audited_and_idempotent(
+    rejected_enrichment,
+):
+    engine, job_id, _, admin, manifest, _ = rejected_enrichment
+    with Session(engine) as db, db.begin():
+        job = db.get(DurableJob, job_id)
+        job.operation, job.error_code = (
+            "pdf_process",
+            "paper_ingestion_finalizing_failed",
+        )
+        inbox = db.get(JobResultInbox, (job_id, 1))
+        inbox.status = "applied"
+        inbox.manifest = manifest.model_copy(
+            update={"failure_code": "invalid_pdf"}
+        ).model_dump(mode="json")
+    for apply in (False, True, True):
+        with Session(engine) as db:
+            before = db.get(DurableJob, job_id).error_code
+            result = OperatorCapabilities(
+                db
+            ).document_result_recovery.reconcile_pdf_failure(
+                actor=admin,
+                operation=cli_operation("maintenance.reconcile-pdf-failure"),
+                job_id=job_id,
+            )
+            assert result["changed"] is (before != "invalid_pdf")
+            if apply:
+                db.commit()
+            else:
+                db.rollback()
+    with Session(engine) as db:
+        assert db.get(DurableJob, job_id).status == "failed"
+        assert db.get(DurableJob, job_id).error_code == "invalid_pdf"
+        assert db.get(JobResultInbox, (job_id, 1)).attempt_count == 8

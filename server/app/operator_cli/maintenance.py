@@ -88,6 +88,32 @@ def recover_document_result(
     emit(state, {"dry_run": not apply, **result})
 
 
+@maintenance_group.command("reconcile-pdf-failure")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option("--job-id", required=True, type=click.UUID)
+@click.option("--apply", is_flag=True)
+@click.option("--yes", is_flag=True)
+@click.pass_obj
+@guarded
+def reconcile_pdf_failure(
+    state: CliState, actor_email: str, job_id: UUID, apply: bool, yes: bool
+) -> None:
+    """Correct one proven source failure from its accepted manifest; no execution."""
+    operator = load_user(actor_email)
+    if apply:
+        confirm(f"Reclassify PDF source failure for {job_id}?", yes=yes)
+    runner = executor()
+    execute = runner.command if apply else runner.query
+    result = execute(
+        lambda c: c.document_result_recovery.reconcile_pdf_failure(
+            actor=current_admin(c, operator.id),
+            operation=cli_operation("maintenance.reconcile-pdf-failure"),
+            job_id=job_id,
+        )
+    )
+    emit(state, {"dry_run": not apply, **result})
+
+
 @maintenance_group.command("backfill-token-indexes")
 @click.option("--actor-email", required=True, callback=email_callback)
 @click.option("--batch-size", type=click.IntRange(1, 25), default=5, show_default=True)

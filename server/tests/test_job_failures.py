@@ -15,6 +15,11 @@ from app.modules.jobs.application.failures import actionable_job_failure
         ("mineru_content_insufficient", False, None),
         ("mineru_response_unsafe", False, None),
         ("document_reflow_source_revision_changed", True, None),
+        ("invalid_pdf", False, None),
+        ("upload_too_large", False, None),
+        ("paper_source_pdf_unavailable", False, None),
+        ("paper_source_unsafe_address", False, None),
+        ("paper_ingestion_downloading_failed", True, None),
     ],
 )
 def test_actionable_mineru_failures_preserve_product_semantics(

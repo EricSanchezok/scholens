@@ -310,6 +310,16 @@ When a known-source job fails with `upload_too_large`, its wait guidance directs
 the Agent to choose a smaller accessible source or upload a compressed local
 copy with `Scholens:upload_local_paper`; it never recommends retrying the
 unchanged source.
+Failure receipts retain the worker's original processing stage. The PDF adapter
+maps its bounded source-error vocabulary to existing public failure categories:
+invalid/oversized/unsafe sources and unavailable HTTP sources are non-retryable;
+DNS, timeout, network and retryable upstream failures remain download failures.
+Accepting a failure artifact must never reclassify it as a finalization failure.
+For historical rows, `maintenance reconcile-pdf-failure --actor-email <admin>
+--job-id <uuid>` previews a correction only when the applied current-generation
+manifest proves a known source error and the stored code is the old generic
+finalization code. `--apply --yes` commits only the corrected job error and an
+append-only audit entry; it never reruns the worker or failure compensation.
 
 Project collection tools preserve their established inputs and item fields but
 return MCP-specific bounded summaries. `list_projects` and

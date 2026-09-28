@@ -13,8 +13,29 @@ from app.modules.operation_journal.domain import (
     ResourceRef,
 )
 
+PDF_SOURCE_FAILURE_CODES = {
+    "invalid_pdf": "invalid_pdf",
+    "upload_too_large": "upload_too_large",
+    "source_checksum_mismatch": "invalid_pdf",
+    "paper_source_unsafe_address": "paper_source_unsafe_address",
+    "paper_source_pdf_unavailable": "paper_source_pdf_unavailable",
+    "paper_source_http_error": "paper_source_pdf_unavailable",
+    "paper_source_redirect_invalid": "paper_source_pdf_unavailable",
+    "paper_source_content_length_invalid": "paper_source_pdf_unavailable",
+    "paper_source_resolution_failed": "paper_source_pdf_unavailable",
+    "paper_source_resolution_unavailable": "paper_ingestion_downloading_failed",
+    "paper_source_resolution_invalid": "paper_ingestion_downloading_failed",
+    "paper_source_dns_failed": "paper_ingestion_downloading_failed",
+    "paper_source_timeout": "paper_ingestion_downloading_failed",
+    "paper_source_network_error": "paper_ingestion_downloading_failed",
+    "paper_source_retryable": "paper_ingestion_downloading_failed",
+    "paper_source_materialization_failed": "paper_ingestion_downloading_failed",
+    "source_ready_unavailable": "paper_ingestion_claim_failed",
+}
+
 SAFE_PDF_FAILURE_CODES = frozenset(
     {
+        *PDF_SOURCE_FAILURE_CODES.values(),
         "pdf_content_insufficient",
         "job_execution_retry_exhausted",
         "provider_outcome_unknown",
@@ -47,6 +68,8 @@ PDF_PROGRESS_FAILURE_CODES = {
 
 
 def safe_pdf_failure_code(*, reason: str, progress_code: str | None) -> str:
+    if reason in PDF_SOURCE_FAILURE_CODES:
+        return PDF_SOURCE_FAILURE_CODES[reason]
     if reason in SAFE_PDF_FAILURE_CODES:
         return reason
     if progress_code is None:

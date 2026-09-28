@@ -1,7 +1,6 @@
 """Atomic operator recovery of a rejected, already-paid enrichment artifact."""
 
 from datetime import UTC, datetime, timedelta
-import re
 from uuid import UUID, uuid4
 
 from scholens_job_contracts import JobResultManifest
@@ -12,14 +11,19 @@ from app.bootstrap.adapters.document_stage_callbacks import (
     DocumentEnrichmentCallback,
     DocumentEnrichmentCompletion,
 )
+from app.bootstrap.adapters.document_job_callback_support import (
+    PDF_SOURCE_FAILURE_CODES,
+)
 from app.modules.identity.application.identity import Identity
 from app.modules.identity.domain import (
     AccountAccessFacts,
-    require_administrator,
     require_product_access,
 )
-from app.modules.jobs.application.actions import JOB_COMPLETED
 from app.modules.jobs.application.results import ReservedJobResult
+from app.modules.jobs.application.result_recovery import (
+    RecoveredDocumentResult,
+    ReclassifiedPdfFailure,
+)
 from app.modules.jobs.infrastructure.models import (
     DurableJob,
     JobExecution,
@@ -27,12 +31,8 @@ from app.modules.jobs.infrastructure.models import (
     JobResultEffect,
 )
 from app.modules.jobs.infrastructure.result_inbox import JobResultRepository
-from app.modules.operation_journal.application import OperationJournal
-from app.modules.operation_journal.domain import OperationAction, ResourceRef
 from app.modules.papers.infrastructure.models import Document
 from app.shared.application import (
-    Actor,
-    OperationContext,
     OperationContextFactory,
     OperationInitiator,
     JobOrigin,
@@ -41,23 +41,11 @@ from app.shared.application import (
 )
 
 
-class DocumentResultRecovery:
+class SqlDocumentResultRecovery:
     """No worker dispatch, paid call, failure compensation reversal, or schema edit."""
 
-    def __init__(
-        self, db: Session, *, identity: Identity, journal: OperationJournal
-    ) -> None:
-        self._db, self._identity, self._journal = db, identity, journal
-
-    @staticmethod
-    def _authorize(actor: Actor) -> None:
-        require_administrator(
-            AccountAccessFacts(
-                status=actor.status,
-                is_admin=actor.is_admin,
-                is_blocked=actor.is_blocked,
-            )
-        )
+    def __init__(self, db: Session, *, identity: Identity) -> None:
+        self._db, self._identity = db, identity
 
     def _candidate(
         self, job_id: UUID
@@ -111,23 +99,64 @@ class DocumentResultRecovery:
             raise ValueError("document_result_has_effects")
         return job, inbox, manifest
 
-    def manifest(self, *, actor: Actor, job_id: UUID) -> JobResultManifest:
-        self._authorize(actor)
+    def manifest(self, *, job_id: UUID) -> JobResultManifest:
         return self._candidate(job_id)[2]
+
+    def reconcile_pdf_failure(self, *, job_id: UUID) -> ReclassifiedPdfFailure:
+        """Correct only a proven historical misclassification, without replaying cleanup."""
+        self._db.execute(text("SET LOCAL lock_timeout = '5s'"))
+        self._db.execute(text("SET LOCAL statement_timeout = '30s'"))
+        job = self._db.scalar(
+            select(DurableJob).where(DurableJob.id == job_id).with_for_update()
+        )
+        execution = self._db.scalar(
+            select(JobExecution).where(JobExecution.job_id == job_id).with_for_update()
+        )
+        if (
+            job is None
+            or execution is None
+            or job.operation != "pdf_process"
+            or job.status != "failed"
+        ):
+            raise ValueError("pdf_failure_not_reconcilable")
+        inbox = self._db.scalar(
+            select(JobResultInbox)
+            .where(
+                JobResultInbox.job_id == job_id,
+                JobResultInbox.claim_generation == execution.claim_generation,
+            )
+            .with_for_update()
+        )
+        if inbox is None or inbox.status != "applied":
+            raise ValueError("pdf_failure_not_reconcilable")
+        manifest = JobResultManifest.model_validate(inbox.manifest)
+        corrected = PDF_SOURCE_FAILURE_CODES.get(manifest.failure_code or "")
+        if (
+            corrected is None
+            or manifest.claim_generation != execution.claim_generation
+            or manifest.storage_key != manifest.key_for(job_id)
+        ):
+            raise ValueError("pdf_failure_not_reconcilable")
+        previous = job.error_code
+        if previous not in {corrected, "paper_ingestion_finalizing_failed"}:
+            raise ValueError("pdf_failure_not_reconcilable")
+        changed = previous != corrected
+        if changed:
+            job.error_code = corrected
+        return ReclassifiedPdfFailure(
+            changed=changed,
+            previous_error=previous,
+            error_code=corrected,
+            result_sha256=manifest.sha256,
+        )
 
     def apply(
         self,
         *,
-        actor: Actor,
-        operation: OperationContext,
         job_id: UUID,
         manifest: JobResultManifest,
         payload: dict[str, object],
-        reason: str,
-    ) -> dict[str, object]:
-        self._authorize(actor)
-        if re.fullmatch(r"[a-z][a-z0-9_-]{0,79}", reason) is None:
-            raise ValueError("recovery_reason_must_be_a_bounded_identifier")
+    ) -> RecoveredDocumentResult:
         job, inbox, current_manifest = self._candidate(job_id)
         if current_manifest != manifest:
             raise ValueError("document_result_manifest_changed")
@@ -193,30 +222,11 @@ class DocumentResultRecovery:
         if job.status != "completed":
             raise ValueError("document_result_source_or_access_changed")
         JobResultRepository(self._db).applied(reservation, actions=result.post_commit)
-        self._journal.append_many(
-            actor=owner, operation=resumed, changes=result.changes
-        )
-        self._journal.append(
-            actor=owner,
+        return RecoveredDocumentResult(
+            owner=owner,
             operation=resumed,
-            action=JOB_COMPLETED,
-            resources=(ResourceRef("job", str(job_id)),),
+            changes=tuple(result.changes),
+            generation=inbox.claim_generation,
+            attempts=inbox.attempt_count,
+            previous_error=inbox.error_code,
         )
-        self._journal.append(
-            actor=actor,
-            operation=operation,
-            action=OperationAction("job.result_recovered"),
-            resources=(
-                ResourceRef("job", str(job_id)),
-                ResourceRef("result_sha256", manifest.sha256),
-                ResourceRef("generation", str(inbox.claim_generation)),
-                ResourceRef("recovery_reason", reason),
-            ),
-        )
-        return {
-            "job_id": str(job_id),
-            "status": job.status,
-            "generation": inbox.claim_generation,
-            "application_attempts": inbox.attempt_count,
-            "previous_apply_error": inbox.error_code,
-        }
