@@ -42,7 +42,7 @@ from app.shared.application import (
 
 
 class SqlDocumentResultRecovery:
-    """No worker dispatch, paid call, failure compensation reversal, or schema edit."""
+    """Reuse accepted enrichment bytes without resubmitting paid execution."""
 
     def __init__(self, db: Session, *, identity: Identity) -> None:
         self._db, self._identity = db, identity

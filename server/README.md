@@ -224,8 +224,9 @@ verifies the original bounded S3 object's length and SHA-256 outside the
 transaction, then rechecks the current administrator, original owner, source,
 access, execution generation and manifest. A newer enrichment, cancellation,
 unexpected generation effects, or any unsuccessful application rejects the
-recovery and preserves the original failure. No worker or paid provider is
-called. The successful transaction reuses the canonical enrichment consumer,
+recovery and preserves the original failure. No enrichment worker is redispatched
+and no paid model is called. Canonical completion may enqueue deterministic
+metadata indexing and bibliography follow-ups. The successful transaction reuses the canonical enrichment consumer,
 commits its outbox effects, preserves the inbox's original error and accumulated
 attempt count, and appends `job.result_recovered` with the operator, reason,
 artifact digest and generation. Ordinary retry budgets remain unchanged.
