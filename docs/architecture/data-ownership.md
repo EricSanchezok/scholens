@@ -218,7 +218,10 @@ table outputs retain document or Project audience as their producer requires.
 
 Annotation-thread positions are canonical Research data. PDF selections use
 one-based pages and normalized rectangles; parsed-text selections use validated
-start/end offsets with an optional page projection. A thread owns one color,
+start/end offsets with an optional page projection. The shared parsed-content
+adapter normalizes JSON page keys to integers for AI and Zotero annotations.
+An unmapped offset has no page projection; it does not invalidate an exact
+text anchor. A thread owns one color,
 immutable audience and zero or more chronological comments. Comments inherit
 the thread audience and own only their content and author. Threads do not
 support recursive comment trees or audience mutation.
