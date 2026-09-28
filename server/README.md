@@ -759,7 +759,12 @@ signed, job-scoped Server callback; credentials never leave Server. It accepts
 only an open PDF location from that catalog and records stable credential,
 rate-limit, or availability failures on the durable job without substituting an
 MCP or general web-search result. A catalog `404` or a work with no open PDF
-retains the existing source-unavailable/not-found semantics.
+retains the existing source-unavailable/not-found semantics. Explicit location
+`pdf_url` values take precedence and may use extensionless download endpoints.
+The generic `open_access.oa_url` can also identify an HTML landing page, so it
+is a download fallback only when its path ends in `.pdf`; a landing-page-only
+record returns `paper_source_pdf_unavailable` instead of attempting to parse
+the article webpage as a PDF. The worker still validates every downloaded file.
 
 Zotero is a separate read-only integration under
 `/api/v1/integrations/zotero`. `POST .../oauth/authorizations` starts a
