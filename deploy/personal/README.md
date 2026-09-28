@@ -141,6 +141,15 @@ all components must agree. The legacy CLI default is `linux/amd64`; production
 verification requires explicit `--expected-platform linux/arm64`.
 Publishing creates no GitHub Release, version tag, runtime deployment or database write.
 
+Publication remains cancellable after its prerequisite jobs succeed. The publish
+job has a 60-minute deadline, including immutable asset uploads and read-back
+verification; the Web build has a separate 10-minute deadline so a stalled
+BuildKit operation cannot occupy the publishing lane for the full job budget.
+After cancellation or timeout, rerun publication for the same immutable revision.
+The existing manifest and conditional object writes preserve completed assets;
+reruns revalidate recorded digests, scans and stored source maps before final SHA
+tags are accepted.
+
 The personal publisher selects `arm64-int8` for both Python images. Jobs packages
 only the digest-verified tokenizer; the API image carries the registered model
 artifact for the independent owner. Native image smoke tests execute that model
