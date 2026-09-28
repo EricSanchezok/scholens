@@ -6,7 +6,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import create_engine, delete, func, select, text
 from sqlalchemy.orm import Session
 from scholens_ai.passages import (
     PassageEmbeddingRecord,
@@ -205,13 +205,14 @@ def test_search_uses_one_current_projection_without_old_revision_or_stale_fallba
         assert TokenProjectionRepository(db).adopt(
             document_id=doc_id, projection=projection()
         )
-    passages = searchable_passages(model_revision="test-v1").c
+    scope = select(Document.id).where(Document.id == doc_id)
+    passages = searchable_passages(model_revision="test-v1", document_ids=scope).c
     statement = select(passages.start_line, passages.content).where(
         passages.document_id == doc_id
     )
     with Session(engine) as db, db.begin():
         assert db.execute(statement).all() == [(1, "alpha"), (1, "alpha")]
-        other = searchable_passages(model_revision="not-adopted").c
+        other = searchable_passages(model_revision="not-adopted", document_ids=scope).c
         assert db.scalars(
             select(other.content).where(other.document_id == doc_id)
         ).all() == ["alpha alpha"]
@@ -220,3 +221,76 @@ def test_search_uses_one_current_projection_without_old_revision_or_stale_fallba
             {"id": doc_id},
         )
         assert db.execute(statement).all() == []
+
+
+def test_scoped_search_bounds_reads_with_unrelated_token_and_legacy_documents(database):
+    engine, doc_id = database
+    unrelated_ids = [uuid4() for _ in range(65)]
+    body = "alpha " * 128
+    binary = projection().vectors
+    unrelated_projection = TokenProjection(
+        content_digest=hashlib.sha256(body.encode()).hexdigest(),
+        model_revision="test-v1",
+        spans=[TokenSpan(start=i * 6, end=i * 6 + 5, tokens=1) for i in range(128)],
+        vectors=binary,
+    )
+    try:
+        with Session(engine) as db, db.begin():
+            assert TokenProjectionRepository(db).adopt(
+                document_id=doc_id, projection=projection()
+            )
+            for other_id in unrelated_ids:
+                db.add(
+                    Document(
+                        id=other_id,
+                        sha256=uuid4().hex * 2,
+                        original_filename="unrelated.pdf",
+                        size_bytes=1,
+                        s3_object_key=f"tests/{other_id}.pdf",
+                        raw_content=body,
+                        processing_status="completed",
+                    )
+                )
+            db.flush()
+            for other_id in unrelated_ids[:-1]:
+                assert TokenProjectionRepository(db).adopt(
+                    document_id=other_id, projection=unrelated_projection
+                )
+            db.add(
+                DocumentPassage(
+                    document_id=unrelated_ids[-1],
+                    start_line=1,
+                    end_line=1,
+                    content="unrelated legacy text",
+                )
+            )
+        scope = select(Document.id).where(Document.id == doc_id)
+        relation = searchable_passages(model_revision="test-v1", document_ids=scope)
+        passages = relation.c
+        # The projection itself is scoped, including its legacy branch. Consumers
+        # do not need to discard unrelated rows after union/ranking/coverage.
+        statement = select(func.count()).select_from(relation)
+        with Session(engine) as db:
+            assert db.scalar(statement) == 2
+            assert set(db.scalars(select(passages.document_id))) == {doc_id}
+            sql = str(statement.compile(engine, compile_kwargs={"literal_binds": True}))
+            plan = db.execute(
+                text("EXPLAIN (ANALYZE, FORMAT JSON) " + sql)
+            ).scalar_one()[0]["Plan"]
+
+            def visited_token_rows(node):
+                own = 0
+                if node.get("Relation Name") == "document_token_passages":
+                    own = (
+                        node["Actual Rows"] + node.get("Rows Removed by Filter", 0)
+                    ) * node["Actual Loops"]
+                return own + sum(
+                    visited_token_rows(child) for child in node.get("Plans", [])
+                )
+
+            # 8,192 unrelated token rows must not be scanned for two authorized
+            # rows. Bound actual work, not unstable wall time or exact plan text.
+            assert visited_token_rows(plan) <= 4
+    finally:
+        with Session(engine) as db, db.begin():
+            db.execute(delete(Document).where(Document.id.in_(unrelated_ids)))

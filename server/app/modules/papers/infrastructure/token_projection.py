@@ -4,7 +4,7 @@ import hashlib
 from uuid import UUID
 
 from scholens_ai.token_projection import TokenProjection
-from sqlalchemy import and_, delete, exists, insert, select, union_all
+from sqlalchemy import Select, and_, delete, exists, insert, select, union_all
 from sqlalchemy.sql.selectable import Subquery
 from sqlalchemy.orm import Session, load_only
 
@@ -16,10 +16,14 @@ from app.modules.papers.infrastructure.models import (
 )
 
 
-def searchable_passages(*, model_revision: str) -> Subquery:
+def searchable_passages(
+    *, model_revision: str, document_ids: Select[tuple[UUID]]
+) -> Subquery:
     """Read one complete projection per document without reviving stale windows.
 
-    Authorization is applied by the owning search query before ranking. Once a
+    The owning search query supplies its authorized, filtered document IDs.
+    Scope both branches before UNION ALL: an outer join can otherwise scan the
+    entire union once for each visible document under a nested-loop plan. Once a
     document has adopted this revision, a changed source has no semantic body
     until its replacement commits; old line windows must not mask that gap.
     """
@@ -38,7 +42,7 @@ def searchable_passages(*, model_revision: str) -> Subquery:
         DocumentPassage.embedding,
         DocumentPassage.embedding_model_revision,
         DocumentPassage.id.label("sort_key"),
-    ).where(~adopted)
+    ).where(DocumentPassage.document_id.in_(document_ids), ~adopted)
     current = (
         select(
             DocumentTokenPassage.document_id,
@@ -60,6 +64,7 @@ def searchable_passages(*, model_revision: str) -> Subquery:
         )
         .join(Document, Document.id == DocumentTokenPassage.document_id)
         .where(
+            DocumentTokenPassage.document_id.in_(document_ids),
             DocumentTokenProjection.model_revision == model_revision,
             DocumentTokenProjection.content_digest == Document.content_digest,
         )

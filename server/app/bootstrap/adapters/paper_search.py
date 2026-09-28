@@ -375,7 +375,10 @@ def _matching_passages(
 ) -> dict[UUID, list[PaperSearchSnippet]]:
     if not document_ids:
         return {}
-    passages = searchable_passages(model_revision=EMBEDDING_MODEL_REVISION).c
+    passages = searchable_passages(
+        model_revision=EMBEDDING_MODEL_REVISION,
+        document_ids=select(Document.id).where(Document.id.in_(document_ids)),
+    ).c
     passage_rank = func.ts_rank_cd(passages.ts_vector, text_query)
     ranked = (
         select(
@@ -503,7 +506,10 @@ class PostgresPaperSearch:
             )
             or 0
         )
-        passages = searchable_passages(model_revision=EMBEDDING_MODEL_REVISION).c
+        passages = searchable_passages(
+            model_revision=EMBEDDING_MODEL_REVISION,
+            document_ids=select(Document.id).where(*conditions),
+        ).c
         semantic_passages = int(
             self._db.scalar(
                 select(func.count(func.distinct(passages.document_id)))
@@ -616,8 +622,14 @@ class PostgresPaperSearch:
                         .limit(self._CANDIDATE_LIMIT)
                     ).tuples()
                 ]
+                passage_document_ids = select(Document.id).where(*conditions)
+                if has_exact_metadata:
+                    passage_document_ids = passage_document_ids.where(
+                        Document.id.in_(sorted(lexical_ids, key=str))
+                    )
                 passages = searchable_passages(
-                    model_revision=EMBEDDING_MODEL_REVISION
+                    model_revision=EMBEDDING_MODEL_REVISION,
+                    document_ids=passage_document_ids,
                 ).c
                 passage_distance = passages.embedding.cosine_distance(query_embedding)
                 passage_conditions: list[ColumnElement[bool]] = [
