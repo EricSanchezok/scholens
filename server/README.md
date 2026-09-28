@@ -216,6 +216,20 @@ compensation and the rejection commit together, including journal changes and
 the normal post-commit concurrency release. Apply lock/statement deadlines are
 five/thirty seconds. Consumer diagnostics contain error classes, not artifacts.
 
+`maintenance recover-document-result --actor-email <admin> --job-id <uuid>
+--reason <incident-id>` validates one rejected `document_enrich` artifact and
+previews its complete application in a rolled-back transaction. Add `--apply
+--yes` after fixing the application defect to commit the recovery. The command
+verifies the original bounded S3 object's length and SHA-256 outside the
+transaction, then rechecks the current administrator, original owner, source,
+access, execution generation and manifest. A newer enrichment, cancellation,
+unexpected generation effects, or any unsuccessful application rejects the
+recovery and preserves the original failure. No worker or paid provider is
+called. The successful transaction reuses the canonical enrichment consumer,
+commits its outbox effects, preserves the inbox's original error and accumulated
+attempt count, and appends `job.result_recovered` with the operator, reason,
+artifact digest and generation. Ordinary retry budgets remain unchanged.
+
 Post-commit actions for fenced results are persisted in `job_result_effects` in
 the result transaction. The consumer delivers up to four effects between result
 applications and retries dependency failures with backoff capped at five minutes.
