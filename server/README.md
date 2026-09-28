@@ -983,6 +983,15 @@ intact for rollback. The owning persistence adapter contains the temporary dual
 read; retire it only after all retained documents have the active projection and
 N-1 rollout/rollback support has been explicitly retired.
 
+Every passage query supplies its authorized, filtered document-ID relation to
+both sides of that dual read before `UNION ALL`. Semantic ranking, coverage and
+full-text snippets share this scoped projection. An outer authorization join
+alone is insufficient to bound work: PostgreSQL can repeat the entire token
+corpus for each visible document when estimating the source-digest join. The
+scope does not change ranking thresholds or revive stale/old-model windows.
+Real PostgreSQL regression coverage bounds visited passage rows with a larger
+unrelated corpus instead of relying on wall-clock thresholds or one exact plan.
+
 O4 and the measured ARM64 INT8 revision share the reviewed semantic acceptance
 thresholds. The synthetic bilingual fixture measured Recall@10 0.703125 to
 0.71875 and NDCG@10 0.718233 to 0.715284; this supports the precision change,
