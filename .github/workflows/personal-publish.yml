@@ -50,10 +50,11 @@ jobs:
 
   publish:
     if: >-
-      always() && needs.prepare.result == 'success' &&
+      !cancelled() && needs.prepare.result == 'success' &&
       (needs.quality.result == 'success' || needs.quality.result == 'skipped')
     needs: [prepare, quality]
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     environment: personal-image-publish
     steps:
       - name: Check out exact release source
@@ -135,6 +136,7 @@ jobs:
       - name: Build Web and export source maps from one build graph
         if: steps.existing.outputs.exists == 'false'
         id: web
+        timeout-minutes: 10
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
