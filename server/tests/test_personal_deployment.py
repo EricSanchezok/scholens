@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
 import json
 from pathlib import Path
 
@@ -13,6 +14,198 @@ spec = importlib.util.spec_from_file_location(
 assert spec and spec.loader
 renderer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(renderer)
+
+CACHE_VERSION = "12345678-1234-1234-1234-123456789abc"
+
+
+def cache_reference_fixture():
+    return {
+        name: f"arn:aws:ssm:ap-south-2:669409472143:parameter/sanchezcloud/scholens/preview/cache-{group}/{CACHE_VERSION}/{field}"
+        for name, (group, field) in renderer.CACHE_PARAMETER_FIELDS.items()
+    }
+
+
+def test_cache_bootstrap_adds_only_exact_ssm_reads_and_preserves_source_rights():
+    import yaml
+
+    original = renderer.common(
+        yaml.load(
+            (ROOT / "deploy/ecs/scholens-foundation-bootstrap.yml").read_text(),
+            Loader=renderer.CloudFormationLoader,
+        )
+    )["Resources"]["TaskExecutionRole"]
+    template = renderer.render("bootstrap")
+    actual = copy.deepcopy(template["Resources"]["TaskExecutionRole"])
+    new_policy = actual["Properties"]["Policies"].pop()
+    assert actual == original  # Includes trust, SM, KMS, and retained role identity.
+    condition, policy, disabled = new_policy["Fn::If"]
+    assert condition == "CacheParametersConfigured"
+    assert disabled == {"Ref": "AWS::NoValue"}
+    assert policy["PolicyDocument"]["Statement"] == [
+        {
+            "Effect": "Allow",
+            "Action": ["ssm:GetParameters"],
+            "Resource": [{"Ref": name} for name in renderer.CACHE_PARAMETER_FIELDS],
+        }
+    ]
+    assert all(
+        template["Parameters"][name]["Default"] == ""
+        for name in renderer.CACHE_PARAMETER_FIELDS
+    )
+    assert "BothCacheParameterGroups" in template["Rules"]
+
+
+def test_independent_cache_canaries_change_only_the_intended_secret_references():
+    baseline = renderer.render("runtime")
+    groups = {
+        "api": {"ApiTaskDefinition", "ConversationWorkerTaskDefinition"},
+        "jobs": {
+            "DocumentWorkerTaskDefinition",
+            "DocumentIndexWorkerTaskDefinition",
+            "DocumentEnrichmentWorkerTaskDefinition",
+            "ResearchWorkerTaskDefinition",
+            "MaintenanceWorkerTaskDefinition",
+        },
+    }
+    for group, expected in groups.items():
+        sources = dict.fromkeys(renderer.CACHE_GROUPS, "secretsmanager")
+        sources[group] = "ssm"
+        candidate = renderer.render("runtime", cache_sources=sources)
+        changed = {
+            name
+            for name, value in candidate["Resources"].items()
+            if value != baseline["Resources"][name]
+        }
+        assert changed == expected
+        for name in expected:
+            before = baseline["Resources"][name]
+            after = copy.deepcopy(candidate["Resources"][name])
+            before_containers = before["Properties"]["ContainerDefinitions"]
+            for index, container in enumerate(
+                after["Properties"]["ContainerDefinitions"]
+            ):
+                original_secrets = {
+                    s["Name"]: s for s in before_containers[index].get("Secrets", [])
+                }
+                for secret in container.get("Secrets", []):
+                    if secret["Name"] not in {"CACHE_USERNAME", "CACHE_PASSWORD"}:
+                        continue
+                    field = secret["Name"].removeprefix("CACHE_").title()
+                    assert secret["ValueFrom"] == {
+                        "Ref": f"{renderer.CACHE_GROUPS[group]}Cache{field}ParameterArn"
+                    }
+                    secret["ValueFrom"] = original_secrets[secret["Name"]]["ValueFrom"]
+            assert (
+                after == before
+            )  # Images, roles, limits, mounts, commands, logs unchanged.
+        assert (
+            candidate["Parameters"][
+                f"{renderer.CACHE_GROUPS[group]}CacheCredentialSource"
+            ]["Default"]
+            == "ssm"
+        )
+    assert all(
+        baseline["Parameters"][name]["Default"] == "secretsmanager"
+        for name in renderer.CACHE_SOURCE_PARAMETERS
+    )
+    assert set(renderer.CACHE_PARAMETER_FIELDS) <= set(baseline["Parameters"])
+
+
+def test_cache_planning_preserves_references_and_selects_sources_independently(
+    monkeypatch,
+):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+    references = cache_reference_fixture()
+    selected = control.cache_credential_overrides({}, "ssm", "preserve", references)
+    assert selected["ApiCacheCredentialSource"] == "ssm"
+    assert selected["JobsCacheCredentialSource"] == "secretsmanager"
+    assert control.cache_credential_overrides(selected) == selected
+    rollback = control.cache_credential_overrides(selected, "secretsmanager")
+    assert rollback["ApiCacheCredentialSource"] == "secretsmanager"
+    assert {k: rollback[k] for k in references} == references
+    assert (
+        control.cache_credential_overrides(selected, jobs_source="ssm")[
+            "JobsCacheCredentialSource"
+        ]
+        == "ssm"
+    )
+
+
+def test_cache_planning_rejects_partial_foreign_and_mixed_version_references(
+    monkeypatch,
+):
+    import importlib
+    import pytest
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+    valid = cache_reference_fixture()
+    cases = [
+        {"ApiCacheUsernameParameterArn": valid["ApiCacheUsernameParameterArn"]},
+        dict(
+            valid,
+            ApiCachePasswordParameterArn=valid["ApiCachePasswordParameterArn"].replace(
+                "669409472143", "111122223333"
+            ),
+        ),
+        dict(
+            valid,
+            ApiCachePasswordParameterArn=valid["ApiCachePasswordParameterArn"].replace(
+                "ap-south-2", "us-east-1"
+            ),
+        ),
+        dict(
+            valid,
+            ApiCachePasswordParameterArn=valid["ApiCachePasswordParameterArn"]
+            + ":password::",
+        ),
+        dict(
+            valid,
+            ApiCachePasswordParameterArn=valid["ApiCachePasswordParameterArn"].replace(
+                CACHE_VERSION, "abcdefab-1234-1234-1234-123456789abc"
+            ),
+        ),
+        dict(
+            valid, ApiCachePasswordParameterArn=valid["JobsCachePasswordParameterArn"]
+        ),
+        dict(valid, ApiCachePasswordParameterArn=""),
+        dict(valid, UnexpectedCredential="not-an-arn"),
+    ]
+    for bad in cases:
+        with pytest.raises(ValueError):
+            control.cache_credential_overrides({}, "ssm", "ssm", bad)
+    with pytest.raises(ValueError, match="requires both"):
+        control.cache_credential_overrides({}, "ssm")
+
+
+def test_cache_apply_cannot_override_the_frozen_plan_or_fetch_values(monkeypatch):
+    import importlib
+    import sys
+    import pytest
+
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    control = importlib.import_module("personal_control_plane")
+
+    def unexpected_aws(*args):
+        raise AssertionError("Invalid apply input must stop before any AWS call")
+
+    monkeypatch.setattr(control, "aws", unexpected_aws)
+    for extra in (
+        ["--api-cache-credential-source", "ssm"],
+        ["--jobs-cache-credential-source", "secretsmanager"],
+        ["--cache-parameter-arns", json.dumps(cache_reference_fixture())],
+    ):
+        monkeypatch.setattr(
+            sys, "argv", ["personal_control_plane", "runtime", "apply", *extra]
+        )
+        with pytest.raises(ValueError, match="only when planning"):
+            control.main()
+    for filename in ("personal_control_plane.py", "personal_deployment.py"):
+        body = (ROOT / "scripts" / filename).read_text()
+        assert "get-secret-value" not in body and "get-parameter" not in body
 
 
 def test_foundation_excludes_managed_compute_and_preserves_durable_storage() -> None:

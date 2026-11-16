@@ -39,6 +39,23 @@ on:
         default: preserve
         type: choice
         options: [preserve, '0', '10', '50', '100']
+      api_cache_credential_source:
+        description: Plan-only API/conversation cache source; preserve keeps deployed references
+        required: false
+        default: preserve
+        type: choice
+        options: [preserve, secretsmanager, ssm]
+      jobs_cache_credential_source:
+        description: Plan-only background cache source; preserve keeps deployed references
+        required: false
+        default: preserve
+        type: choice
+        options: [preserve, secretsmanager, ssm]
+      cache_parameter_arns:
+        description: Plan-only JSON mapping of approved non-secret parameter ARN fields; never values
+        required: false
+        default: '{}'
+        type: string
 
 permissions:
   contents: read
@@ -77,10 +94,14 @@ jobs:
           APPLICATION_ENABLED: ${{ inputs.application_enabled || 'false' }}
           BACKGROUND_MODE: ${{ inputs.background_mode || 'preserve' }}
           PROCESSING_ROLLOUT: ${{ inputs.processing_rollout || 'preserve' }}
+          API_CACHE_CREDENTIAL_SOURCE: ${{ inputs.api_cache_credential_source || 'preserve' }}
+          JOBS_CACHE_CREDENTIAL_SOURCE: ${{ inputs.jobs_cache_credential_source || 'preserve' }}
+          CACHE_PARAMETER_ARNS: ${{ inputs.cache_parameter_arns || '{}' }}
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
         run: |
           uv run --no-project --with PyYAML==6.0.3 --with boto3==1.43.61 python scripts/personal_control_plane.py runtime "$OPERATION" \
-            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED" --background-mode "$BACKGROUND_MODE" --processing-rollout "$PROCESSING_ROLLOUT"
+            --change-set-arn "$CHANGE_SET_ARN" --release-sha "$RELEASE_SHA" --application-enabled "$APPLICATION_ENABLED" --background-mode "$BACKGROUND_MODE" --processing-rollout "$PROCESSING_ROLLOUT" \
+            --api-cache-credential-source "$API_CACHE_CREDENTIAL_SOURCE" --jobs-cache-credential-source "$JOBS_CACHE_CREDENTIAL_SOURCE" --cache-parameter-arns "$CACHE_PARAMETER_ARNS"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: inputs.operation == 'plan'
         with:

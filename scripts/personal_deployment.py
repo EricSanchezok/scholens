@@ -16,6 +16,62 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
+CACHE_GROUPS = {"api": "Api", "jobs": "Jobs"}
+CACHE_PARAMETER_FIELDS = {
+    f"{prefix}Cache{field.title()}ParameterArn": (group, field)
+    for group, prefix in CACHE_GROUPS.items()
+    for field in ("username", "password")
+}
+CACHE_SOURCE_PARAMETERS = tuple(
+    f"{prefix}CacheCredentialSource" for prefix in CACHE_GROUPS.values()
+)
+
+
+def cache_parameter_pattern(group: str, field: str) -> str:
+    return (
+        r"^$|^arn:aws:ssm:ap-south-2:669409472143:parameter/"
+        rf"sanchezcloud/scholens/preview/cache-{group}/([A-Za-z0-9-]{{32,64}})/{field}$"
+    )
+
+
+def cache_parameter_contract(
+    template: dict[str, Any], *, include_conditions: bool = False
+) -> None:
+    """Describe already-provisioned references, never SecureString payloads."""
+    parameters = template.setdefault("Parameters", {})
+    for name, (group, field) in CACHE_PARAMETER_FIELDS.items():
+        parameters[name] = {
+            "Type": "String",
+            "Default": "",
+            "AllowedPattern": cache_parameter_pattern(group, field),
+            "Description": "Non-secret ARN of the reviewed immutable Standard SecureString.",
+        }
+    for prefix in CACHE_GROUPS.values():
+        present = [
+            {
+                "Fn::Not": [
+                    {"Fn::Equals": [{"Ref": f"{prefix}Cache{field}ParameterArn"}, ""]}
+                ]
+            }
+            for field in ("Username", "Password")
+        ]
+        absent = [
+            {"Fn::Equals": [{"Ref": f"{prefix}Cache{field}ParameterArn"}, ""]}
+            for field in ("Username", "Password")
+        ]
+        if include_conditions:
+            template.setdefault("Conditions", {})[
+                f"{prefix}CacheParametersConfigured"
+            ] = {"Fn::And": present}
+        template.setdefault("Rules", {})[f"{prefix}CacheParameterPair"] = {
+            "Assertions": [
+                {
+                    "Assert": {"Fn::Or": [{"Fn::And": absent}, {"Fn::And": present}]},
+                    "AssertDescription": "Cache username and password parameter ARNs must be supplied together.",
+                }
+            ]
+        }
+
 
 class CloudFormationLoader(yaml.SafeLoader):
     pass
@@ -136,6 +192,60 @@ def foundation(template: dict[str, Any]) -> dict[str, Any]:
 
 
 def bootstrap(template: dict[str, Any]) -> dict[str, Any]:
+    cache_parameter_contract(template, include_conditions=True)
+    template["Conditions"]["CacheParametersConfigured"] = {
+        "Fn::And": [
+            {"Condition": f"{prefix}CacheParametersConfigured"}
+            for prefix in CACHE_GROUPS.values()
+        ]
+    }
+    template["Rules"]["BothCacheParameterGroups"] = {
+        "Assertions": [
+            {
+                "Assert": {
+                    "Fn::Or": [
+                        {
+                            "Fn::And": [
+                                {"Fn::Equals": [{"Ref": name}, ""]}
+                                for name in CACHE_PARAMETER_FIELDS
+                            ]
+                        },
+                        {
+                            "Fn::And": [
+                                {"Fn::Not": [{"Fn::Equals": [{"Ref": name}, ""]}]}
+                                for name in CACHE_PARAMETER_FIELDS
+                            ]
+                        },
+                    ]
+                },
+                "AssertDescription": "Provision all four approved cache parameter grants together, or leave them disabled.",
+            }
+        ]
+    }
+    # Source permissions and the key/trust policy are retained for rollback.
+    template["Resources"]["TaskExecutionRole"]["Properties"]["Policies"].append(
+        {
+            "Fn::If": [
+                "CacheParametersConfigured",
+                {
+                    "PolicyName": "ReadApprovedCacheParameters",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": ["ssm:GetParameters"],
+                                "Resource": [
+                                    {"Ref": name} for name in CACHE_PARAMETER_FIELDS
+                                ],
+                            }
+                        ],
+                    },
+                },
+                {"Ref": "AWS::NoValue"},
+            ]
+        }
+    )
     template["Parameters"]["RdsSecurityGroupId"].pop("Default", None)
     template["Parameters"]["BackgroundHostRoleArn"] = {
         "Type": "String",
@@ -455,7 +565,55 @@ def inference_resources(resources: dict[str, Any]) -> None:
     resources["InferenceService"] = service
 
 
-def runtime(template: dict[str, Any]) -> dict[str, Any]:
+def runtime(
+    template: dict[str, Any], cache_sources: dict[str, str] | None = None
+) -> dict[str, Any]:
+    cache_sources = cache_sources or dict.fromkeys(CACHE_GROUPS, "secretsmanager")
+    if set(cache_sources) != set(CACHE_GROUPS) or any(
+        source not in {"secretsmanager", "ssm"} for source in cache_sources.values()
+    ):
+        raise ValueError("Unsupported cache credential source")
+    cache_parameter_contract(template)
+    for group, prefix in CACHE_GROUPS.items():
+        name = f"{prefix}CacheCredentialSource"
+        template["Parameters"][name] = {
+            "Type": "String",
+            "Default": cache_sources[group],
+            "AllowedValues": ["secretsmanager", "ssm"],
+        }
+        template["Rules"][f"{prefix}CacheSourceMatchesTemplate"] = {
+            "Assertions": [
+                {
+                    "Assert": {"Fn::Equals": [{"Ref": name}, cache_sources[group]]},
+                    "AssertDescription": "Re-render through the reviewed controller when changing credential source.",
+                }
+            ]
+        }
+        if cache_sources[group] == "ssm":
+            template["Rules"][f"{prefix}CacheSourceRequiresParameters"] = {
+                "Assertions": [
+                    {
+                        "Assert": {
+                            "Fn::And": [
+                                {
+                                    "Fn::Not": [
+                                        {
+                                            "Fn::Equals": [
+                                                {
+                                                    "Ref": f"{prefix}Cache{field}ParameterArn"
+                                                },
+                                                "",
+                                            ]
+                                        }
+                                    ]
+                                }
+                                for field in ("Username", "Password")
+                            ]
+                        },
+                        "AssertDescription": "SSM injection requires both reviewed parameter ARNs.",
+                    }
+                ]
+            }
     kept_types = {
         "AWS::IAM::Role",
         "AWS::Logs::LogGroup",
@@ -653,6 +811,20 @@ def runtime(template: dict[str, Any]) -> dict[str, Any]:
                     port.pop("AppProtocol", None)
                 if container["Name"] == "web":
                     continue
+                group = (
+                    "api"
+                    if container["Name"] in {"api", "conversation-worker"}
+                    else "jobs"
+                )
+                for secret in container.get("Secrets", []):
+                    if (
+                        secret["Name"] in {"CACHE_USERNAME", "CACHE_PASSWORD"}
+                        and cache_sources[group] == "ssm"
+                    ):
+                        field = secret["Name"].removeprefix("CACHE_").title()
+                        secret["ValueFrom"] = {
+                            "Ref": f"{CACHE_GROUPS[group]}Cache{field}ParameterArn"
+                        }
                 shared_client = any(v["Name"] == "inference" for v in props["Volumes"])
                 if shared_client:
                     container.setdefault("MountPoints", []).append(
@@ -771,7 +943,9 @@ def prune_parameters(template: dict[str, Any]) -> None:
     }
 
 
-def render(stage: str) -> dict[str, Any]:
+def render(
+    stage: str, *, cache_sources: dict[str, str] | None = None
+) -> dict[str, Any]:
     source = {
         "foundation": "foundation",
         "bootstrap": "foundation-bootstrap",
@@ -782,9 +956,10 @@ def render(stage: str) -> dict[str, Any]:
         Loader=CloudFormationLoader,
     )
     template = common(template)
-    template = {"foundation": foundation, "bootstrap": bootstrap, "runtime": runtime}[
-        stage
-    ](template)
+    if stage == "runtime":
+        template = runtime(template, cache_sources=cache_sources)
+    else:
+        template = {"foundation": foundation, "bootstrap": bootstrap}[stage](template)
     template["Description"] = f"Isolated personal-account Scholens {stage}"
     prune_parameters(template)
     return template
@@ -794,5 +969,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=["foundation", "bootstrap", "runtime"])
     parser.add_argument("--output", required=True, type=Path)
+    for group in CACHE_GROUPS:
+        parser.add_argument(
+            f"--{group}-cache-credential-source",
+            choices=["secretsmanager", "ssm"],
+            default="secretsmanager",
+        )
     args = parser.parse_args()
-    args.output.write_text(json.dumps(render(args.stage), indent=2) + "\n")
+    sources = {
+        group: getattr(args, f"{group}_cache_credential_source")
+        for group in CACHE_GROUPS
+    }
+    if args.stage != "runtime" and "ssm" in sources.values():
+        parser.error("Cache source selection only belongs to runtime rendering")
+    args.output.write_text(
+        json.dumps(render(args.stage, cache_sources=sources), indent=2) + "\n"
+    )

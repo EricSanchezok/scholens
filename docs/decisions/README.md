@@ -32,6 +32,8 @@ change what the accepted record decided.
 
 ## Accepted decisions
 
+- [ADR 0062: Versioned SSM cache references](./0062-versioned-ssm-cache-references.md)
+
 - [ADR 0061: Fair bounded job publication](./0061-fair-bounded-job-publication.md)
 
 - [ADR 0053: Explicit single-host runtime endpoints](./0053-explicit-single-host-runtime.md)

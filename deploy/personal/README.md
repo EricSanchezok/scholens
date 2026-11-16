@@ -132,6 +132,46 @@ verify every endpoint and queue belongs to that rehearsal before enabling servic
 Restoring a database does not authorize replaying copied jobs. Record actual restore,
 ARM64 startup and functional verification results separately from template generation.
 
+## Versioned cache parameter rollout
+
+The operator may provision one Standard `SecureString` per cache username/password
+under the existing configuration CMK, using a source-version-specific path. Values
+never belong in CloudFormation, workflow inputs, artifacts or source. The renderer
+and controller only accept the four non-secret ARN fields:
+`ApiCacheUsernameParameterArn`, `ApiCachePasswordParameterArn`,
+`JobsCacheUsernameParameterArn`, and `JobsCachePasswordParameterArn`.
+The product owns this controlled provisioning manifest; native CloudFormation
+does not support `SecureString` resources. See
+[ADR 0062](../../docs/decisions/0062-versioned-ssm-cache-references.md).
+
+First review an administrator-owned **bootstrap** update with all four approved
+ARNs. It adds only exact-resource `ssm:GetParameters` to the existing execution
+role, preserving Secrets Manager reads, KMS policies and trust. Empty defaults
+leave that new policy disabled. Do not expand GitHub's deployment permissions or
+add parameter tags to make a read succeed.
+
+Runtime plans accept `api_cache_credential_source` and
+`jobs_cache_credential_source` as `preserve` (default), `secretsmanager`, or `ssm`.
+`cache_parameter_arns` is a JSON object containing approved ARN fields, not values.
+Each username/password pair must use the same source-version path in the reviewed
+personal account and region. Plans reject missing pairs, foreign fields/accounts
+or regions, and Secrets Manager-style JSON selectors on a parameter ARN.
+
+Select API/conversation first, inspect the exact change set and verify healthy
+cache operations before selecting background workers. The renderer changes only
+the selected consumers' `CACHE_USERNAME`/`CACHE_PASSWORD` references; it preserves
+images and all other task properties. Existing admission pause/drain, registration
+refresh and restoration govern background rollout. Do not launch or retry jobs
+for acceptance. Valkey's separate reference-only rollout must pass its persistence
+and outage-window checks before it is changed.
+
+Normal releases preserve deployed source modes and ARN mappings. Apply uses only
+the frozen reviewed plan and rejects new cache overrides. To roll back, plan the
+same compatible manifest with the selected source `secretsmanager`, retain staged
+ARN mappings and original SM rights, verify health, and only then consider removing
+new reads. Neither this workflow nor application rollback deletes source secrets,
+parameters, cache data or keys. Changing cache references does not run migrations.
+
 ## Manual ARM64 image publication
 
 `personal-publish.yml` accepts only a revision already merged into main, runs the shared
@@ -188,9 +228,13 @@ rolled back as part of an application release.
 `valkey/runtime.yml` runs the pinned ARM64 Valkey image with TLS only on private host
 port 6380, a 192 MiB no-eviction cache limit, 128 MiB soft/384 MiB hard container memory, AOF
 and the same API/Jobs key-prefix ACLs as the managed cache. The default user is disabled.
-The ECS execution role injects two Secrets Manager passwords; the process receives no
-AWS role. Bootstrap hashes passwords into a private tmpfs ACL file and removes plaintext
-password variables before starting Valkey. No credential appears in command arguments.
+The ECS execution role injects two passwords from the explicitly selected Secrets
+Manager or SSM source; the default remains Secrets Manager. The
+[Valkey credential-reference runbook](valkey/README.md) defines exact parameter
+grants, the explicit source selection, acceptance and same-data rollback.
+The process receives no AWS role. Bootstrap hashes passwords into a private tmpfs
+ACL file and removes plaintext password variables before starting Valkey. No
+credential appears in command arguments.
 
 Run `valkey/prepare-host.sh` through SSM after Account Center provisions the shared CA.
 It creates only the Valkey leaf certificate and data directory, and refuses partial or

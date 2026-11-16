@@ -15,7 +15,13 @@ import tarfile
 import time
 from typing import Any
 
-from personal_deployment import render
+from personal_deployment import (
+    CACHE_GROUPS,
+    CACHE_PARAMETER_FIELDS,
+    CACHE_SOURCE_PARAMETERS,
+    cache_parameter_pattern,
+    render,
+)
 
 ACCOUNT = "669409472143"
 REGION = "ap-south-2"
@@ -24,6 +30,7 @@ STACKS = {
     "runtime": "sanchezcloud-scholens-production",
 }
 BUCKET = f"sanchezcloud-scholens-releases-{ACCOUNT}-{REGION}"
+CACHE_RUNTIME_PARAMETERS = (*CACHE_SOURCE_PARAMETERS, *CACHE_PARAMETER_FIELDS)
 
 
 def aws(*args: str) -> Any:
@@ -109,6 +116,55 @@ def processing_overrides(
     }
 
 
+def cache_credential_overrides(
+    previous: dict[str, str],
+    api_source: str = "preserve",
+    jobs_source: str = "preserve",
+    parameter_arns: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Validate non-secret exact references; never fetch credential values."""
+    supplied = parameter_arns or {}
+    if set(supplied) - set(CACHE_PARAMETER_FIELDS):
+        raise ValueError(
+            "Only the four reviewed cache parameter ARN fields are accepted"
+        )
+    if any(not isinstance(value, str) or not value for value in supplied.values()):
+        raise ValueError(
+            "Cache ARN overrides must be nonempty strings; rollback preserves references"
+        )
+    result = {name: previous.get(name, "") for name in CACHE_PARAMETER_FIELDS}
+    result.update(supplied)
+    for group, requested in (("api", api_source), ("jobs", jobs_source)):
+        if requested not in {"preserve", "secretsmanager", "ssm"}:
+            raise ValueError("Unsupported cache credential source")
+        prefix = CACHE_GROUPS[group]
+        source_name = f"{prefix}CacheCredentialSource"
+        source = (
+            previous.get(source_name, "secretsmanager")
+            if requested == "preserve"
+            else requested
+        )
+        if source not in {"secretsmanager", "ssm"}:
+            raise ValueError("Deployed cache credential source is unsupported")
+        result[source_name] = source
+        versions = []
+        for field in ("username", "password"):
+            name = f"{prefix}Cache{field.title()}ParameterArn"
+            value = result[name]
+            if value:
+                match = re.fullmatch(cache_parameter_pattern(group, field), value)
+                if not match:
+                    raise ValueError(f"Invalid reviewed parameter ARN for {name}")
+                versions.append(match.group(1))
+        if len(versions) not in {0, 2} or len(set(versions)) > 1:
+            raise ValueError(
+                "Cache username/password must reference one complete immutable source version"
+            )
+        if source == "ssm" and len(versions) != 2:
+            raise ValueError("SSM cache source requires both approved parameter ARNs")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=STACKS)
@@ -128,7 +184,31 @@ def main() -> None:
     parser.add_argument(
         "--application-enabled", choices=["true", "false"], default="false"
     )
+    for group in CACHE_GROUPS:
+        parser.add_argument(
+            f"--{group}-cache-credential-source",
+            choices=["preserve", "secretsmanager", "ssm"],
+            default="preserve",
+        )
+    parser.add_argument("--cache-parameter-arns", default="{}")
     args = parser.parse_args()
+    try:
+        cache_arns = json.loads(args.cache_parameter_arns)
+    except ValueError as exc:
+        raise ValueError(
+            "Cache parameter references must be a JSON object of non-secret ARNs"
+        ) from exc
+    if not isinstance(cache_arns, dict):
+        raise ValueError("Cache parameter references must be a JSON object")
+    cache_requested = (
+        args.api_cache_credential_source != "preserve"
+        or args.jobs_cache_credential_source != "preserve"
+        or bool(cache_arns)
+    )
+    if cache_requested and (args.stage != "runtime" or args.operation != "plan"):
+        raise ValueError(
+            "Cache reference overrides are selected only when planning runtime"
+        )
     guard_destination(
         aws("sts", "get-caller-identity")["Account"], os.environ.get("AWS_REGION", "")
     )
@@ -183,7 +263,13 @@ def main() -> None:
                 }
                 if current_stack["StackStatus"] == "UPDATE_COMPLETE" and any(
                     actual.get(k) != planned.get(k)
-                    for k in ("ReleaseSha", "ApiImage", "WebImage", "JobsImage")
+                    for k in (
+                        "ReleaseSha",
+                        "ApiImage",
+                        "WebImage",
+                        "JobsImage",
+                        *CACHE_RUNTIME_PARAMETERS,
+                    )
                 ):
                     raise ValueError("Another release superseded this operation")
             AdmissionRelease(arn).run()
@@ -202,7 +288,6 @@ def main() -> None:
             time.sleep(15)
         raise TimeoutError("Stack convergence requires operator investigation")
 
-    template = render(args.stage)
     stack = aws(
         "cloudformation", "describe-stacks", "--stack-name", STACKS[args.stage]
     )["Stacks"][0]
@@ -216,7 +301,27 @@ def main() -> None:
     previous_values = {
         x["ParameterKey"]: x["ParameterValue"] for x in stack["Parameters"]
     }
+    cache_values = (
+        cache_credential_overrides(
+            previous_values,
+            args.api_cache_credential_source,
+            args.jobs_cache_credential_source,
+            cache_arns,
+        )
+        if args.stage == "runtime"
+        else {}
+    )
+    template = render(
+        args.stage,
+        cache_sources={
+            group: cache_values[f"{prefix}CacheCredentialSource"]
+            for group, prefix in CACHE_GROUPS.items()
+        }
+        if args.stage == "runtime"
+        else None,
+    )
     overrides = {"ExpectedAccountId": ACCOUNT}
+    overrides.update(cache_values)
     manifest_hash = ""
     if args.background_mode != "preserve":
         if args.stage != "runtime":
