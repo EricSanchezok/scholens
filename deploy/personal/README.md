@@ -238,7 +238,11 @@ after the runtime log groups exist, passing the confirmed shared alert topic as
 `AlertTopicArn`. Create and review its exact CloudFormation change set before
 execution. It owns application log metric filters and alarms in
 `Scholens/Personal`, without exporter containers. The runtime retains logs for
-30 days. Metric filters and alarms have CloudWatch charges. The
+30 days. `DiagnosticMetricsEnabled=false` keeps all fourteen application alarms
+and their metric filters while leaving twelve additional diagnostic series in
+ordinary logs. Set it to `true` through a reviewed change set to restore their
+metric extraction. This monitoring-only change does not require publishing or
+deploying application images. Metric filters and alarms have CloudWatch charges. The
 [observability runbook](../../docs/operations/AWS_OBSERVABILITY_SETUP.md) owns
 the signal inventory, bounded queue dimensions, actual-ingestion verification
 and limitations. Deploy and verify the durable-backlog reporter before enabling

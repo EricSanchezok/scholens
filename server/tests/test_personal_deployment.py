@@ -167,6 +167,72 @@ def test_personal_business_monitoring_has_bounded_cost_and_no_exporter():
     )
 
 
+def test_personal_monitoring_can_stop_diagnostic_extraction_without_losing_alarms():
+    import yaml
+    from scholens_job_contracts import JOB_QUEUE_NAMES
+
+    template = yaml.load(
+        (ROOT / "deploy/personal/application-monitoring.yml").read_text(),
+        Loader=renderer.CloudFormationLoader,
+    )
+    parameter = template["Parameters"]["DiagnosticMetricsEnabled"]
+    assert parameter["Type"] == "String"
+    assert parameter["Default"] == "false"
+    assert parameter["AllowedValues"] == ["true", "false"]
+    assert template["Conditions"]["ExtractDiagnosticMetrics"] == {
+        "Fn::Equals": [{"Ref": "DiagnosticMetricsEnabled"}, "true"]
+    }
+    diagnostic_metrics = set()
+    alarm_series = set()
+    retained_series = set()
+    conditional_filters = 0
+    alarms = 0
+    for resource in template["Resources"].values():
+        props = resource["Properties"]
+        if resource.get("Condition"):
+            assert resource["Type"] == "AWS::Logs::MetricFilter"
+            assert resource["Condition"] == "ExtractDiagnosticMetrics"
+            conditional_filters += 1
+            diagnostic_metrics.update(
+                metric["MetricName"] for metric in props["MetricTransformations"]
+            )
+        elif resource["Type"] == "AWS::CloudWatch::Alarm":
+            alarms += 1
+            alarm_series.add(
+                (
+                    props["MetricName"],
+                    tuple((d["Name"], d["Value"]) for d in props.get("Dimensions", [])),
+                )
+            )
+        else:
+            assert resource["Type"] == "AWS::Logs::MetricFilter"
+            for metric in props["MetricTransformations"]:
+                if metric.get("Dimensions"):
+                    assert metric["Dimensions"] == [
+                        {"Key": "Queue", "Value": "$.queue"}
+                    ]
+                    retained_series.update(
+                        (metric["MetricName"], (("Queue", queue),))
+                        for queue in JOB_QUEUE_NAMES
+                    )
+                else:
+                    retained_series.add((metric["MetricName"], ()))
+    assert conditional_filters == 11
+    assert diagnostic_metrics == {
+        "HttpRequests",
+        "HttpStreamFailures",
+        "McpResultBudgetErrors",
+        "JobExecutions",
+        "InferenceQueryDuration",
+        "InferenceFailedResponses",
+        "DurablePendingJobs",
+    }
+    # Every existing alarm keeps its exact metric/dimension producer in both modes.
+    assert alarms == 14
+    assert len(alarm_series) == 14
+    assert retained_series == alarm_series
+
+
 def test_preview_uses_separate_oidc_subjects_and_account_guard() -> None:
     template = renderer.render("bootstrap")
     text = json.dumps(template)

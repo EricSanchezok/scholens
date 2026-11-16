@@ -12,13 +12,42 @@ evidence, not zero failures.
 Application stdout reaches CloudWatch through ECS `awslogs`. Runtime log groups
 retain 30 days for incident review and the contract retirement observation
 window. The separately reviewed `application-monitoring.yml` stack derives
-16 fixed metric names in `Scholens/Personal` from these existing logs, without an
-exporter process or additional application permissions. Metric dimensions never
-contain users, jobs, documents, model revisions, or request references. These
-custom metrics and fourteen alarms have CloudWatch charges; they add no host tier.
-Only the two durable-backlog metrics have a dimension: `Queue`, restricted by
-the filter to the six registered queue names. This bounds the total to 26 metric
-series. All other metrics remain dimensionless.
+metrics in `Scholens/Personal` from these existing logs, without an exporter
+process or additional application permissions. `DiagnosticMetricsEnabled=false`
+is the default: nine fixed metric names produce fourteen bounded series and
+keep all fourteen application alarms. `DiagnosticMetricsEnabled=true` additionally
+extracts seven diagnostic metric names, restoring the previous total of sixteen
+names and twenty-six series. Metric dimensions never contain users, jobs,
+documents, model revisions, or request references. Only the two durable-backlog
+metrics use `Queue`, restricted to the six registered queue names; all other
+metrics remain dimensionless. Metrics and alarms have CloudWatch charges; neither
+mode changes the host tier, log events, log retention, application behavior or
+in-process OpenTelemetry exports.
+
+The optional diagnostic metrics are `HttpRequests`, `HttpStreamFailures`,
+`McpResultBudgetErrors`, `JobExecutions`, `InferenceQueryDuration`,
+`InferenceFailedResponses` and the six `DurablePendingJobs` series. Their source
+events and numeric fields remain in ordinary logs when extraction is disabled.
+Error, health, receipt-latency and durable-waiting alarms remain active in both
+modes. Losing the optional persistent metric graphs is a diagnostic tradeoff;
+an absent diagnostic series is not evidence of zero requests or failures.
+
+For an existing stack, create a change set with the current `AlertTopicArn`
+preserved and `DiagnosticMetricsEnabled=false`. Review the exact diff before
+execution: it must remove only the eleven diagnostic `AWS::Logs::MetricFilter`
+resources, without altering any alarm, required metric filter, log group,
+application task or permission. Record the alarm definitions/actions and recent
+required samples before and after, and confirm ordinary logs still arrive. Metric
+listings and billing can lag; verify the extraction configuration and new samples
+before estimating savings. Do not multiply the historical visible series count
+by a monthly price or promise a fixed saving from this change.
+
+Rollback uses the same reviewed template with `DiagnosticMetricsEnabled=true`,
+which recreates the optional filters without changing application tasks. It
+resumes extraction for newly ingested events only; it does not backfill a gap in
+diagnostic metric history from retained logs. Keep the prior template and exact
+parameter values with the deployment evidence. If a required metric or alarm
+changes unexpectedly, stop acceptance and restore the prior monitoring setup.
 
 HTTP completion logs, metrics and matched-route spans use the complete registered
 route template, including every router prefix and named parameter. FastAPI 0.138's
