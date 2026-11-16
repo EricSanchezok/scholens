@@ -43,6 +43,7 @@ ecs-task-definitions/
 # misc
 .DS_Store
 *.pem
+!deploy/trust/aws-rds-global-bundle.pem
 celerybeat-schedule.db
 
 # debug

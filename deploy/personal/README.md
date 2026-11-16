@@ -56,6 +56,11 @@ entrypoint owns public HTTPS. Python tasks mount `/srv/sanchezcloud/trust` read-
 public/private CA bundle for HTTPS and Valkey TLS. Production validation stays enabled
 with explicit `RUNTIME_DEPLOYMENT_MODE=single-host`.
 
+The API image's fallback RDS trust bundle is the
+[retained public certificate artifact](../trust/README.md), copied at build time
+and checked against the pre-existing SHA-256. This makes builds independent of
+upstream bundle updates without changing the approved trust set or TLS validation.
+
 Each service runs one task when enabled; workers retain concurrency one. Container CPU,
 soft memory and hard memory limits are explicit. Deployments stop the old task before
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a
@@ -238,7 +243,11 @@ after the runtime log groups exist, passing the confirmed shared alert topic as
 `AlertTopicArn`. Create and review its exact CloudFormation change set before
 execution. It owns application log metric filters and alarms in
 `Scholens/Personal`, without exporter containers. The runtime retains logs for
-30 days. Metric filters and alarms have CloudWatch charges. The
+30 days. `DiagnosticMetricsEnabled=false` keeps all fourteen application alarms
+and their metric filters while leaving twelve additional diagnostic series in
+ordinary logs. Set it to `true` through a reviewed change set to restore their
+metric extraction. This monitoring-only change does not require publishing or
+deploying application images. Metric filters and alarms have CloudWatch charges. The
 [observability runbook](../../docs/operations/AWS_OBSERVABILITY_SETUP.md) owns
 the signal inventory, bounded queue dimensions, actual-ingestion verification
 and limitations. Deploy and verify the durable-backlog reporter before enabling

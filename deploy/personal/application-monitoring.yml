@@ -5,6 +5,12 @@ Parameters:
   AlertTopicArn:
     Type: String
     AllowedPattern: ^arn:aws:sns:ap-south-2:669409472143:[A-Za-z0-9_-]+$
+  DiagnosticMetricsEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Extract optional diagnostic metrics from existing logs. Alarm
+      metrics remain enabled; true restores the additional diagnostic series.
 Rules:
   Destination:
     Assertions:
@@ -18,9 +24,15 @@ Rules:
         - Ref: AWS::Region
         - ap-south-2
       AssertDescription: Only the approved personal region is supported.
+Conditions:
+  ExtractDiagnosticMetrics:
+    Fn::Equals:
+    - Ref: DiagnosticMetricsEnabled
+    - 'true'
 Resources:
   HttpRequestsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/api
       FilterPattern: '{ $.event = "http.request.completed" && $.route != "/livez"
@@ -45,6 +57,7 @@ Resources:
         DefaultValue: 0
   HttpStreamFailuresFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/api
       FilterPattern: '{ $.event = "http.request.completed" && $.stream_failed IS TRUE
@@ -81,6 +94,7 @@ Resources:
         DefaultValue: 0
   McpResultBudgetErrorsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/api
       FilterPattern: '{ $.event = "mcp.request.error" && $.error_code = "tool_result_budget_exceeded"
@@ -116,6 +130,7 @@ Resources:
         DefaultValue: 0
   DocumentJobExecutionsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/document-worker
       FilterPattern: '{ $.event = "job.task.completed" }'
@@ -138,6 +153,7 @@ Resources:
         DefaultValue: 0
   DocumentIndexJobExecutionsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/document-index-worker
       FilterPattern: '{ $.event = "job.task.completed" }'
@@ -160,6 +176,7 @@ Resources:
         DefaultValue: 0
   DocumentEnrichmentJobExecutionsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/document-enrichment-worker
       FilterPattern: '{ $.event = "job.task.completed" }'
@@ -182,6 +199,7 @@ Resources:
         DefaultValue: 0
   ResearchJobExecutionsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/research-worker
       FilterPattern: '{ $.event = "job.task.completed" }'
@@ -204,6 +222,7 @@ Resources:
         DefaultValue: 0
   MaintenanceJobExecutionsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/maintenance-worker
       FilterPattern: '{ $.event = "job.task.completed" }'
@@ -226,6 +245,7 @@ Resources:
         DefaultValue: 0
   InferenceQueryDurationFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/inference
       FilterPattern: '{ $.event = "inference.request.completed" && $.kind = "query"
@@ -237,6 +257,7 @@ Resources:
         Unit: Milliseconds
   InferenceFailedResponsesFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/inference
       FilterPattern: '{ $.event = "inference.request.completed" && $.kind != "health"
@@ -346,6 +367,7 @@ Resources:
       - Ref: AlertTopicArn
   DurablePendingJobsFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: ExtractDiagnosticMetrics
     Properties:
       LogGroupName: /sanchezcloud/scholens/api
       FilterPattern: '{ $.event = "jobs.outbox.backlog" && ( $.queue = "conversation" || $.queue
