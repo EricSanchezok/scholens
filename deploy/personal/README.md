@@ -56,6 +56,11 @@ entrypoint owns public HTTPS. Python tasks mount `/srv/sanchezcloud/trust` read-
 public/private CA bundle for HTTPS and Valkey TLS. Production validation stays enabled
 with explicit `RUNTIME_DEPLOYMENT_MODE=single-host`.
 
+The API image's fallback RDS trust bundle is the
+[retained public certificate artifact](../trust/README.md), copied at build time
+and checked against the pre-existing SHA-256. This makes builds independent of
+upstream bundle updates without changing the approved trust set or TLS validation.
+
 Each service runs one task when enabled; workers retain concurrency one. Container CPU,
 soft memory and hard memory limits are explicit. Deployments stop the old task before
 starting its replacement (`minimumHealthyPercent=0`, `maximumPercent=100`), accepting a

@@ -2,7 +2,6 @@ ARG PYTHON_IMAGE=python:3.12.14-alpine3.23@sha256:aa81c9c4cc2f42592a6c8a9fba3a13
 ARG EMBEDDING_BUILD_IMAGE=python:3.12.14-slim-bookworm@sha256:a116514e19457bcb7af7efe9c3dd0b9b71e85b317694e7882a1c52aa15a78134
 ARG SCHOLENS_EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
 ARG SCHOLENS_EMBEDDING_VARIANT=o4
-ARG RDS_GLOBAL_BUNDLE_URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ARG RDS_GLOBAL_BUNDLE_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
 
 FROM ${EMBEDDING_BUILD_IMAGE} AS embedding-builder
@@ -23,7 +22,6 @@ RUN .venv/bin/python -m scholens_ai.download_embeddings /models/search \
 
 FROM ${PYTHON_IMAGE} AS builder
 
-ARG RDS_GLOBAL_BUNDLE_URL
 ARG RDS_GLOBAL_BUNDLE_SHA256
 ARG SANCHEZCLOUD_IDENTITY_REVISION
 ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/sanchezcloud-identity/tarball
@@ -45,9 +43,8 @@ RUN --mount=type=secret,id=github_token \
     && tar -xzf /tmp/sanchezcloud-identity.tar.gz --strip-components=1 -C /app/sanchezcloud-identity \
     && rm /tmp/sanchezcloud-identity.tar.gz
 
-RUN curl --fail --location --silent --show-error \
-      --output /tmp/global-bundle.pem "${RDS_GLOBAL_BUNDLE_URL}" \
-    && echo "${RDS_GLOBAL_BUNDLE_SHA256}  /tmp/global-bundle.pem" | sha256sum -c
+COPY deploy/trust/aws-rds-global-bundle.pem /tmp/global-bundle.pem
+RUN echo "${RDS_GLOBAL_BUNDLE_SHA256}  /tmp/global-bundle.pem" | sha256sum -c
 
 COPY packages/scholens_observability/ /packages/scholens_observability/
 COPY packages/scholens_ai/ /packages/scholens_ai/

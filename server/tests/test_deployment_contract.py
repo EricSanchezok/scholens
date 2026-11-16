@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -2718,6 +2719,18 @@ def test_edge_rotation_version_lookup_never_reads_the_secret_value() -> None:
     assert "An absent `AWSPREVIOUS` is normal" in rotation
 
 
+def test_api_retains_the_approved_public_rds_certificate_set() -> None:
+    dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+    bundle = (ROOT / "deploy/trust/aws-rds-global-bundle.pem").read_bytes()
+    expected = "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+    assert hashlib.sha256(bundle).hexdigest() == expected
+    assert f"ARG RDS_GLOBAL_BUNDLE_SHA256={expected}" in dockerfile
+    assert bundle.count(b"-----BEGIN CERTIFICATE-----") == 108
+    assert bundle.count(b"-----END CERTIFICATE-----") == 108
+    assert b"PRIVATE KEY" not in bundle
+    assert "RDS_GLOBAL_BUNDLE_URL" not in dockerfile
+
+
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
@@ -2749,8 +2762,14 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     builder = server_dockerfile.split("FROM ${PYTHON_IMAGE} AS builder", maxsplit=1)[
         1
     ].split("FROM ${PYTHON_IMAGE} AS runtime", maxsplit=1)[0]
-    assert "ARG RDS_GLOBAL_BUNDLE_URL" in builder
+    assert (
+        "COPY deploy/trust/aws-rds-global-bundle.pem /tmp/global-bundle.pem" in builder
+    )
     assert "ARG RDS_GLOBAL_BUNDLE_SHA256" in builder
+    assert (
+        '"${RDS_GLOBAL_BUNDLE_SHA256}  /tmp/global-bundle.pem" | sha256sum -c'
+        in builder
+    )
 
     for lane in (
         "server",
