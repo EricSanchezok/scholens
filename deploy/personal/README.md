@@ -188,9 +188,13 @@ rolled back as part of an application release.
 `valkey/runtime.yml` runs the pinned ARM64 Valkey image with TLS only on private host
 port 6380, a 192 MiB no-eviction cache limit, 128 MiB soft/384 MiB hard container memory, AOF
 and the same API/Jobs key-prefix ACLs as the managed cache. The default user is disabled.
-The ECS execution role injects two Secrets Manager passwords; the process receives no
-AWS role. Bootstrap hashes passwords into a private tmpfs ACL file and removes plaintext
-password variables before starting Valkey. No credential appears in command arguments.
+The ECS execution role injects two passwords from the explicitly selected Secrets
+Manager or SSM source; the default remains Secrets Manager. The
+[Valkey credential-reference runbook](valkey/README.md) defines exact parameter
+grants, the explicit source selection, acceptance and same-data rollback.
+The process receives no AWS role. Bootstrap hashes passwords into a private tmpfs
+ACL file and removes plaintext password variables before starting Valkey. No
+credential appears in command arguments.
 
 Run `valkey/prepare-host.sh` through SSM after Account Center provisions the shared CA.
 It creates only the Valkey leaf certificate and data directory, and refuses partial or

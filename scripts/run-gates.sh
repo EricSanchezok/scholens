@@ -211,6 +211,7 @@ run_deployment() {
     "$server_environment/pytest" -q \
       server/tests/test_deployment_contract.py \
       server/tests/test_personal_deployment.py \
+      server/tests/test_valkey_ssm_deployment.py \
       server/tests/test_ecr_scan_contract.py \
       server/tests/test_release_manifest.py \
       server/tests/test_runtime_entrypoint.py
