@@ -176,6 +176,11 @@ def foundation(template: dict[str, Any]) -> dict[str, Any]:
     template["Resources"] = {
         k: v for k, v in template["Resources"].items() if v["Type"] in allowed
     }
+    # The shared personal ingress does not use the former managed-edge token.
+    # Its deployed RetainExceptOnCreate policy keeps the secret for a separately
+    # reviewed retirement after this template relinquishes ownership.
+    template["Resources"].pop("EdgeSecret", None)
+    template["Outputs"].pop("EdgeSecretArn", None)
     template["Parameters"]["ProductionDomain"]["Default"] = (
         "scholens-preview.sanchezcloud.net"
     )
