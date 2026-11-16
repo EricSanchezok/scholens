@@ -4,6 +4,21 @@ Parameters:
   ExpectedAccountId: {Type: String, AllowedPattern: '[0-9]{12}'}
   ClusterArn: {Type: String}
   CacheEnabled: {Type: String, Default: 'false', AllowedValues: ['false', 'true']}
+  CacheCredentialSource:
+    Type: String
+    Default: secretsmanager
+    AllowedValues: [secretsmanager, ssm]
+    Description: Explicit credential-reference selection; preserve the deployed value for ordinary updates.
+  ApiCachePasswordParameterArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws:ssm:ap-south-2:669409472143:parameter/sanchezcloud/scholens/preview/cache-api/[A-Za-z0-9-]{32,64}/password$'
+    Description: Approved immutable Standard SecureString ARN; never a parameter value.
+  JobsCachePasswordParameterArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws:ssm:ap-south-2:669409472143:parameter/sanchezcloud/scholens/preview/cache-jobs/[A-Za-z0-9-]{32,64}/password$'
+    Description: Approved immutable Standard SecureString ARN; never a parameter value.
   CacheImage:
     Type: String
     Default: valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
@@ -13,8 +28,29 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref 'AWS::AccountId', !Ref ExpectedAccountId]
         AssertDescription: Only the reviewed destination account is allowed.
+  SsmPasswordPair:
+    Assertions:
+      - Assert: !Or
+          - !And
+            - !Equals [!Ref ApiCachePasswordParameterArn, '']
+            - !Equals [!Ref JobsCachePasswordParameterArn, '']
+          - !And
+            - !Not [!Equals [!Ref ApiCachePasswordParameterArn, '']]
+            - !Not [!Equals [!Ref JobsCachePasswordParameterArn, '']]
+        AssertDescription: Supply both approved password parameter ARNs together, or leave both empty.
+  SsmPasswordsRequired:
+    RuleCondition: !Equals [!Ref CacheCredentialSource, ssm]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ApiCachePasswordParameterArn, '']]
+        AssertDescription: SSM credential selection requires the API password parameter ARN.
+      - Assert: !Not [!Equals [!Ref JobsCachePasswordParameterArn, '']]
+        AssertDescription: SSM credential selection requires the Jobs password parameter ARN.
 Conditions:
   RunCache: !Equals [!Ref CacheEnabled, 'true']
+  UseSsmCachePasswords: !Equals [!Ref CacheCredentialSource, ssm]
+  HasSsmCachePasswords: !And
+    - !Not [!Equals [!Ref ApiCachePasswordParameterArn, '']]
+    - !Not [!Equals [!Ref JobsCachePasswordParameterArn, '']]
 Resources:
   CacheLogs:
     Type: AWS::Logs::LogGroup
@@ -41,6 +77,26 @@ Resources:
                 Action: kms:Decrypt
                 Resource: !ImportValue sanchezcloud-scholens-configuration-key-arn
                 Condition: {StringEquals: {kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'}}
+              - !If
+                - HasSsmCachePasswords
+                - Effect: Allow
+                  Action: [ssm:GetParameters]
+                  Resource:
+                    - !Ref ApiCachePasswordParameterArn
+                    - !Ref JobsCachePasswordParameterArn
+                - !Ref AWS::NoValue
+              - !If
+                - HasSsmCachePasswords
+                - Effect: Allow
+                  Action: [kms:Decrypt]
+                  Resource: !ImportValue sanchezcloud-scholens-configuration-key-arn
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+                      kms:EncryptionContext:PARAMETER_ARN:
+                        - !Ref ApiCachePasswordParameterArn
+                        - !Ref JobsCachePasswordParameterArn
+                - !Ref AWS::NoValue
   CacheTask:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -68,13 +124,19 @@ Resources:
             Tmpfs: [{ContainerPath: /tmp, Size: 8, MountOptions: [rw, noexec, nosuid, 'mode=1777']}]
           Secrets:
             - Name: CACHE_API_PASSWORD
-              ValueFrom: !Sub
-                - '${Secret}:password::'
-                - Secret: !ImportValue sanchezcloud-scholens-api-cache-secret-arn
+              ValueFrom: !If
+                - UseSsmCachePasswords
+                - !Ref ApiCachePasswordParameterArn
+                - !Sub
+                  - '${Secret}:password::'
+                  - Secret: !ImportValue sanchezcloud-scholens-api-cache-secret-arn
             - Name: CACHE_JOBS_PASSWORD
-              ValueFrom: !Sub
-                - '${Secret}:password::'
-                - Secret: !ImportValue sanchezcloud-scholens-jobs-cache-secret-arn
+              ValueFrom: !If
+                - UseSsmCachePasswords
+                - !Ref JobsCachePasswordParameterArn
+                - !Sub
+                  - '${Secret}:password::'
+                  - Secret: !ImportValue sanchezcloud-scholens-jobs-cache-secret-arn
           EntryPoint: [/bin/sh, /etc/valkey/start.sh]
           PortMappings: [{ContainerPort: 6380, HostPort: 6380, Protocol: tcp}]
           MountPoints:
