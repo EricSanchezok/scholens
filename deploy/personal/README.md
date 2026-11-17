@@ -42,6 +42,13 @@ Queues and secret paths use `preview` names. GitHub roles trust separate
 `personal-preview` environments. The runtime adapter removes ALB/WAF, managed scaling,
 Cloud Map registration, scheduled producers and telemetry sidecars.
 
+The personal foundation omits the legacy `EdgeSecret` and its ARN export. The
+shared ingress does not consume that token. A reviewed stack update retains the
+existing secret under its deployed `RetainExceptOnCreate` policy; removing it from
+the rendered template does not reduce its storage charge. Any later deletion
+needs separate approval of the exact secret and recovery-window expiration.
+Keep the canonical managed-edge reconstruction template unchanged.
+
 Each Python workload has an independent task role. Conversation processing initially
 uses the API capability policy on its own role because it runs the same application
 composition. Web has no AWS task role. The host firewall must deny containers access to
